@@ -146,7 +146,10 @@ func (g *global) reportChain(v *vread.ChainView) error {
 	}
 	for _, r := range v.Refused {
 		g.say("host %s: REFUSED token %s (%s): %v", r.Host, termsafe.Abbrev(r.Txid), r.Reason, r.Err)
-		problem = refused("a host answered a token that does not verify; it is not used")
+		// A host that answers what does not verify is a host at fault, not
+		// a check that failed on what is read: the vault is read from what
+		// verified, and the command is incomplete.
+		problem = incomplete("a host answered a token that does not verify; it is not used")
 	}
 	hosts := make([]string, 0, len(v.Lacks))
 	for h := range v.Lacks {
@@ -164,6 +167,18 @@ func (g *global) reportChain(v *vread.ChainView) error {
 	}
 	for _, f := range v.Forks {
 		g.say("token %s at seq %d verifies but does not descend from the vault's first token along the chain read (a fork, an orphan, or a token built on a parent no host admits); it is not used", f.Txid, f.Seq())
+	}
+	if beyond := v.Beyond(); len(beyond) > 0 {
+		top := beyond[0]
+		for _, t := range beyond {
+			if t.Seq() > top.Seq() {
+				top = t
+			}
+		}
+		g.say("WITHHELD: %d verified token(s) of the vault exist above seq %d, the last this command could link (the highest at seq %d, %s): a token between is withheld, or its owner signed a stray one. What is read may be an older state", len(beyond), v.Latest().Seq(), top.Seq(), top.Txid)
+		if problem == nil {
+			problem = incomplete("verified tokens of the vault exist above the chain read; ask other hosts")
+		}
 	}
 	if b := v.Broken(); b != "" {
 		g.say("the vault's chain folds to %s at seq %d: its owner signed a token whose counts its own change lists do not give. It is UNUSABLE from that token on (fail closed)", b, v.Usable())
@@ -316,7 +331,7 @@ func (g *global) reportGroup(gr *vread.Group) error {
 	}
 	for _, r := range gr.Refused {
 		g.say("hall host %s: REFUSED group token %s (%s): %v", r.Host, termsafe.Abbrev(r.Txid), r.Reason, r.Err)
-		problem = refused("a host answered a group token that does not verify; it is not used")
+		problem = incomplete("a host answered a group token that does not verify; it is not used")
 	}
 	for h, seqs := range gr.Lacks {
 		if len(seqs) > 0 {

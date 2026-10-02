@@ -85,3 +85,56 @@ func TestNothingLinksThroughARetractedVersion(t *testing.T) {
 		t.Fatalf("a retracted link in the middle: %q\n%s", r.stdout, r.stderr)
 	}
 }
+
+// Hosts that withhold a token in the middle of a vault's chain cannot hide
+// that later ones exist: the tokens they answer above the gap verify and
+// do not link, and a reader with no memory is told so (exit 3).
+func TestWithheldTokensAreNotANote(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	h.put("db/user", "two")
+	h.put("db/host", "three")
+	withhold := func(q *secrec.Question, outs []testhost.Output) []testhost.Output {
+		if q.Class.Name == "vault-seq" && q.Members["seq"] == "2" {
+			return nil
+		}
+		return outs
+	}
+	h.a.Rewrite, h.b.Rewrite = withhold, withhold
+	// With no chain source nothing else says a later token exists.
+	delete(h.env, "BSECRET_ASSET")
+	r := h.run("alice", "", "get", "db/password")
+	if r.code != exitIncomplete || r.stdout != "one" || !strings.Contains(r.stderr, "WITHHELD: 1 verified token(s) of the vault exist above seq 1") {
+		t.Fatalf("a reader with no memory, a token withheld: exit %d %q\n%s", r.code, r.stdout, r.stderr)
+	}
+	if r := h.run("carol", "", "audit", "-free"); r.code != exitIncomplete || !strings.Contains(r.stderr, "WITHHELD") {
+		t.Fatalf("an audit, a token withheld: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	h.a.Rewrite, h.b.Rewrite = nil, nil
+	h.env["BSECRET_ASSET"] = h.chainS.URL
+	if r := h.must("alice", "get", "db/host"); r.stdout != "three" || strings.Contains(r.stderr, "WITHHELD") {
+		t.Fatalf("with nothing withheld: %q\n%s", r.stdout, r.stderr)
+	}
+}
+
+// A host that answers a token that does not verify is at fault, and is
+// named; the read stands on what verified, and is incomplete, not refused:
+// one hostile host cannot make every read of a vault fail a check.
+func TestAHostAnsweringJunkDoesNotFailTheRead(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	h.b.Rewrite = func(q *secrec.Question, outs []testhost.Output) []testhost.Output {
+		if q.Class.Name == "vault" {
+			return append(outs, testhost.Output{Beef: []byte{1, 2, 3}})
+		}
+		return outs
+	}
+	r := h.run("alice", "", "get", "db/password")
+	if r.code != exitIncomplete || r.stdout != "one" || !strings.Contains(r.stderr, "REFUSED token") {
+		t.Fatalf("one host answers junk: exit %d %q\n%s", r.code, r.stdout, r.stderr)
+	}
+}

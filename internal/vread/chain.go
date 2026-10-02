@@ -41,6 +41,9 @@ type ChainView struct {
 	// Forks are tokens that verified at a seq of the canonical chain but do
 	// not continue it.
 	Forks []*Tok
+	// Claimed are the verified tokens the hosts answered as the vault's
+	// latest.
+	Claimed []*Tok
 
 	fold *secrec.VaultFold
 	// reused are the content ids of versions a commitment-reuse token
@@ -94,6 +97,24 @@ func (v *ChainView) Agree() bool {
 		}
 	}
 	return true
+}
+
+// Beyond are the verified tokens of the vault at a seq above the chain
+// read, each once: a host answered them (as the latest, or at a seq the
+// walk could not link), and no chain of spends reaches them from the first
+// token. A token between was withheld, or the owner signed a stray one;
+// either way what was read may be an older state than the vault's latest,
+// and a reader with no memory of its own has nothing else to tell it so.
+func (v *ChainView) Beyond() []*Tok {
+	var out []*Tok
+	seen := map[string]bool{}
+	for _, t := range append(append([]*Tok(nil), v.Claimed...), v.Forks...) {
+		if t.Seq() >= uint64(len(v.Tokens)) && !seen[t.Txid] {
+			seen[t.Txid] = true
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // Set is the current set after the last usable token, ascending by id.
@@ -193,6 +214,7 @@ func (c *Client) Chain(ctx context.Context, crypt string, org []byte, vault [32]
 				continue
 			}
 			found = true
+			v.Claimed = append(v.Claimed, t)
 			if t.Seq() >= v.HostLatest[h] {
 				v.HostLatest[h] = t.Seq()
 			}

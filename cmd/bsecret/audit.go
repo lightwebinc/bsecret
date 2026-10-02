@@ -185,6 +185,11 @@ func cmdAudit(ctx context.Context, g *global, args []string) error {
 	for _, f := range cv.Forks {
 		out.Forks = append(out.Forks, fmt.Sprintf("seq %d %s", f.Seq(), f.Txid))
 	}
+	if len(cv.Beyond()) > 0 && problem == nil {
+		// Verified tokens above the trail that do not link to it: a token
+		// between was withheld, and the audit covers an older state.
+		problem = incomplete("verified tokens of the vault exist above the trail read; the audit does not cover them")
+	}
 	end := out.EndsAt.Height
 	for _, w := range rep.Windows {
 		aw := auditWindow{Epoch: w.Epoch, Removed: w.Removed, Began: w.Began, Late: w.Late, Acknowledged: w.Acknowledged, Settled: w.Settled, Stale: w.Stale}

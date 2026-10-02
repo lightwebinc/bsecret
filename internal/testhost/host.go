@@ -78,6 +78,9 @@ type Host struct {
 	// Substitute, when set, rewrites a carrier's answered BEEF: a host
 	// that serves other bytes.
 	Substitute func(beef []byte) []byte
+	// Rewrite, when set, rewrites the answer to an ls_bsecret question: a
+	// host that withholds, adds or repeats outputs.
+	Rewrite func(q *secrec.Question, outs []Output) []Output
 	// Stale answers every token, carrier and sweep under a proof that names
 	// another block than the one the chain mined it in: a host whose stored
 	// proofs a reorganisation left behind.
@@ -355,6 +358,12 @@ func (h *Host) lookup(w http.ResponseWriter, r *http.Request) {
 		if outs, err = h.Answer(qq); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
+		}
+		h.mu.Lock()
+		rewrite := h.Rewrite
+		h.mu.Unlock()
+		if rewrite != nil {
+			outs = rewrite(qq, outs)
 		}
 	case borgrec.LookupService:
 		qq, err := borgrec.ParseQuery(q.Query)

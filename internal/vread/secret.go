@@ -461,6 +461,14 @@ func (c *Client) Open(ctx context.Context, v *ChainView, g *Group, car *Car, anc
 		}
 	}
 	if err := secrec.CheckCiphertext(rec, ct); err != nil {
+		// A ciphertext fetched by its hash names the source that served
+		// it. One carried in its record came with the carrier a host
+		// answered, which verified as the owner's.
+		if st, ok := content.(interface{ Served([32]byte) string }); ok && rec.Inline == nil {
+			if src := st.Served(rec.Hash); src != "" {
+				return nil, failed("hash", "the ciphertext served by the content source %s is not the one the record names: that source substituted or cut the bytes", src)
+			}
+		}
 		return nil, failed("hash", "the ciphertext served is not the one the record names: whoever served the bytes substituted or cut them")
 	}
 	// 2a to 4.

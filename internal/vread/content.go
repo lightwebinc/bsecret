@@ -25,6 +25,20 @@ type Store struct {
 	// Max is the most bytes a reader fetches for one ciphertext.
 	Max  int
 	HTTP *http.Client
+
+	// wrong is, by hash, the source whose bytes Get returned although they
+	// are not the ciphertext asked for.
+	wrong map[[32]byte]string
+}
+
+// Served names the source whose bytes the last Get of hash returned when
+// no source served the ciphertext itself, or "": the store a reader's hash
+// check names.
+func (s *Store) Served(hash [32]byte) string {
+	if s == nil {
+		return ""
+	}
+	return s.wrong[hash]
 }
 
 func isURL(s string) bool {
@@ -85,7 +99,8 @@ func (s *Store) Put(ct []byte) (string, error) {
 // fetched, and no source is read past length: a record is a fetch
 // instruction, and a reader bounds it. When no source serves the
 // ciphertext and one served other bytes, those are returned, so that the
-// reader's own check names the failure (hash) rather than an absence.
+// reader's own check names the failure (hash) rather than an absence, and
+// Served names the source they came from.
 func (s *Store) Get(ctx context.Context, hash [32]byte, length uint64) ([]byte, error) {
 	if s == nil || len(s.Sources) == 0 {
 		return nil, fmt.Errorf("%w: none is configured (config key content)", ErrUnavailable)
@@ -96,6 +111,8 @@ func (s *Store) Get(ctx context.Context, hash [32]byte, length uint64) ([]byte, 
 	name := hex.EncodeToString(hash[:])
 	var last error
 	var wrong []byte
+	var from string
+	delete(s.wrong, hash)
 	for _, src := range s.Sources {
 		var b []byte
 		var err error
@@ -112,10 +129,14 @@ func (s *Store) Get(ctx context.Context, hash [32]byte, length uint64) ([]byte, 
 			return b, nil
 		}
 		if wrong == nil {
-			wrong = b
+			wrong, from = b, src
 		}
 	}
 	if wrong != nil {
+		if s.wrong == nil {
+			s.wrong = map[[32]byte]string{}
+		}
+		s.wrong[hash] = from
 		return wrong, nil
 	}
 	return nil, fmt.Errorf("%w: %v", ErrUnavailable, last)

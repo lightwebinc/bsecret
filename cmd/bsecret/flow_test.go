@@ -389,7 +389,7 @@ func TestLargeSecretByHash(t *testing.T) {
 			t.Fatal(err)
 		}
 		r := h.run("alice", "", "get", "blob/archive")
-		h.want(r, exitRefused, "hash: the ciphertext served is not the one the record names")
+		h.want(r, exitRefused, "hash: the ciphertext served by the content source "+filepath.Join(h.dir, "content")+" is not the one the record names: that source substituted or cut the bytes")
 		if r.stdout != "" {
 			t.Fatal("a substituted ciphertext was opened")
 		}
@@ -964,7 +964,7 @@ func TestATransitionIsKeptUnlessAnotherSpends(t *testing.T) {
 	h.mu.Lock()
 	h.onSend = func(tx *transaction.Transaction) { h.chain.SpendElsewhere(tip, 0, tx.TxID().String()) }
 	h.mu.Unlock()
-	h.env["BSECRET_TIMEOUT"] = "1s"
+	h.env["BSECRET_TIMEOUT"] = "5s"
 	r = h.run("org", "two", "put", "db/password")
 	if r.code != exitUsage || strings.Contains(r.stderr, "lost") || !strings.Contains(r.stderr, "it is persisted; the next command sends it again") {
 		t.Fatalf("a transition the leg refused while the node names it as the spender: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)

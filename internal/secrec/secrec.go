@@ -11,8 +11,9 @@
 // CBOR decoder runs, and the CBOR decoder bounds every declared length against
 // the bytes present before it allocates.
 //
-// keyed.go and the record helpers of cborutil.go are code that more than one
-// application on the same library uses (docs/spec.md section 16.1).
+// The content key, its commitment and BRC-2's symmetric form are bcommon's
+// keyed package, and the record reader its record package (docs/spec.md
+// section 16.1); keyed.go holds what only bsecret uses.
 package secrec
 
 import (
@@ -20,7 +21,9 @@ import (
 
 	"github.com/bsv-blockchain/go-sdk/wallet"
 
+	"github.com/lightwebinc/bcommon/keyed"
 	"github.com/lightwebinc/bcommon/pushdrop"
+	"github.com/lightwebinc/bcommon/record"
 )
 
 // Registry values (docs/frozen.md); frozen once the first record is
@@ -49,8 +52,8 @@ const (
 
 	// DomainSymmetric and DomainCommitment are BRC-369 section 2's domain
 	// strings, adopted verbatim.
-	DomainSymmetric  = "metanet keyed content symmetric v1"
-	DomainCommitment = "metanet keyed content commitment v1"
+	DomainSymmetric  = keyed.DomainSymmetric
+	DomainCommitment = keyed.DomainCommitment
 	// DomainVaultID, DomainSecretID and DomainEpochWrap are bsecret's own
 	// domain strings: each is hashed into an identifier or a key.
 	DomainVaultID   = "bsecret vault id v1"
@@ -173,19 +176,19 @@ var DefaultLabels = []string{"confidential", "internal", "public", "restricted"}
 
 // The refusals. A host counts them by Reason.
 var (
-	ErrTooLarge   = errors.New("secrec: record exceeds its bound")
-	ErrCBOR       = errors.New("secrec: not a canonical CBOR map")
-	ErrKeyType    = errors.New("secrec: record key is not an unsigned integer")
-	ErrMagic      = errors.New("secrec: wrong magic")
-	ErrMissing    = errors.New("secrec: required key missing")
-	ErrType       = errors.New("secrec: field has the wrong type")
-	ErrRange      = errors.New("secrec: field out of range")
+	ErrTooLarge   = record.ErrTooLarge
+	ErrCBOR       = record.ErrCBOR
+	ErrKeyType    = record.ErrKeyType
+	ErrMagic      = record.ErrMagic
+	ErrMissing    = record.ErrMissing
+	ErrType       = record.ErrType
+	ErrRange      = record.ErrRange
 	ErrIdentity   = errors.New("secrec: identity key is not a canonical compressed key")
 	ErrCrypt      = errors.New("secrec: crypt identifier breaks the grammar")
 	ErrHall       = errors.New("secrec: hall identifier breaks the grammar")
 	ErrName       = errors.New("secrec: name breaks its rule")
 	ErrLabel      = errors.New("secrec: label breaks the grammar or the label set its rule")
-	ErrList       = errors.New("secrec: change list is not distinct, ascending and within its bound")
+	ErrList       = record.ErrList
 	ErrEntry      = errors.New("secrec: change entry is not [id, version, content id, commitment]")
 	ErrChain      = errors.New("secrec: seq, prev, version and previous disagree")
 	ErrCount      = errors.New("secrec: count disagrees with the predecessor and the change lists")
@@ -199,9 +202,9 @@ var (
 	ErrListing    = errors.New("secrec: the token does not list this record as it is")
 	ErrSuccessor  = errors.New("secrec: the record is not the next version of the one before it")
 	ErrHash       = errors.New("secrec: ciphertext is not the one the record names")
-	ErrUnwrap     = errors.New("secrec: wrapped content key does not open")
-	ErrScalar     = errors.New("secrec: content key is not a scalar in [1, n-1]")
-	ErrCommitment = errors.New("secrec: content key does not match the commitment")
+	ErrUnwrap     = keyed.ErrUnwrap
+	ErrScalar     = keyed.ErrScalar
+	ErrCommitment = keyed.ErrCommitment
 	ErrTag        = errors.New("secrec: a segment's authentication tag does not verify under the committed key")
 	ErrPayload    = errors.New("secrec: plaintext is not a payload for this secret")
 )

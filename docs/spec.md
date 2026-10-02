@@ -1755,20 +1755,24 @@ could read unknown to them.
 ### 16.1 Shared code
 
 Code that more than one application uses belongs in the library, not in an
-application. Two bodies of code in this repository are of that kind:
+application. bsecret takes from bcommon:
 
-- **keyed content** (`internal/secrec/keyed.go`): BRC-369's content key,
-  symmetric key, commitment, segments and ordered checks. borg uses the same
-  key functions for its epoch keys, with the BRC-78 release. They are
-  checked here against BRC-369's own vectors (`brc369-v1.json`), and a
-  library package that takes their place answers to the same vectors;
-- **record helpers** (`internal/secrec/cborutil.go`): the bounded, ordered
-  decoding of a canonical CBOR record with integer keys that every
-  application on the library repeats.
+- **the content key** (`keyed`): BRC-369's content key, its symmetric key
+  and commitment, the check on a key just unwrapped, and BRC-2's symmetric
+  form, in which both wraps are written. borg uses the same functions for
+  its epoch keys. They are checked here against BRC-369's own vectors
+  (`brc369-v1.json`);
+- **the record reader** (`record`): the bounded, ordered decoding of a
+  canonical CBOR record with integer keys, its refusals, and the first look
+  a classifier takes (`pushdrop.FirstPush`, `record.Claims`).
+
+What only bsecret uses stays here: the segments of section 6.2, the ordered
+checks of section 7.2 and the locator of section 5.4
+(`internal/secrec/keyed.go`).
 
 bsecret's tooling also reads borg's chains (a group's epochs, the wraps, the
 roll for rotation debt). That code is borg's, and bsecret uses it as borg
-publishes it; none of it is copied here. bsecret pins bcommon v0.5.5.
+publishes it; none of it is copied here. bsecret pins bcommon v0.6.0.
 
 ## 17. Size and rate bounds
 

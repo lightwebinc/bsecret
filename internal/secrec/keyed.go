@@ -1,62 +1,37 @@
-// BRC-369 keyed content: the content key, its symmetric key and commitment
-// (section 2.1 and 2.2), segmented AES-256-GCM (section 2.3) and the three
-// checks in their order (section 5.3). The key functions are the group
-// substrate's, checked against BRC-369's own vectors (docs/spec.md section
-// 16.1).
+// BRC-369 keyed content: segmented AES-256-GCM (section 2.3), the three
+// checks in their order (section 5.3) and the locator. The content key, its
+// symmetric key and its commitment (sections 2.1 and 2.2) are bcommon's
+// keyed package, checked here against BRC-369's own vectors (docs/spec.md
+// section 16.1).
 
 package secrec
 
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"io"
-	"math/big"
 
 	base58 "github.com/bsv-blockchain/go-sdk/compat/base58"
 	ec "github.com/bsv-blockchain/go-sdk/primitives/ec"
+
+	"github.com/lightwebinc/bcommon/keyed"
 )
 
-// SampleKey draws a content key: a scalar uniform in [1, n-1] from r
-// (crypto/rand.Reader when r is nil), never derived from anything
-// (BRC-369 section 2.1 rule 1).
-func SampleKey(r io.Reader) ([32]byte, error) {
-	if r == nil {
-		r = rand.Reader
-	}
-	for {
-		var k [32]byte
-		if _, err := io.ReadFull(r, k[:]); err != nil {
-			return k, err
-		}
-		if CheckScalar(k) == nil {
-			return k, nil
-		}
-	}
-}
+// SampleKey draws a content key: a scalar uniform in [1, n-1], never derived
+// from anything (BRC-369 section 2.1 rule 1).
+func SampleKey(r io.Reader) ([32]byte, error) { return keyed.SampleKey(r) }
 
 // CheckScalar refuses a 32-byte big-endian value outside [1, n-1].
-func CheckScalar(k [32]byte) error {
-	v := new(big.Int).SetBytes(k[:])
-	if v.Sign() == 0 || v.Cmp(ec.S256().N) >= 0 {
-		return ErrScalar
-	}
-	return nil
-}
+func CheckScalar(k [32]byte) error { return keyed.CheckScalar(k) }
 
-// SymmetricKey is BRC-369 section 2.1 rule 3: SHA-256 of the domain string
-// and the scalar. It is never derived from the commitment.
-func SymmetricKey(k [32]byte) [32]byte {
-	return sha256.Sum256(append([]byte(DomainSymmetric), k[:]...))
-}
+// SymmetricKey is BRC-369 section 2.1 rule 3.
+func SymmetricKey(k [32]byte) [32]byte { return keyed.SymmetricKey(k) }
 
 // Commitment is BRC-369 section 2.2's digest form.
-func Commitment(k [32]byte) [32]byte {
-	return sha256.Sum256(append([]byte(DomainCommitment), k[:]...))
-}
+func Commitment(k [32]byte) [32]byte { return keyed.Commitment(k) }
 
 // CommitmentPoint is BRC-369 section 2.2's point form, k * G compressed.
 // bsecret never writes it; it is here to reproduce BRC-369's own vectors.

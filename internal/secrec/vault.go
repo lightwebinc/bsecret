@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lightwebinc/bcommon/cbor"
+	"github.com/lightwebinc/bcommon/record"
 )
 
 // Vault record keys.
@@ -88,7 +89,7 @@ func checkEntries(a []Entry) error {
 
 // Validate applies every rule that needs only the record itself.
 func (v *Vault) Validate() error {
-	if err := checkExtra(v.Extra, vkLast, vkLast+1); err != nil {
+	if err := record.CheckExtra(v.Extra, vkLast, vkLast+1); err != nil {
 		return err
 	}
 	if err := CheckCrypt(v.Crypt); err != nil {
@@ -97,7 +98,7 @@ func (v *Vault) Validate() error {
 	if err := CheckOrgKey(v.Org); err != nil {
 		return err
 	}
-	if err := inRange(v.Seq, 0, MaxSafe, "seq"); err != nil {
+	if err := record.InRange(v.Seq, 0, MaxSafe, "seq"); err != nil {
 		return err
 	}
 	if err := checkName(v.Name); err != nil {
@@ -106,13 +107,13 @@ func (v *Vault) Validate() error {
 	if err := CheckHall(v.Hall); err != nil {
 		return err
 	}
-	if err := inRange(v.Epoch, 0, MaxEpoch, "epoch"); err != nil {
+	if err := record.InRange(v.Epoch, 0, MaxEpoch, "epoch"); err != nil {
 		return err
 	}
 	if err := CheckLabels(v.Labels); err != nil {
 		return err
 	}
-	if err := inRange(v.Anchor, AnchorVersion, AnchorInterval, "anchor"); err != nil {
+	if err := record.InRange(v.Anchor, AnchorVersion, AnchorInterval, "anchor"); err != nil {
 		return err
 	}
 	if err := checkEntries(v.Create); err != nil {
@@ -124,16 +125,16 @@ func (v *Vault) Validate() error {
 	if len(v.Retire) > MaxDelta {
 		return ErrList
 	}
-	if err := sortedDistinct32(v.Retire); err != nil {
+	if err := record.Ascending32(v.Retire); err != nil {
 		return err
 	}
-	if err := inRange(v.Count, 0, MaxSecrets, "count"); err != nil {
+	if err := record.InRange(v.Count, 0, MaxSecrets, "count"); err != nil {
 		return err
 	}
-	if err := inRange(v.Stale, 0, MaxSecrets, "stale"); err != nil {
+	if err := record.InRange(v.Stale, 0, MaxSecrets, "stale"); err != nil {
 		return err
 	}
-	if err := inRange(v.Created, 1, MaxTime, "created"); err != nil {
+	if err := record.InRange(v.Created, 1, MaxTime, "created"); err != nil {
 		return err
 	}
 	return v.cross()
@@ -213,18 +214,18 @@ func (v *Vault) Encode() ([]byte, error) {
 		{Key: uint64(VKAnchor), Val: v.Anchor},
 		{Key: uint64(VKCreate), Val: entryValues(v.Create)},
 		{Key: uint64(VKUpdate), Val: entryValues(v.Update)},
-		{Key: uint64(VKRetire), Val: values32(v.Retire)},
+		{Key: uint64(VKRetire), Val: record.Values32(v.Retire)},
 		{Key: uint64(VKCount), Val: v.Count},
 		{Key: uint64(VKStale), Val: v.Stale},
 		{Key: uint64(VKRoot), Val: append([]byte(nil), v.Root[:]...)},
 		{Key: uint64(VKCreated), Val: v.Created},
 	}
-	return encodeRecord(m, v.Extra, MaxVaultRecord)
+	return record.Encode(m, v.Extra, MaxVaultRecord)
 }
 
 // entries decodes key k as a change list.
 func (f *fields) entries(k uint64) ([]Entry, error) {
-	a, err := f.array(k, MaxDelta)
+	a, err := f.Array(k, MaxDelta)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +255,7 @@ func (f *fields) entries(k uint64) ([]Entry, error) {
 
 // labels decodes key k as a label set.
 func (f *fields) labels(k uint64) ([]string, error) {
-	v, err := f.need(k)
+	v, err := f.Need(k)
 	if err != nil {
 		return nil, err
 	}
@@ -286,58 +287,58 @@ func DecodeVault(p []byte) (*Vault, error) {
 	if err != nil {
 		return nil, err
 	}
-	v := &Vault{Extra: f.extra}
-	if v.Crypt, err = f.text(VKCrypt); err != nil {
+	v := &Vault{Extra: f.Extra}
+	if v.Crypt, err = f.Text(VKCrypt); err != nil {
 		return nil, err
 	}
 	if err := CheckCrypt(v.Crypt); err != nil {
 		return nil, err
 	}
-	if v.Org, err = f.bytesN(VKOrg, -1); err != nil {
+	if v.Org, err = f.BytesN(VKOrg, -1); err != nil {
 		return nil, err
 	}
 	if err := CheckOrgKey(v.Org); err != nil {
 		return nil, err
 	}
-	b, err := f.bytesN(VKVault, 32)
+	b, err := f.BytesN(VKVault, 32)
 	if err != nil {
 		return nil, err
 	}
 	copy(v.Vault[:], b)
-	if v.Seq, err = f.uint(VKSeq, 0, MaxSafe); err != nil {
+	if v.Seq, err = f.Uint(VKSeq, 0, MaxSafe); err != nil {
 		return nil, err
 	}
-	if b, err = f.bytesN(VKPrev, 32); err != nil {
+	if b, err = f.BytesN(VKPrev, 32); err != nil {
 		return nil, err
 	}
 	copy(v.Prev[:], b)
-	if v.Name, err = f.text(VKName); err != nil {
+	if v.Name, err = f.Text(VKName); err != nil {
 		return nil, err
 	}
 	if err := checkName(v.Name); err != nil {
 		return nil, err
 	}
-	if v.Hall, err = f.text(VKHall); err != nil {
+	if v.Hall, err = f.Text(VKHall); err != nil {
 		return nil, err
 	}
 	if err := CheckHall(v.Hall); err != nil {
 		return nil, err
 	}
-	if b, err = f.bytesN(VKGroup, GroupIDLen); err != nil {
+	if b, err = f.BytesN(VKGroup, GroupIDLen); err != nil {
 		return nil, err
 	}
 	copy(v.Group[:], b)
-	if v.Epoch, err = f.uint(VKEpoch, 0, MaxEpoch); err != nil {
+	if v.Epoch, err = f.Uint(VKEpoch, 0, MaxEpoch); err != nil {
 		return nil, err
 	}
-	if b, err = f.bytesN(VKEpochID, 32); err != nil {
+	if b, err = f.BytesN(VKEpochID, 32); err != nil {
 		return nil, err
 	}
 	copy(v.EpochID[:], b)
 	if v.Labels, err = f.labels(VKLabels); err != nil {
 		return nil, err
 	}
-	if v.Anchor, err = f.uint(VKAnchor, AnchorVersion, AnchorInterval); err != nil {
+	if v.Anchor, err = f.Uint(VKAnchor, AnchorVersion, AnchorInterval); err != nil {
 		return nil, err
 	}
 	if v.Create, err = f.entries(VKCreate); err != nil {
@@ -346,20 +347,20 @@ func DecodeVault(p []byte) (*Vault, error) {
 	if v.Update, err = f.entries(VKUpdate); err != nil {
 		return nil, err
 	}
-	if v.Retire, err = f.list32(VKRetire, MaxDelta); err != nil {
+	if v.Retire, err = f.List32(VKRetire, MaxDelta); err != nil {
 		return nil, err
 	}
-	if v.Count, err = f.uint(VKCount, 0, MaxSecrets); err != nil {
+	if v.Count, err = f.Uint(VKCount, 0, MaxSecrets); err != nil {
 		return nil, err
 	}
-	if v.Stale, err = f.uint(VKStale, 0, MaxSecrets); err != nil {
+	if v.Stale, err = f.Uint(VKStale, 0, MaxSecrets); err != nil {
 		return nil, err
 	}
-	if b, err = f.bytesN(VKRoot, 32); err != nil {
+	if b, err = f.BytesN(VKRoot, 32); err != nil {
 		return nil, err
 	}
 	copy(v.Root[:], b)
-	if v.Created, err = f.uint(VKCreated, 1, MaxTime); err != nil {
+	if v.Created, err = f.Uint(VKCreated, 1, MaxTime); err != nil {
 		return nil, err
 	}
 	if err := v.cross(); err != nil {

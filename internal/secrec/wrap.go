@@ -5,35 +5,14 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 
-	aesgcm "github.com/bsv-blockchain/go-sdk/primitives/aesgcm"
 	ec "github.com/bsv-blockchain/go-sdk/primitives/ec"
 	"github.com/bsv-blockchain/go-sdk/wallet"
+
+	"github.com/lightwebinc/bcommon/keyed"
 )
-
-// gcmSeal is BRC-2's symmetric form as go-sdk writes it: AES-256-GCM with a
-// 32-byte IV, written IV || ciphertext || tag.
-func gcmSeal(key []byte, iv [32]byte, plaintext []byte) ([]byte, error) {
-	ct, tag, err := aesgcm.AESGCMEncrypt(plaintext, key, iv[:], []byte{})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]byte, 0, 32+len(ct)+16)
-	out = append(out, iv[:]...)
-	out = append(out, ct...)
-	return append(out, tag...), nil
-}
-
-// gcmOpen reverses gcmSeal through go-sdk's own symmetric key.
-func gcmOpen(key, sealed []byte) ([]byte, error) {
-	if len(sealed) < 48 {
-		return nil, errors.New("secrec: ciphertext too short")
-	}
-	return ec.NewSymmetricKey(key).Decrypt(sealed)
-}
 
 // EpochWrapKey is the key a content key is wrapped under for the members of
 // one epoch: SHA-256 of the domain string, the epoch's BRC-369 symmetric key
@@ -60,24 +39,7 @@ func WrapToEpoch(epochSymmetric, contentID, k [32]byte, r io.Reader) ([]byte, er
 		return nil, err
 	}
 	w := EpochWrapKey(epochSymmetric, contentID)
-	return gcmSeal(w[:], iv, k[:])
-}
-
-// checkOpened is the tail of every unwrap: exactly 32 bytes, a scalar, and
-// the committed one, in that order.
-func checkOpened(pt []byte, commitment [32]byte) ([32]byte, error) {
-	var k [32]byte
-	if len(pt) != 32 {
-		return k, fmt.Errorf("%w: plaintext of %d bytes", ErrUnwrap, len(pt))
-	}
-	copy(k[:], pt)
-	if err := CheckScalar(k); err != nil {
-		return k, err
-	}
-	if Commitment(k) != commitment {
-		return k, ErrCommitment
-	}
-	return k, nil
+	return keyed.SymmetricSeal(w[:], iv, k[:])
 }
 
 // UnwrapFromEpoch is a member's checks 2a and 2b. A reader runs check 1
@@ -92,11 +54,11 @@ func UnwrapFromEpoch(epochSymmetric, contentID [32]byte, wrap []byte, commitment
 		return [32]byte{}, fmt.Errorf("%w: length %d", ErrUnwrap, len(wrap))
 	}
 	w := EpochWrapKey(epochSymmetric, contentID)
-	pt, err := gcmOpen(w[:], wrap)
+	pt, err := keyed.SymmetricOpen(w[:], wrap)
 	if err != nil {
 		return [32]byte{}, fmt.Errorf("%w: %v", ErrUnwrap, err)
 	}
-	return checkOpened(pt, commitment)
+	return keyed.CheckOpened(pt, commitment)
 }
 
 // SelfKeyID is the self wrap's BRC-43 key id: the standard padded base64 of
@@ -145,14 +107,14 @@ func WrapToSelfWithIV(owner *ec.PrivateKey, contentID, k [32]byte, iv [32]byte) 
 	if err != nil {
 		return nil, err
 	}
-	return gcmSeal(sk.ToBytes(), iv, k[:])
+	return keyed.SymmetricSeal(sk.ToBytes(), iv, k[:])
 }
 
 // WrapToEpochWithIV is WrapToEpoch with a caller's IV, for golden vectors
 // only.
 func WrapToEpochWithIV(epochSymmetric, contentID, k [32]byte, iv [32]byte) ([]byte, error) {
 	w := EpochWrapKey(epochSymmetric, contentID)
-	return gcmSeal(w[:], iv, k[:])
+	return keyed.SymmetricSeal(w[:], iv, k[:])
 }
 
 // UnwrapFromSelf is the owner's side: its wallet decrypts the self wrap, and
@@ -165,5 +127,5 @@ func UnwrapFromSelf(ctx context.Context, w wallet.Interface, contentID [32]byte,
 	if err != nil {
 		return [32]byte{}, fmt.Errorf("%w: %v", ErrUnwrap, err)
 	}
-	return checkOpened(res.Plaintext, commitment)
+	return keyed.CheckOpened(res.Plaintext, commitment)
 }

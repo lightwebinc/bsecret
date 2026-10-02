@@ -10,6 +10,7 @@ import (
 	"github.com/bsv-blockchain/go-sdk/wallet"
 
 	"github.com/lightwebinc/bcommon/cbor"
+	"github.com/lightwebinc/bcommon/record"
 )
 
 // Secret record keys.
@@ -92,7 +93,7 @@ func (s *Secret) checkContent() error {
 
 // Validate applies every rule that needs only the record itself.
 func (s *Secret) Validate() error {
-	if err := checkExtra(s.Extra, skLast, skLast+1); err != nil {
+	if err := record.CheckExtra(s.Extra, skLast, skLast+1); err != nil {
 		return err
 	}
 	if err := CheckCrypt(s.Crypt); err != nil {
@@ -101,22 +102,22 @@ func (s *Secret) Validate() error {
 	if err := CheckOrgKey(s.Org); err != nil {
 		return err
 	}
-	if err := inRange(s.Version, 1, MaxSafe, "version"); err != nil {
+	if err := record.InRange(s.Version, 1, MaxSafe, "version"); err != nil {
 		return err
 	}
 	if err := CheckLabel(s.Label); err != nil {
 		return err
 	}
-	if err := inRange(s.Epoch, 0, MaxEpoch, "epoch"); err != nil {
+	if err := record.InRange(s.Epoch, 0, MaxEpoch, "epoch"); err != nil {
 		return err
 	}
-	if err := inRange(s.Length, 1, MaxLength, "length"); err != nil {
+	if err := record.InRange(s.Length, 1, MaxLength, "length"); err != nil {
 		return err
 	}
 	if err := CheckSegment(s.Segment); err != nil {
 		return err
 	}
-	if err := inRange(s.Created, 1, MaxTime, "created"); err != nil {
+	if err := record.InRange(s.Created, 1, MaxTime, "created"); err != nil {
 		return err
 	}
 	if len(s.Self) != WrapLen || len(s.Wrap) != WrapLen {
@@ -163,7 +164,7 @@ func (s *Secret) described() cbor.Map {
 // of BRC-369 section 4.2 rule 3's content id: it is fixed before any key is
 // wrapped, both wraps are bound to it, and a vault token lists it.
 func (s *Secret) ContentID() ([32]byte, error) {
-	if err := checkExtra(s.Extra, skLast, skLast+1); err != nil {
+	if err := record.CheckExtra(s.Extra, skLast, skLast+1); err != nil {
 		return [32]byte{}, err
 	}
 	b, err := cbor.Encode(append(s.described(), s.Extra...))
@@ -185,7 +186,7 @@ func (s *Secret) Encode() ([]byte, error) {
 	if s.Inline != nil {
 		m = append(m, cbor.Pair{Key: uint64(SKInline), Val: append([]byte(nil), s.Inline...)})
 	}
-	return encodeRecord(m, s.Extra, MaxSecretRecord)
+	return record.Encode(m, s.Extra, MaxSecretRecord)
 }
 
 // DecodeSecret parses a secret record in the refusal order (docs/spec.md
@@ -195,80 +196,80 @@ func DecodeSecret(p []byte) (*Secret, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Secret{Extra: f.extra}
-	if s.Crypt, err = f.text(SKCrypt); err != nil {
+	s := &Secret{Extra: f.Extra}
+	if s.Crypt, err = f.Text(SKCrypt); err != nil {
 		return nil, err
 	}
 	if err := CheckCrypt(s.Crypt); err != nil {
 		return nil, err
 	}
-	if s.Org, err = f.bytesN(SKOrg, -1); err != nil {
+	if s.Org, err = f.BytesN(SKOrg, -1); err != nil {
 		return nil, err
 	}
 	if err := CheckOrgKey(s.Org); err != nil {
 		return nil, err
 	}
-	b, err := f.bytesN(SKVault, 32)
+	b, err := f.BytesN(SKVault, 32)
 	if err != nil {
 		return nil, err
 	}
 	copy(s.Vault[:], b)
-	if b, err = f.bytesN(SKID, 32); err != nil {
+	if b, err = f.BytesN(SKID, 32); err != nil {
 		return nil, err
 	}
 	copy(s.ID[:], b)
-	if s.Version, err = f.uint(SKVersion, 1, MaxSafe); err != nil {
+	if s.Version, err = f.Uint(SKVersion, 1, MaxSafe); err != nil {
 		return nil, err
 	}
-	if b, err = f.bytesN(SKPrevious, 32); err != nil {
+	if b, err = f.BytesN(SKPrevious, 32); err != nil {
 		return nil, err
 	}
 	copy(s.Previous[:], b)
-	if s.Label, err = f.text(SKLabel); err != nil {
+	if s.Label, err = f.Text(SKLabel); err != nil {
 		return nil, err
 	}
 	if err := CheckLabel(s.Label); err != nil {
 		return nil, err
 	}
-	if b, err = f.bytesN(SKGroup, GroupIDLen); err != nil {
+	if b, err = f.BytesN(SKGroup, GroupIDLen); err != nil {
 		return nil, err
 	}
 	copy(s.Group[:], b)
-	if s.Epoch, err = f.uint(SKEpoch, 0, MaxEpoch); err != nil {
+	if s.Epoch, err = f.Uint(SKEpoch, 0, MaxEpoch); err != nil {
 		return nil, err
 	}
-	if b, err = f.bytesN(SKEpochID, 32); err != nil {
+	if b, err = f.BytesN(SKEpochID, 32); err != nil {
 		return nil, err
 	}
 	copy(s.EpochID[:], b)
-	if b, err = f.bytesN(SKCommitment, 32); err != nil {
+	if b, err = f.BytesN(SKCommitment, 32); err != nil {
 		return nil, err
 	}
 	copy(s.Commitment[:], b)
-	if b, err = f.bytesN(SKHash, 32); err != nil {
+	if b, err = f.BytesN(SKHash, 32); err != nil {
 		return nil, err
 	}
 	copy(s.Hash[:], b)
-	if s.Length, err = f.uint(SKLength, 1, MaxLength); err != nil {
+	if s.Length, err = f.Uint(SKLength, 1, MaxLength); err != nil {
 		return nil, err
 	}
-	if b, err = f.bytesN(SKSalt, SaltLen); err != nil {
+	if b, err = f.BytesN(SKSalt, SaltLen); err != nil {
 		return nil, err
 	}
 	copy(s.Salt[:], b)
-	if s.Segment, err = f.uint(SKSegment, MinSegment, MaxSegment); err != nil {
+	if s.Segment, err = f.Uint(SKSegment, MinSegment, MaxSegment); err != nil {
 		return nil, err
 	}
-	if s.Created, err = f.uint(SKCreated, 1, MaxTime); err != nil {
+	if s.Created, err = f.Uint(SKCreated, 1, MaxTime); err != nil {
 		return nil, err
 	}
-	if s.Self, err = f.bytesN(SKSelf, WrapLen); err != nil {
+	if s.Self, err = f.BytesN(SKSelf, WrapLen); err != nil {
 		return nil, err
 	}
-	if s.Wrap, err = f.bytesN(SKWrap, WrapLen); err != nil {
+	if s.Wrap, err = f.BytesN(SKWrap, WrapLen); err != nil {
 		return nil, err
 	}
-	if v, ok := f.known[SKInline]; ok {
+	if v, ok := f.Get(SKInline); ok {
 		in, ok := v.([]byte)
 		if !ok {
 			return nil, fmt.Errorf("%w: key %d", ErrType, SKInline)
@@ -311,7 +312,7 @@ type Payload struct {
 
 // Encode writes the payload in canonical CBOR.
 func (p *Payload) Encode() ([]byte, error) {
-	if err := checkExtra(p.Extra, pkLast, pkLast+1); err != nil {
+	if err := record.CheckExtra(p.Extra, pkLast, pkLast+1); err != nil {
 		return nil, err
 	}
 	if err := CheckSecretName(p.Name); err != nil {
@@ -341,7 +342,7 @@ func (p *Payload) Encode() ([]byte, error) {
 	if len(p.Pad) != 0 {
 		m = append(m, cbor.Pair{Key: uint64(PKPad), Val: p.Pad})
 	}
-	return encodeRecord(m, p.Extra, MaxPayload)
+	return record.Encode(m, p.Extra, MaxPayload)
 }
 
 // DecodePayload parses a payload. A reader calls it only on plaintext whose
@@ -351,36 +352,36 @@ func DecodePayload(b []byte) (*Payload, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &Payload{Extra: f.extra}
-	if p.Name, err = f.text(PKName); err != nil {
+	p := &Payload{Extra: f.Extra}
+	if p.Name, err = f.Text(PKName); err != nil {
 		return nil, err
 	}
 	if err := CheckSecretName(p.Name); err != nil {
 		return nil, err
 	}
-	if p.Value, err = f.bytesN(PKValue, -1); err != nil {
+	if p.Value, err = f.BytesN(PKValue, -1); err != nil {
 		return nil, err
 	}
-	if _, ok := f.known[PKType]; ok {
-		if p.Type, err = f.text(PKType); err != nil {
+	if _, ok := f.Get(PKType); ok {
+		if p.Type, err = f.Text(PKType); err != nil {
 			return nil, err
 		}
 		if len(p.Type) < 1 || len(p.Type) > MaxType || !utf8.ValidString(p.Type) {
 			return nil, fmt.Errorf("%w: key %d", ErrRange, PKType)
 		}
 	}
-	if _, ok := f.known[PKNotAfter]; ok {
-		if p.NotAfter, err = f.uint(PKNotAfter, 1, MaxTime); err != nil {
+	if _, ok := f.Get(PKNotAfter); ok {
+		if p.NotAfter, err = f.Uint(PKNotAfter, 1, MaxTime); err != nil {
 			return nil, err
 		}
 	}
-	if _, ok := f.known[PKRotateEvery]; ok {
-		if p.RotateEvery, err = f.uint(PKRotateEvery, 1, MaxEpoch); err != nil {
+	if _, ok := f.Get(PKRotateEvery); ok {
+		if p.RotateEvery, err = f.Uint(PKRotateEvery, 1, MaxEpoch); err != nil {
 			return nil, err
 		}
 	}
-	if _, ok := f.known[PKPad]; ok {
-		if p.Pad, err = f.bytesN(PKPad, -1); err != nil {
+	if _, ok := f.Get(PKPad); ok {
+		if p.Pad, err = f.BytesN(PKPad, -1); err != nil {
 			return nil, err
 		}
 		if len(p.Pad) == 0 {

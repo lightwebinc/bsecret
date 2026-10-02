@@ -49,7 +49,7 @@ $ make vectors   # regenerate the golden vectors
 ```
 
 Go 1.27.1 or later. The direct dependencies are go-sdk v1.5.2 and bcommon
-v0.5.5, and nothing else.
+v0.6.0, and nothing else.
 
 ## License
 

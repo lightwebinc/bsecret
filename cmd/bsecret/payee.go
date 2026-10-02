@@ -216,7 +216,7 @@ func payeeSettle(ctx context.Context, g *global, paths []string, inFlight int) e
 			continue
 		}
 		if err != nil {
-			notSettled(r.l, payWords(err, 0))
+			notSettled(r.l, payWords(err, 0, "-max-sats"))
 			continue
 		}
 		h.st.Settled = append(h.st.Settled, r.l.Txid)

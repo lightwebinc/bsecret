@@ -479,8 +479,13 @@ func TestAnAuditOverItsBudgetPaysNothing(t *testing.T) {
 	h.startPaid("payee", map[string]uint64{"audit": 20})
 	h.identity("auditor", true)
 	r := h.run("auditor", "", "audit", "-budget", "10")
-	if r.code != exitUsage || !strings.Contains(r.stderr, "more than the 10 this command may pay") || strings.Contains(r.stdout, "paid ") {
+	if r.code != exitUsage || !strings.Contains(r.stderr, "more than the 10 this command may pay (what is left of -budget)") || strings.Contains(r.stdout, "paid ") {
 		t.Fatalf("an audit whose page costs more than its budget: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	// A price over what one question may cost names that flag.
+	r = h.run("auditor", "", "audit", "-max-sats", "10")
+	if r.code != exitUsage || !strings.Contains(r.stderr, "more than the 10 this command may pay (-max-sats)") || strings.Contains(r.stdout, "paid ") {
+		t.Fatalf("an audit whose page costs more than -max-sats: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
 	}
 	if r := h.must("auditor", "audit", "-budget", "20"); !strings.Contains(r.stdout, "paid 20 sat") || !strings.Contains(r.stdout, "audit   OK") {
 		t.Fatalf("an audit within its budget:\n%s\n%s", r.stdout, r.stderr)
@@ -819,5 +824,67 @@ func TestAFirstTokenNeverSpendsItsTreesChange(t *testing.T) {
 	r = h.must("org", "vault", "create", h.group, "-name", "more")
 	if strings.Contains(r.stderr, "own fund key") {
 		t.Fatalf("a second vault moved a coin again:\n%s", r.stderr)
+	}
+}
+
+// A funding tree minted ahead takes a coin when it is minted, and gives its
+// change back only once the mint is collected. A home with one coin has
+// none in between, and the token that lists the version just published
+// needs a fee: the mint is collected and its change waited for, so the put
+// that leaves the tree low finishes like any other. Before, it stopped at
+// an empty wallet with a version published and never listed.
+func TestATreeMintedAheadDoesNotEmptyTheWallet(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	borg, err := testhost.NewBorg(filepath.Join(h.dir, "borg-org"), h.chainS.URL, h.a, h.b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.borg = borg
+	org := h.identity("org", false, "-borg", borg.Home)
+	h.must("org", "fund", "-blocks", "1")
+	h.identity("miner", false)
+	h.must("miner", "fund", "-blocks", "100")
+	r := h.must("org", "crypt", "new", "example")
+	h.crypt = cryptLine.FindStringSubmatch(r.stdout)[1]
+	h.a.Carry(h.crypt)
+	h.b.Carry(h.crypt)
+	h.env["BSECRET_CRYPT"], h.env["BSECRET_HALL"], h.env["BSECRET_ORG"] = h.crypt, borg.Hall, org
+	h.identity("alice", false)
+	if h.group, err = borg.CreateGroup("engineering", h.keys["alice"]); err != nil {
+		t.Fatal(err)
+	}
+	h.must("org", "vault", "create", h.group, "-name", "ops")
+	// The home is left with exactly one coin, as one that has spent the
+	// others is.
+	g, _, _ := h.global("org")
+	hm, err := g.openHome()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for hm.e.Pool.Count() > 1 {
+		if _, err := hm.e.Pool.Take(1 << 30); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hm.close()
+	// A tree of 8 is minted ahead once 4 outputs or fewer are left: the
+	// fourth put's carrier triggers the mint, and its token needs a fee.
+	ahead := false
+	for i, name := range []string{"a/one", "a/two", "a/three", "a/four", "a/five", "a/six"} {
+		r := h.put(name, "v")
+		if !strings.Contains(r.stdout, fmt.Sprintf("token   seq %d ", i+1)) {
+			t.Fatalf("put %s:\n%s\n%s", name, r.stdout, r.stderr)
+		}
+		ahead = ahead || strings.Contains(r.stderr, "so the next is minted ahead")
+	}
+	if !ahead {
+		t.Fatal("no tree was minted ahead: the test did not reach the case")
+	}
+	if r := h.must("alice", "get", "a/six"); r.stdout != "v" || !strings.Contains(r.stderr, "anchored, current") {
+		t.Fatalf("alice: %q\n%s", r.stdout, r.stderr)
+	}
+	if r := h.must("org", "doctor"); strings.Contains(r.stdout, "outbox      ") || strings.Contains(r.stdout, "unlisted    ") {
+		t.Fatalf("the home owes something:\n%s", r.stdout)
 	}
 }

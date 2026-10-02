@@ -340,7 +340,7 @@ func (g *global) paidTrail(ctx context.Context, t *target, base string, b *budge
 		if err != nil {
 			return nil, fmt.Errorf("%w; the trail is not complete (a larger -budget, or -free to read it token by token at no price)", err)
 		}
-		outs, paid, err := g.ask(ctx, h, t.rd.Headers, base, q, per)
+		outs, paid, err := g.askWithin(ctx, h, t.rd.Headers, base, q, per, b.bound())
 		b.paid(paid)
 		return outs, err
 	}, func(beef []byte) (*vread.Tok, error) {

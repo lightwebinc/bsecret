@@ -40,6 +40,14 @@ const (
 	LabelRollback  = "rollback"
 )
 
+// culprit is what each of a reader's later checks names when it fails
+// (spec section 7.2): a failure says who, not only what.
+var culprit = map[string]string{
+	"commitment": "the key the wrap holds is not the one the record commits to: the owner wrapped a key other than the one it committed to",
+	"tag":        "a segment's tag does not verify under the committed key: the owner encrypted under a key other than the one it committed to",
+	"payload":    "the plaintext is not this secret's payload: the owner published another secret's payload under this identifier",
+}
+
 // ErrUnavailable is a ciphertext no configured source holds: nothing names
 // a store that serves none (spec section 18).
 var ErrUnavailable = errors.New("vread: no content source holds the ciphertext")
@@ -456,6 +464,20 @@ func (c *Client) Open(ctx context.Context, v *ChainView, g *Group, car *Car, anc
 		return nil, failed("hash", "the ciphertext served is not the one the record names: whoever served the bytes substituted or cut them")
 	}
 	// 2a to 4.
+	p, err := readValue(ctx, rec, ct, keys)
+	if err != nil {
+		return nil, err
+	}
+	rd.Payload = p
+	return rd, nil
+}
+
+// readValue makes checks 2a to 4 of a read on a ciphertext already held to
+// the record's length and hash: the wrap, under the key of the epoch the
+// record names and no other, or the owner's self wrap; the commitment;
+// every segment's tag; the payload and its name. A failure names its
+// culprit in words as well as by its label.
+func readValue(ctx context.Context, rec *secrec.Secret, ct []byte, keys Keys) (*secrec.Payload, error) {
 	var p *secrec.Payload
 	var err error
 	if keys.Owner != nil {
@@ -468,11 +490,19 @@ func (c *Client) Open(ctx context.Context, v *ChainView, g *Group, car *Car, anc
 		if kerr != nil {
 			return nil, failed("undecryptable", "this key holds no key of epoch %d, the epoch the record names: %v", rec.Epoch, kerr)
 		}
-		p, err = secrec.ReadAsMember(rec, ct, sym)
+		if p, err = secrec.ReadAsMember(rec, ct, sym); err != nil && secrec.Reason(err) == "undecryptable" {
+			// This reader opened and verified the key of the epoch the
+			// record names, and the wrap does not open under it: that
+			// names the owner (spec sections 6.3 and 7.2).
+			return nil, failed("undecryptable", "the wrap does not open under the key of epoch %d, the epoch the record names, which this key opened and verified against the group's commitment: the owner wrapped the content key under another key, or wrapped something that is not a key (%v)", rec.Epoch, err)
+		}
 	}
 	if err != nil {
-		return nil, &Failure{Label: secrec.Reason(err), Err: err}
+		label := secrec.Reason(err)
+		if who := culprit[label]; who != "" {
+			return nil, failed(label, "%s (%v)", who, err)
+		}
+		return nil, &Failure{Label: label, Err: err}
 	}
-	rd.Payload = p
-	return rd, nil
+	return p, nil
 }

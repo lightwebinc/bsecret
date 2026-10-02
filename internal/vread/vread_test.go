@@ -351,3 +351,60 @@ func TestAnAnswerIsBounded(t *testing.T) {
 		t.Fatalf("an answer over the bound: %v", err)
 	}
 }
+
+// A read's later checks name their culprit in words: a member that opened
+// the key of the epoch a record names, and finds the wrap does not open
+// under it, is told the owner wrapped under another key; a wrap that holds
+// another key than the one committed to names the owner too.
+func TestAFailedReadNamesItsCulprit(t *testing.T) {
+	key := func(b byte) [32]byte { return sha256.Sum256([]byte{b}) }
+	k, other, sym, old, salt := key(1), key(2), key(3), key(4), [secrec.SaltLen]byte{9}
+	pt, err := (&secrec.Payload{Name: "a/b", Value: []byte("v")}).EncodePadded(256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, err := secrec.Seal(k, salt, 16384, pt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vault := key(5)
+	id, _ := secrec.SecretID(vault, "a/b")
+	org, _ := hex.DecodeString("02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5")
+	rec := &secrec.Secret{Crypt: "a_abcdefghij", Org: org, Vault: vault, ID: id, Version: 1, Label: "internal", Epoch: 1,
+		Commitment: secrec.Commitment(k), Hash: sha256.Sum256(ct), Length: uint64(len(ct)), Salt: salt, Segment: 16384, Created: 1,
+		Self: make([]byte, secrec.WrapLen), Inline: ct}
+	cid, err := rec.ContentID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	keys := Keys{Epoch: func(context.Context, uint64) ([32]byte, error) { return sym, nil }}
+	read := func(wrapKey, wrapped [32]byte) error {
+		r := *rec
+		if r.Wrap, err = secrec.WrapToEpoch(wrapKey, cid, wrapped, nil); err != nil {
+			t.Fatal(err)
+		}
+		_, err := readValue(ctx, &r, ct, keys)
+		return err
+	}
+	if err := read(sym, k); err != nil {
+		t.Fatalf("a version wrapped under the named epoch's key: %v", err)
+	}
+	var f *Failure
+	if err := read(old, k); !errors.As(err, &f) || f.Label != "undecryptable" || !contains(err.Error(), "the owner wrapped the content key under another key") {
+		t.Errorf("a wrap under another epoch's key: %v", err)
+	}
+	if err := read(sym, other); !errors.As(err, &f) || f.Label != "commitment" || !contains(err.Error(), "the owner wrapped a key other than the one it committed to") {
+		t.Errorf("another key wrapped: %v", err)
+	}
+	// A reader that holds no key of the named epoch says so, and blames
+	// nobody.
+	none := Keys{Epoch: func(context.Context, uint64) ([32]byte, error) {
+		return [32]byte{}, errors.New("no wrap names this key")
+	}}
+	r := *rec
+	r.Wrap, _ = secrec.WrapToEpoch(sym, cid, k, nil)
+	if _, err := readValue(ctx, &r, ct, none); !errors.As(err, &f) || f.Label != "undecryptable" || contains(err.Error(), "the owner") {
+		t.Errorf("a reader with no key of the epoch: %v", err)
+	}
+}

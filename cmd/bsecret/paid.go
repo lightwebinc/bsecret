@@ -131,6 +131,12 @@ func (g *global) paidBase(at string) (string, error) {
 // returns what was paid, answered or not: a payment that left this process
 // is made.
 func (g *global) ask(ctx context.Context, h *home, hc chaintracker.ChainTracker, base string, q vread.Query, maxSats uint64) ([]lookup.Output, uint64, error) {
+	return g.askWithin(ctx, h, hc, base, q, maxSats, "-max-sats")
+}
+
+// askWithin is ask for a caller whose bound on this question may be another
+// flag's: bound names it, for the refusal of a price over maxSats.
+func (g *global) askWithin(ctx context.Context, h *home, hc chaintracker.ChainTracker, base string, q vread.Query, maxSats uint64, bound string) ([]lookup.Output, uint64, error) {
 	raw, _ := json.Marshal(q)
 	qq, err := secrec.ParseQuery(raw)
 	if err != nil {
@@ -189,7 +195,7 @@ func (g *global) ask(ctx context.Context, h *home, hc chaintracker.ChainTracker,
 	case errors.Is(ferr, errPaidOnce) || (ferr == nil && status == http.StatusPaymentRequired && once.tx != nil):
 		return nil, once.sats, refused("%s at %s: the host asked for a payment again after one was sent; one question is paid for once", qq.Class.Name, base)
 	case ferr != nil:
-		return nil, once.sats, fmt.Errorf("%s at %s: %w", qq.Class.Name, base, payWords(ferr, maxSats))
+		return nil, once.sats, fmt.Errorf("%s at %s: %w", qq.Class.Name, base, payWords(ferr, maxSats, bound))
 	case status != http.StatusOK:
 		return nil, once.sats, fmt.Errorf("%s at %s: status %d: %s", qq.Class.Name, base, status, termsafe.Abbrev(firstLine(string(ans))))
 	}
@@ -257,6 +263,15 @@ func (b *budget) next() (uint64, error) {
 	return min(b.per, b.total-b.spent), nil
 }
 
+// bound names the flag that sets what next answers: the price of one
+// question, or what is left of the budget when that is less.
+func (b *budget) bound() string {
+	if b.total-min(b.spent, b.total) < b.per {
+		return "what is left of -budget"
+	}
+	return "-max-sats"
+}
+
 func (b *budget) paid(sats uint64) { b.spent += sats }
 
 // checkOrigin refuses a terms base that is not an origin (spec section
@@ -272,10 +287,10 @@ func checkOrigin(base string) error {
 
 // payWords puts a refusal of the purse in this command's words. The library
 // names no flag and no config key; the command that set them does.
-func payWords(err error, maxSats uint64) error {
+func payWords(err error, maxSats uint64, bound string) error {
 	switch {
 	case errors.Is(err, purse.ErrOverMaxPay):
-		return fmt.Errorf("%w: more than the %d this command may pay (-max-sats)", err, maxSats)
+		return fmt.Errorf("%w: more than the %d this command may pay (%s)", err, maxSats, bound)
 	case errors.Is(err, purse.ErrNoNode):
 		return fmt.Errorf("%w (config key asset)", err)
 	case errors.Is(err, purse.ErrNoSettler):

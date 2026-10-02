@@ -398,6 +398,8 @@ func (e *Engine) spend(ctx context.Context, kind string) (*transaction.Transacti
 		if err := e.prove(ctx, kind, tree); err != nil {
 			return nil, 0, err
 		}
+	} else if err := e.reproveTree(ctx, tree); err != nil {
+		return nil, 0, err
 	}
 	mp, err := Minimal(tree.MerklePath, tree.TxID())
 	if err != nil {
@@ -455,6 +457,56 @@ func (e *Engine) prove(ctx context.Context, kind string, tree *transaction.Trans
 		}
 	}
 	return e.St.Save()
+}
+
+// reproveTree holds a funding tree's kept proof to the publisher's headers
+// and, when a reorganisation left it stale, replaces it with the node's
+// current one, in the home too: a carrier or a first token carrying a
+// proof of an orphaned block is refused by every host.
+func (e *Engine) reproveTree(ctx context.Context, tree *transaction.Transaction) error {
+	id := tree.TxID().String()
+	changed, err := e.current(ctx, tree)
+	if err != nil {
+		return fmt.Errorf("funding tree %s: %w", Short(id), err)
+	}
+	if !changed {
+		return nil
+	}
+	mp := tree.MerklePath
+	e.note("funding tree %s: its kept proof named a block that is no longer in the header source's chain; the node's current proof, at height %d, replaces it", Short(id), mp.BlockHeight)
+	e.kept.Prove(id, mp)
+	for _, kind := range state.TreeKinds {
+		ts := e.St.Trees[kind]
+		if ts == nil {
+			continue
+		}
+		fix := func(t *funding.Tree) {
+			if t != nil && t.Txid == id {
+				t.BumpHex, t.Height, t.BeefHex = mp.Hex(), mp.BlockHeight, ""
+			}
+		}
+		fix(ts.Tree)
+		for i := range ts.Trees {
+			fix(&ts.Trees[i])
+		}
+		for i := range ts.Ahead {
+			fix(&ts.Ahead[i])
+		}
+	}
+	return e.St.Save()
+}
+
+// treeTx is a funding tree the home keeps, under a proof that verifies
+// against the publisher's headers.
+func (e *Engine) treeTx(ctx context.Context, txid string) (*transaction.Transaction, error) {
+	tree, err := e.kept.Tx(txid)
+	if err != nil {
+		return nil, err
+	}
+	if tree.MerklePath == nil {
+		return nil, fmt.Errorf("funding tree %s has no proof yet", Short(txid))
+	}
+	return tree, e.reproveTree(ctx, tree)
 }
 
 // markSpent records that vout of the current tree of kind is used.

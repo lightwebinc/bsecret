@@ -311,7 +311,7 @@ func (g *global) paidTrail(ctx context.Context, t *target, base string, maxSats 
 	toks, err := vread.Trail(q, func(q vread.Query) ([]lookup.Output, error) {
 		return g.ask(ctx, h, t.rd.Headers, base, q, maxSats)
 	}, func(beef []byte) (*vread.Tok, error) {
-		return vread.VerifyToken(ctx, beef, t.crypt, t.org, &t.vault, t.rd.Headers)
+		return t.rd.Token(ctx, beef, t.crypt, t.org, &t.vault)
 	})
 	if err != nil {
 		var re *vread.Refusal

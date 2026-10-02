@@ -50,7 +50,7 @@ func (v *ChainView) secretQuery(id [32]byte) Query {
 // the vault, keeping each once.
 func (c *Client) carriers(ctx context.Context, v *ChainView, host string, outs []lookup.Output, seen map[string]*Car, refused *[]Refusal) {
 	for _, o := range outs {
-		car, err := VerifyCarrier(ctx, o.Beef, v.Crypt, c.Headers)
+		car, err := c.Carrier(ctx, o.Beef, v.Crypt)
 		if err == nil {
 			s := car.Carrier.Secret
 			if hex.EncodeToString(s.Org) != hex.EncodeToString(v.Org) || s.Vault != v.Vault {
@@ -142,7 +142,7 @@ type SetAnswer struct {
 func (c *Client) Secrets(ctx context.Context, v *ChainView) []SetAnswer {
 	q := Query{"crypt": v.Crypt, "org": hex.EncodeToString(v.Org), "secretsOf": VaultHex(v.Vault)}
 	cursor := func(o lookup.Output) string {
-		car, err := VerifyCarrier(ctx, o.Beef, v.Crypt, c.Headers)
+		car, err := c.Carrier(ctx, o.Beef, v.Crypt)
 		if err != nil {
 			return ""
 		}
@@ -259,7 +259,7 @@ func (c *Client) Swept(ctx context.Context, crypt string, op transaction.Outpoin
 		}
 		asked++
 		for _, o := range outs {
-			spent, txid, err := VerifySweep(ctx, o.Beef, crypt, c.Headers)
+			spent, txid, err := c.Sweep(ctx, o.Beef, crypt)
 			if err != nil {
 				continue
 			}

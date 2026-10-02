@@ -162,7 +162,7 @@ func (c *Client) Chain(ctx context.Context, crypt string, org []byte, vault [32]
 	v := &ChainView{Crypt: crypt, Org: org, Vault: vault, HostLatest: map[string]uint64{}, HostErr: map[string]error{},
 		Lacks: map[string][]uint64{}, fold: secrec.NewVaultFold(), reused: map[[32]byte]bool{}}
 	verify := func(h string, o lookup.Output, seq *uint64) *Tok {
-		t, err := VerifyToken(ctx, o.Beef, crypt, org, &vault, c.Headers)
+		t, err := c.Token(ctx, o.Beef, crypt, org, &vault)
 		if err == nil && seq != nil && t.Seq() != *seq {
 			err = errors.New("vread: the token is not of the seq asked")
 		}
@@ -503,7 +503,7 @@ func (c *Client) Vaults(ctx context.Context, crypt string, org []byte) (map[[32]
 			continue
 		}
 		for _, o := range ho.Outputs {
-			t, err := VerifyToken(ctx, o.Beef, crypt, org, nil, c.Headers)
+			t, err := c.Token(ctx, o.Beef, crypt, org, nil)
 			if err != nil {
 				continue
 			}

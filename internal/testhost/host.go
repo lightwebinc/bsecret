@@ -78,6 +78,10 @@ type Host struct {
 	// Substitute, when set, rewrites a carrier's answered BEEF: a host
 	// that serves other bytes.
 	Substitute func(beef []byte) []byte
+	// Stale answers every token, carrier and sweep under a proof that names
+	// another block than the one the chain mined it in: a host whose stored
+	// proofs a reorganisation left behind.
+	Stale bool
 	// Submits counts submissions; Refused counts refusals by reason; Asked
 	// counts the ls_bsecret questions answered, by class.
 	Submits int
@@ -563,7 +567,7 @@ func (h *Host) Answer(q *secrec.Question) ([]Output, error) {
 	toks := func(rs []*tokRow) []Output {
 		out := []Output{}
 		for _, t := range rs {
-			out = append(out, Output{Beef: t.stored})
+			out = append(out, Output{Beef: h.stale(t.stored, false)})
 		}
 		return out
 	}
@@ -571,7 +575,7 @@ func (h *Host) Answer(q *secrec.Question) ([]Output, error) {
 		if h.Substitute != nil {
 			return h.Substitute(c.beef)
 		}
-		return c.beef
+		return h.stale(c.beef, true)
 	}
 	cars := func(rs []*carRow) []Output {
 		out := []Output{}
@@ -698,7 +702,7 @@ func (h *Host) Answer(q *secrec.Question) ([]Output, error) {
 			}
 			for _, x := range s.spent {
 				if x == m["spent"] {
-					out = append(out, Output{Beef: s.beef})
+					out = append(out, Output{Beef: h.stale(s.beef, false)})
 				}
 			}
 		}
@@ -731,6 +735,36 @@ func (h *Host) Answer(q *secrec.Question) ([]Output, error) {
 		return toks(page(rs, n, func(t *tokRow) string { return strconv.FormatUint(t.seq, 10) })), nil
 	}
 	return nil, fmt.Errorf("class %s is not answered here", q.Class.Name)
+}
+
+// stale rewrites a stored BEEF's proof to name another block when Stale is
+// set: the subject's own proof, or with parent its funding parent's.
+func (h *Host) stale(beef []byte, parent bool) []byte {
+	if !h.Stale {
+		return beef
+	}
+	_, tx, _, err := guard.ParseBEEF(beef, 8<<20)
+	if err != nil || tx == nil {
+		return beef
+	}
+	target := tx
+	if parent {
+		if len(tx.Inputs) == 0 || tx.Inputs[0].SourceTransaction == nil {
+			return beef
+		}
+		target = tx.Inputs[0].SourceTransaction
+	}
+	if target.MerklePath == nil {
+		return beef
+	}
+	mp := *target.MerklePath
+	mp.BlockHeight += 3
+	target.MerklePath = &mp
+	out, err := tx.AtomicBEEF(false)
+	if err != nil {
+		return beef
+	}
+	return out
 }
 
 // Plane stands in for the multicast plane: a facade that delivers each

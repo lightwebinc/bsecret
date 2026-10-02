@@ -1191,3 +1191,73 @@ func TestAnUnconfirmedCarrierIsNotPublished(t *testing.T) {
 		t.Fatalf("alice: %q\n%s", r.stdout, r.stderr)
 	}
 }
+
+// After a reorganisation a proof kept from before may name a block that is
+// no longer in the best chain. A reader handed such a proof by a host, and
+// an owner holding one in its home, each take the transaction's current
+// proof from the node and verify that against their own headers.
+func TestStaleProofsAreReplaced(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	// The hosts answer every token and carrier under a proof of another
+	// block.
+	h.a.Stale, h.b.Stale = true, true
+	if r := h.must("alice", "get", "db/password"); r.stdout != "one" || strings.Contains(r.stderr, "REFUSED") {
+		t.Fatalf("a reader given stale proofs: %q\n%s", r.stdout, r.stderr)
+	}
+	if r := h.must("carol", "audit", "-free"); !strings.Contains(r.stdout, "audit   OK") {
+		t.Fatalf("an audit given stale proofs:\n%s\n%s", r.stdout, r.stderr)
+	}
+	// With no chain source there is nothing to replace them with: nothing
+	// verifies, and nothing is taken.
+	delete(h.env, "BSECRET_ASSET")
+	h.want(h.run("bob", "", "get", "db/password"), exitIncomplete, "no host answers this vault")
+	h.env["BSECRET_ASSET"] = h.chainS.URL
+	h.a.Stale, h.b.Stale = false, false
+
+	// The owner's home: the proofs it kept of its latest token and of its
+	// funding tree name another block.
+	path := filepath.Join(h.dir, "org", state.File)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var st map[string]any
+	if err := json.Unmarshal(raw, &st); err != nil {
+		t.Fatal(err)
+	}
+	shift := func(m map[string]any) {
+		mp, err := transaction.NewMerklePathFromHex(m["bumpHex"].(string))
+		if err != nil {
+			t.Fatal(err)
+		}
+		mp.BlockHeight += 3
+		m["bumpHex"] = mp.Hex()
+	}
+	tokens := st["vaults"].([]any)[0].(map[string]any)["tokens"].([]any)
+	for _, tok := range tokens {
+		shift(tok.(map[string]any))
+	}
+	trees := st["trees"].(map[string]any)["secret"].(map[string]any)
+	shift(trees["tree"].(map[string]any))
+	for _, tr := range trees["trees"].([]any) {
+		shift(tr.(map[string]any))
+	}
+	out, _ := json.Marshal(st)
+	if err := os.WriteFile(path, out, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := h.put("db/password", "two")
+	if !strings.Contains(r.stderr, "the node's current proof") {
+		t.Fatalf("a put from a home with stale proofs:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if r := h.must("alice", "get", "db/password"); r.stdout != "two" || strings.Contains(r.stderr, "DISAGREES") {
+		t.Fatalf("after the put: %q\n%s", r.stdout, r.stderr)
+	}
+	// The home is healed: the next put says nothing of proofs.
+	if r := h.put("db/password", "three"); strings.Contains(r.stderr, "the node's current proof") {
+		t.Fatalf("the home kept its stale proofs:\n%s", r.stderr)
+	}
+}

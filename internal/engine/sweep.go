@@ -63,6 +63,11 @@ func (e *Engine) Retract(ctx context.Context, crypt, txid string, vouts []uint32
 	if err != nil {
 		return nil, err
 	}
+	if tree.MerklePath != nil {
+		if err := e.reproveTree(ctx, tree); err != nil {
+			return nil, err
+		}
+	}
 	payer := e.NewPayer()
 	fee, coin, err := e.sweepFee(ctx, payer)
 	if err != nil {
@@ -204,6 +209,13 @@ func (e *Engine) FinishSweep(ctx context.Context) error {
 			return err
 		}
 		tx.MerklePath = mp
+	}
+	if changed, err := e.current(ctx, tx); err == nil && changed {
+		// A sweep mined again after a reorganisation: its current proof.
+		sw.BumpHex, sw.Height = tx.MerklePath.Hex(), tx.MerklePath.BlockHeight
+		if err := e.St.Save(); err != nil {
+			return err
+		}
 	}
 	mp, err := Minimal(tx.MerklePath, tx.TxID())
 	if err != nil {

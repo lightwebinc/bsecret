@@ -279,6 +279,95 @@ const (
 	walkBytes   = 256 << 20
 )
 
+// A host stores an object with the proof it was given, and cannot take a
+// new one: after a reorganisation the stored proof may name a block that is
+// no longer in the best chain, although the same transaction was mined
+// again elsewhere (spec section 11.5). A reader then fetches the
+// transaction's current proof from a chain source by its txid, and verifies
+// that against its own headers. The three methods below do it for a token,
+// a carrier's funding tree and a sweep; without a chain source they are the
+// plain checks.
+
+// current is the chain source's proof of tx, cut to the minimal one, when
+// the proof tx carries does not verify against the reader's headers and the
+// source's does.
+func (c *Client) current(ctx context.Context, tx *transaction.Transaction) bool {
+	if c.Source == nil || tx == nil || c.Headers == nil {
+		return false
+	}
+	if tx.MerklePath != nil {
+		if ok, err := tx.MerklePath.Verify(ctx, tx.TxID(), c.Headers); err != nil || ok {
+			return false
+		}
+	}
+	mp, err := c.Source.MerkleProof(ctx, tx.TxID().String())
+	if err != nil || mp == nil {
+		return false
+	}
+	if mp, err = secrec.MinimalPath(mp, tx.TxID()); err != nil {
+		return false
+	}
+	if ok, err := mp.Verify(ctx, tx.TxID(), c.Headers); err != nil || !ok {
+		return false
+	}
+	tx.MerklePath = mp
+	return true
+}
+
+// Token is VerifyToken, with a stale stored proof replaced by the chain
+// source's current one.
+func (c *Client) Token(ctx context.Context, beef []byte, crypt string, org []byte, vault *[32]byte) (*Tok, error) {
+	t, err := VerifyToken(ctx, beef, crypt, org, vault, c.Headers)
+	if !errors.Is(err, secrec.ErrUnmined) || len(beef) > limits.MaxBEEF {
+		return t, err
+	}
+	tx, _, perr := secrec.StoredToken(beef)
+	if perr != nil || !c.current(ctx, tx) {
+		return nil, err
+	}
+	again, perr := tx.AtomicBEEF(false)
+	if perr != nil {
+		return nil, err
+	}
+	return VerifyToken(ctx, again, crypt, org, vault, c.Headers)
+}
+
+// Carrier is VerifyCarrier, with a stale proof of the carrier's funding
+// tree replaced by the chain source's current one.
+func (c *Client) Carrier(ctx context.Context, beef []byte, crypt string) (*Car, error) {
+	car, err := VerifyCarrier(ctx, beef, crypt, c.Headers)
+	if err == nil || c.Source == nil {
+		return car, err
+	}
+	_, tx, _, perr := guard.ParseBEEF(beef, limits.MaxBEEF)
+	if perr != nil || tx == nil || len(tx.Inputs) != 1 || !c.current(ctx, tx.Inputs[0].SourceTransaction) {
+		return nil, err
+	}
+	again, perr := tx.AtomicBEEF(false)
+	if perr != nil {
+		return nil, err
+	}
+	return VerifyCarrier(ctx, again, crypt, c.Headers)
+}
+
+// Sweep is VerifySweep, with a stale stored proof replaced by the chain
+// source's current one.
+func (c *Client) Sweep(ctx context.Context, beef []byte, crypt string) ([]transaction.Outpoint, string, error) {
+	spent, txid, err := VerifySweep(ctx, beef, crypt, c.Headers)
+	if !errors.Is(err, secrec.ErrUnmined) {
+		return spent, txid, err
+	}
+	_, tx, _, perr := guard.ParseBEEF(beef, limits.MaxBEEF)
+	if perr != nil || tx == nil || !c.current(ctx, tx) {
+		return nil, "", err
+	}
+	again, perr := tx.AtomicBEEF(false)
+	if perr != nil {
+		return nil, "", err
+	}
+	return VerifySweep(ctx, again, crypt, c.Headers)
+}
+
 // HostOutputs is what one host answered to one question, all pages.
 type HostOutputs struct {
 	Host      string

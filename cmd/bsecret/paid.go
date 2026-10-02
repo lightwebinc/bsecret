@@ -346,7 +346,7 @@ func cmdHistory(ctx context.Context, g *global, args []string) error {
 	}
 	var bad error
 	for _, out := range outs {
-		car, err := vread.VerifyCarrier(ctx, out.Beef, t.crypt, t.rd.Headers)
+		car, err := t.rd.Carrier(ctx, out.Beef, t.crypt)
 		if err == nil && (car.Carrier.Secret.ID != id || car.Carrier.Secret.Vault != t.vault) {
 			err = errors.New("another secret's carrier")
 		}

@@ -64,15 +64,6 @@ func (e *Engine) ownToken(txid string) (*transaction.Transaction, error) {
 	return nil, fmt.Errorf("%s is not a token of this home's", txid)
 }
 
-// parentOf is the transaction a token's predecessor input spends: the
-// token before it, or at seq 0 the chain tree.
-func (e *Engine) parentOf(txid string) (*transaction.Transaction, error) {
-	if tx, err := e.ownToken(txid); err == nil {
-		return tx, nil
-	}
-	return e.kept.Tx(txid)
-}
-
 // Records are a vault's own chain, decoded.
 func Records(v *state.Vault) ([]*secrec.Vault, error) {
 	var out []*secrec.Vault
@@ -172,12 +163,8 @@ func (e *Engine) Ready(ctx context.Context, v *state.Vault) (*Writer, error) {
 	w := &Writer{Vault: v, Recs: recs, Pred: recs[len(recs)-1], Last: last, Fold: f, At: e.Now()}
 	// 1. the vault's latest token is the latest: mined in the writer's own
 	// headers, and its output unspent per a source that indexes spends.
-	tx, err := rebuild(last)
-	if err != nil {
-		return nil, err
-	}
-	if !secrec.IsMined(ctx, tx, e.Legs.Headers) {
-		return nil, fmt.Errorf("%w: the vault's latest token %s does not verify against the header source", ErrStale, Short(last.Txid))
+	if _, err := e.tokenTx(ctx, last); err != nil {
+		return nil, fmt.Errorf("%w: the vault's latest token: %v", ErrStale, err)
 	}
 	by, err := e.Legs.Asset.Spender(ctx, last.Txid, last.Vout)
 	if err != nil {
@@ -217,6 +204,28 @@ func (e *Engine) refresh(ctx context.Context, w *Writer) error {
 	}
 	w.At = e.Now()
 	return nil
+}
+
+// tokenTx rebuilds a mined token of the home's own under a proof that
+// verifies against the publisher's headers, replacing a kept proof a
+// reorganisation left stale with the node's current one, in the home too.
+func (e *Engine) tokenTx(ctx context.Context, t *state.Token) (*transaction.Transaction, error) {
+	tx, err := rebuild(t)
+	if err != nil {
+		return nil, err
+	}
+	changed, err := e.current(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	if changed {
+		e.note("token %s: its kept proof named a block that is no longer in the header source's chain; the node's current proof, at height %d, replaces it", Short(t.Txid), tx.MerklePath.BlockHeight)
+		t.BumpHex, t.Height = tx.MerklePath.Hex(), tx.MerklePath.BlockHeight
+		if err := e.St.Save(); err != nil {
+			return nil, err
+		}
+	}
+	return tx, nil
 }
 
 // group reads the vault's group through borg's reader.
@@ -433,7 +442,7 @@ func (e *Engine) transition(ctx context.Context, w *Writer, c Change) error {
 	if rec.Count > limits.SecretsWarn {
 		e.note("warning: the vault holds %d secrets; a removal from its group then takes more than 4 blocks to settle (docs/limits.md)", rec.Count)
 	}
-	parent, err := rebuild(w.Last)
+	parent, err := e.tokenTx(ctx, w.Last)
 	if err != nil {
 		return err
 	}
@@ -751,19 +760,21 @@ func (e *Engine) publishToken(ctx context.Context, v *state.Vault, txid string) 
 	if err != nil {
 		return err
 	}
-	tx, err := rebuild(t)
+	// A token just mined waits for its block to reach the header source;
+	// one whose kept proof a reorganisation left stale takes the node's
+	// current proof.
+	tx, err := e.tokenTx(ctx, t)
 	if err != nil {
-		return err
+		if tx, err = rebuild(t); err != nil {
+			return err
+		}
+		if err := e.inHeaders(ctx, state.KindToken, tx); err != nil {
+			return err
+		}
 	}
-	parent, err := e.parentOf(t.Parent)
+	parent, err := e.parentTx(ctx, v, t)
 	if err != nil {
-		return err
-	}
-	if parent.MerklePath == nil {
-		return fmt.Errorf("token %s: its parent %s has no proof", Short(txid), Short(t.Parent))
-	}
-	if err := e.inHeaders(ctx, state.KindToken, tx); err != nil {
-		return err
+		return fmt.Errorf("token %s: its parent %s: %w", Short(txid), Short(t.Parent), err)
 	}
 	beef, err := TokenBEEF(ctx, v.Crypt, tx, parent, e.Legs.Headers)
 	if err != nil {
@@ -775,6 +786,18 @@ func (e *Engine) publishToken(ctx context.Context, v *state.Vault, txid string) 
 	p := state.Pending{Kind: state.KindToken, Crypt: v.Crypt, Txid: txid, Beef: hex.EncodeToString(beef), Org: e.orgHex(), Vault: v.ID, Seq: t.Seq,
 		NotBefore: e.Now().Add(e.Opts.Delay).Unix()}
 	return e.queue(ctx, p)
+}
+
+// parentTx is the transaction a token's predecessor input spends, under a
+// proof that verifies against the publisher's headers: the token before it
+// in the vault, or at seq 0 the chain tree.
+func (e *Engine) parentTx(ctx context.Context, v *state.Vault, t *state.Token) (*transaction.Transaction, error) {
+	for i := range v.Tokens {
+		if v.Tokens[i].Txid == t.Parent {
+			return e.tokenTx(ctx, &v.Tokens[i])
+		}
+	}
+	return e.treeTx(ctx, t.Parent)
 }
 
 // Owed publishes what the home owes its crypts: a token of its own vaults

@@ -215,7 +215,7 @@ func (f *filler) sweep(ctx context.Context, host string, c *vread.Car) bool {
 		return false
 	}
 	for _, o := range outs {
-		spent, txid, err := vread.VerifySweep(ctx, o.Beef, f.t.crypt, rd.Headers)
+		spent, txid, err := rd.Sweep(ctx, o.Beef, f.t.crypt)
 		if err != nil {
 			continue
 		}

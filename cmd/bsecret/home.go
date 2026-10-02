@@ -1,0 +1,725 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/bsv-blockchain/go-sdk/chainhash"
+	base58 "github.com/bsv-blockchain/go-sdk/compat/base58"
+	ec "github.com/bsv-blockchain/go-sdk/primitives/ec"
+
+	"github.com/lightwebinc/bcommon/bwallet"
+	"github.com/lightwebinc/bcommon/guard"
+	"github.com/lightwebinc/bcommon/mint"
+	"github.com/lightwebinc/bcommon/nodeapi"
+	"github.com/lightwebinc/bcommon/publish"
+	"github.com/lightwebinc/bcommon/termsafe"
+
+	"github.com/lightwebinc/borg/reader"
+
+	"github.com/lightwebinc/bsecret/internal/config"
+	"github.com/lightwebinc/bsecret/internal/engine"
+	"github.com/lightwebinc/bsecret/internal/limits"
+	"github.com/lightwebinc/bsecret/internal/secrec"
+	"github.com/lightwebinc/bsecret/internal/state"
+	"github.com/lightwebinc/bsecret/internal/unicast"
+	"github.com/lightwebinc/bsecret/internal/vread"
+)
+
+// httpClient is the client for everything but submissions, which
+// bcommon's facade makes itself.
+var httpClient *http.Client
+
+// sampleHook, when a test sets it, draws content keys in place of the
+// random source.
+var sampleHook func() ([32]byte, [secrec.SaltLen]byte, error)
+
+// poll paces proof waits; tests shorten it.
+var poll = 2 * time.Second
+
+// openWallet opens the home's embedded wallet.
+func (g *global) openWallet() (*bwallet.Embedded, error) {
+	e, err := bwallet.Open(g.cfg.Home, engine.Profile)
+	if err != nil {
+		return nil, fmt.Errorf("open the home %s: %w (run `bsecret init`)", g.cfg.Home, err)
+	}
+	e.Originator = g.cfg.Originator
+	e.Mainnet = g.cfg.Network == "main"
+	return e, nil
+}
+
+// lockHome takes the home's lock: one command that spends from the pool or
+// writes the state at a time.
+func (g *global) lockHome() (func(), error) {
+	unlock, err := state.Lock(filepath.Join(g.cfg.Home, "lock"))
+	if errors.Is(err, state.ErrLocked) {
+		return nil, usage("another bsecret command is using the home %s (one at a time)", g.cfg.Home)
+	}
+	return unlock, err
+}
+
+// home is an open, locked home: its wallet and its state.
+type home struct {
+	e     *bwallet.Embedded
+	st    *state.State
+	close func()
+}
+
+// openHome opens and locks the home and loads its state.
+func (g *global) openHome() (*home, error) {
+	e, err := g.openWallet()
+	if err != nil {
+		return nil, err
+	}
+	unlock, err := g.lockHome()
+	if err != nil {
+		return nil, err
+	}
+	st, err := state.Load(g.cfg.Home, e.Signer().IdentityHex())
+	if err != nil {
+		unlock()
+		return nil, err
+	}
+	return &home{e: e, st: st, close: unlock}, nil
+}
+
+// peekState reads the home's state without the lock, for a command that
+// only reads it; nil when there is no home.
+func (g *global) peekState() *state.State {
+	e, err := g.openWallet()
+	if err != nil {
+		return nil
+	}
+	st, err := state.Load(g.cfg.Home, e.Signer().IdentityHex())
+	if err != nil {
+		return nil
+	}
+	return st
+}
+
+// identityKey is the home's identity private key: an organisation's when
+// this home owns vaults, from which its signer key is derived.
+func (g *global) identityKey() (*ec.PrivateKey, error) {
+	raw, err := os.ReadFile(filepath.Join(g.cfg.Home, "identity.json"))
+	if err != nil {
+		return nil, fmt.Errorf("open the home %s: %w (run `bsecret init`)", g.cfg.Home, err)
+	}
+	var id struct {
+		WIF string `json:"wif"`
+	}
+	if err := json.Unmarshal(raw, &id); err != nil {
+		return nil, fmt.Errorf("identity.json: %w", err)
+	}
+	k, err := ec.PrivateKeyFromWif(id.WIF)
+	if err != nil {
+		return nil, fmt.Errorf("identity.json: %w", err)
+	}
+	return k, nil
+}
+
+// node is the configured node: its JSON-RPC and asset API.
+func (g *global) node(needRPC bool) (*nodeapi.RPC, *nodeapi.Asset, error) {
+	if g.cfg.Asset == "" || (needRPC && g.cfg.RPC == "") {
+		if needRPC {
+			return nil, nil, usage("rpc and asset must be configured (config keys rpc, asset)")
+		}
+		return nil, nil, usage("asset must be configured (config key asset): proofs and spends are read from the node")
+	}
+	var rpc *nodeapi.RPC
+	if g.cfg.RPC != "" {
+		rpc = &nodeapi.RPC{URL: g.cfg.RPC, User: g.cfg.RPCUser, Pass: g.cfg.RPCPass, ID: "bsecret"}
+	}
+	return rpc, &nodeapi.Asset{Base: g.cfg.Asset}, nil
+}
+
+// spends is the configured spend source, or nil: the node's view of which
+// outputs are spent.
+func (g *global) spends() *nodeapi.Asset {
+	if g.cfg.Asset == "" {
+		return nil
+	}
+	return &nodeapi.Asset{Base: g.cfg.Asset}
+}
+
+// settler is the configured settlement leg.
+func (g *global) settler() (publish.Settler, *publish.Arcade, error) {
+	kind, addr, _ := strings.Cut(g.cfg.Settle, ":")
+	switch kind {
+	case "tcp":
+		return &publish.TCPIngress{Addr: addr}, nil, nil
+	case "rpc":
+		return &publish.RPCSettler{RPC: &nodeapi.RPC{URL: addr, User: g.cfg.RPCUser, Pass: g.cfg.RPCPass, ID: "bsecret"}}, nil, nil
+	case "arcade":
+		a := &publish.Arcade{Base: addr, Key: g.cfg.ArcadeKey}
+		return a, a, nil
+	}
+	return nil, nil, usage("settle must be tcp:<host:port>, rpc:<url> or arcade:<url> (config key settle)")
+}
+
+// reader is a reader over the crypt's hosts and the header source.
+func (g *global) reader() (*vread.Client, error) {
+	hc, err := g.headerClient()
+	if err != nil {
+		return nil, err
+	}
+	if len(g.cfg.Hosts) == 0 {
+		return nil, usage("no overlay host configured (config key hosts, or -hosts)")
+	}
+	return &vread.Client{Hosts: g.cfg.Hosts, Headers: hc, Timeout: g.cfg.Timeout, HTTP: httpClient}, nil
+}
+
+// groups is borg's reader over the hosts of the group's hall and the same
+// header source.
+func (g *global) groups() (*reader.Client, error) {
+	hc, err := g.headerClient()
+	if err != nil {
+		return nil, err
+	}
+	hosts := g.cfg.GroupHosts()
+	if len(hosts) == 0 {
+		return nil, usage("no overlay host configured for the group's hall (config key hall_hosts, or hosts)")
+	}
+	return &reader.Client{Hosts: hosts, Headers: hc, Timeout: g.cfg.Timeout, HTTP: httpClient}, nil
+}
+
+// content is where ciphertexts that are not carried are kept, or nil.
+func (g *global) content() *vread.Store {
+	if len(g.cfg.Content) == 0 {
+		return nil
+	}
+	hc := httpClient
+	if hc == nil {
+		hc = &http.Client{Timeout: g.cfg.Timeout}
+	}
+	return &vread.Store{Sources: g.cfg.Content, Max: g.cfg.MaxFetch, HTTP: hc}
+}
+
+// parseKey reads an identity key from 66 lowercase hex digits.
+func parseKey(what, s string) ([]byte, error) {
+	if !config.IsKeyHex(s) {
+		return nil, usage("%s %q is not an identity key (66 lowercase hex digits)", what, termsafe.Abbrev(s))
+	}
+	b, _ := hex.DecodeString(s)
+	return b, nil
+}
+
+// legs are the endpoints a publisher publishes and settles through. None
+// has a default.
+func (g *global) legs() (engine.Legs, error) {
+	var l engine.Legs
+	_, asset, err := g.node(false)
+	if err != nil {
+		return l, err
+	}
+	l.Asset = asset
+	if l.Settler, l.Arcade, err = g.settler(); err != nil {
+		return l, err
+	}
+	hc, err := g.headerClient()
+	if err != nil {
+		return l, err
+	}
+	l.Headers = hc
+	// A publisher confirms every object at every host named by lookup
+	// (spec section 13), so it needs the hosts.
+	if l.Reader, err = g.reader(); err != nil {
+		return l, err
+	}
+	if l.Groups, err = g.groups(); err != nil {
+		return l, err
+	}
+	l.Content = g.content()
+	switch g.cfg.Mode {
+	case config.ModeUnicast:
+		if g.cfg.Facade != "" {
+			return l, usage("facade is for mode plane; mode unicast submits to every host in hosts, so leave facade unset")
+		}
+		need, err := config.Need(g.cfg.Quorum, len(g.cfg.Hosts))
+		if err != nil {
+			return l, usage("%v (config key quorum)", err)
+		}
+		l.Hosts = &unicast.Set{Hosts: g.cfg.Hosts, Need: need, Retries: engine.Retries, HTTP: httpClient, Note: g.say, Verbose: g.verbose}
+	default:
+		if g.cfg.Facade == "" {
+			return l, usage("facade must be configured (config key facade): the overlay host a publisher submits to on the plane (or set mode = unicast to submit to every host in hosts)")
+		}
+		l.Facade = &publish.Facade{Base: g.cfg.Facade, HTTP: httpClient}
+		var direct []string
+		for _, h := range g.cfg.Hosts {
+			if strings.TrimRight(h, "/") != strings.TrimRight(g.cfg.Facade, "/") {
+				direct = append(direct, h)
+			}
+		}
+		if len(direct) > 0 {
+			l.Direct = &unicast.Set{Hosts: direct, Need: len(direct), Retries: engine.Retries, HTTP: httpClient, Note: g.say, Verbose: g.verbose}
+		}
+	}
+	return l, nil
+}
+
+// writer is an open home with its publisher.
+type writer struct {
+	h   *home
+	eng *engine.Engine
+}
+
+// close ends a publisher's run: a tree minted ahead is collected, the
+// per-host tallies printed, and the home unlocked.
+func (w *writer) close(ctx context.Context, g *global) {
+	if w.eng != nil {
+		if err := w.eng.Close(ctx); err != nil {
+			g.say("closing: %v", err)
+		}
+		g.tallies(w.eng)
+	}
+	w.h.close()
+}
+
+// openWriter opens the home and a publisher over it, and finishes whatever
+// a previous run left.
+func (g *global) openWriter(ctx context.Context) (*writer, error) {
+	h, err := g.openHome()
+	if err != nil {
+		return nil, err
+	}
+	w := &writer{h: h}
+	legs, err := g.legs()
+	if err != nil {
+		h.close()
+		return nil, err
+	}
+	p := limits.Publisher{Plane: g.cfg.Mode == config.ModePlane, Hosts: len(g.cfg.Hosts), TreeCount: g.cfg.TreeCount,
+		ChainTreeCount: g.cfg.ChainTreeCount, ObjectBound: g.cfg.ObjectBound}
+	if g.cfg.Mode == config.ModeUnicast {
+		p.Need, _ = config.Need(g.cfg.Quorum, len(g.cfg.Hosts))
+	}
+	warnings, err := p.Check()
+	if err != nil {
+		h.close()
+		return nil, usage("%v", err)
+	}
+	for _, x := range warnings {
+		g.say("warning: %s", x)
+	}
+	o := engine.Options{TreeCount: g.cfg.TreeCount, ChainTreeCount: g.cfg.ChainTreeCount, TreeSats: limits.DefaultTreeSats,
+		Ahead: limits.DefaultAhead, Fees: mint.DefaultFees, ObjectBound: g.cfg.ObjectBound, Poll: poll, Wait: 10 * time.Minute,
+		Delay: g.cfg.Delay, Freshness: g.cfg.Freshness}
+	if uint32(o.TreeCount) <= o.Ahead { //nolint:gosec // bounded by the limits
+		o.Ahead = uint32(o.TreeCount / 2) //nolint:gosec // bounded by the limits
+	}
+	eng, err := engine.New(h.st, h.e.Signer(), h.e.Pool, legs, o)
+	if err != nil {
+		h.close()
+		return nil, err
+	}
+	eng.Note, eng.Verbose, eng.Sample = g.say, g.verbose, sampleHook
+	w.eng = eng
+	if eng.Key, err = g.identityKey(); err != nil {
+		w.close(ctx, g)
+		return nil, err
+	}
+	if err := eng.Start(ctx); err != nil {
+		var lost *engine.LostError
+		if !errors.As(err, &lost) {
+			w.close(ctx, g)
+			return nil, err
+		}
+		// A transition a previous command left was beaten to the chain;
+		// this command goes on from what the home holds.
+		g.say("%v", lost)
+	}
+	return w, nil
+}
+
+// tallies prints, in mode unicast, each host's count of what it took and
+// what it missed.
+func (g *global) tallies(eng *engine.Engine) {
+	if eng == nil || eng.Legs.Hosts == nil {
+		return
+	}
+	for _, t := range eng.Legs.Hosts.Tallies() {
+		line := fmt.Sprintf("host %s: took %d object(s), missed %d", t.Host, t.Took, t.Missed)
+		if t.Missed > 0 {
+			line += ": " + strings.Join(t.MissedWhat, ", ")
+		}
+		fmt.Fprintln(g.stdout, line)
+	}
+}
+
+const initHelp = `usage: bsecret init [-from FILE | -borg DIR]
+
+Create the home (mode 0700): an identity key and an empty coin pool. Print
+the identity key and the fund address for the configured network. A home
+that exists is left alone and printed.
+
+A vault's owner is a borg organisation: the key that signs every token and
+every carrier is the organisation's identity key. So an owner's home is
+made around that key: -borg DIR takes it from the borg home DIR (its
+identity.json), and -from FILE from an identity file carried by hand.
+Nothing else of the borg home is read, then or later: the group's chain and
+its epoch keys are read from the hall's hosts, and the two homes keep
+separate coin pools, state and locks. The file is the organisation's key:
+carry it as the secret it is.
+
+A member's home is made the same way around the key the group names, which
+is the member's borg home's; or, for a key that is in no borg home, with a
+plain init.`
+
+// adoptIdentity copies an identity file into a home that has none.
+func adoptIdentity(home, from string) error {
+	raw, err := os.ReadFile(from) //nolint:gosec // the operator's own path
+	if err != nil {
+		return err
+	}
+	var id struct {
+		WIF string `json:"wif"`
+	}
+	if err := json.Unmarshal(raw, &id); err != nil {
+		return usage("%s is not an identity file: %v", from, err)
+	}
+	if _, err := ec.PrivateKeyFromWif(id.WIF); err != nil {
+		return usage("%s holds no identity key: %v", from, err)
+	}
+	dst := filepath.Join(home, "identity.json")
+	if _, err := os.Stat(dst); err == nil {
+		return usage("the home %s has an identity already; -from and -borg make a new home", home)
+	}
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		return err
+	}
+	return state.WriteAtomic(dst, raw, 0o600)
+}
+
+func cmdInit(_ context.Context, g *global, args []string) error {
+	fs := g.flagSet("init", initHelp)
+	from := fs.String("from", "", "an identity.json: make this home around that identity key")
+	borg := fs.String("borg", "", "a borg home: make this home around its identity key")
+	if pos, err := parse(fs, args); err != nil {
+		return err
+	} else if len(pos) > 0 {
+		return usage("init takes no arguments")
+	}
+	if *from != "" && *borg != "" {
+		return usage("-from and -borg are exclusive")
+	}
+	if *borg != "" {
+		*from = filepath.Join(*borg, "identity.json")
+	}
+	if *from != "" {
+		if err := adoptIdentity(g.cfg.Home, *from); err != nil {
+			return err
+		}
+		fmt.Fprintln(g.stdout, "created", g.cfg.Home, "around the identity in", *from)
+	}
+	e, err := bwallet.Create(g.cfg.Home, engine.Profile)
+	if errors.Is(err, bwallet.ErrIdentityExists) {
+		if e, err = g.openWallet(); err != nil {
+			return err
+		}
+		if *from == "" {
+			g.say("the home %s exists; left as it is", g.cfg.Home)
+		} else if err := e.Pool.Save(); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	} else {
+		fmt.Fprintln(g.stdout, "created", g.cfg.Home)
+	}
+	if err := os.Chmod(g.cfg.Home, 0o700); err != nil {
+		return err
+	}
+	e.Mainnet = g.cfg.Network == "main"
+	addr, err := e.FundAddress(e.Mainnet)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(g.stdout, "identity     %s\nfund address %s (%s)\n", e.Signer().IdentityHex(), addr, g.cfg.Network)
+	return nil
+}
+
+const fundHelp = `usage: bsecret fund [-blocks N] [-batch N] [-rescan]
+       bsecret fund -txid TXID
+
+With -txid, import a payment: read the mined transaction TXID with its
+proof from the node (asset), check the proof against the header source,
+and add every output it pays to the home's fund address to the pool. This
+is how a home on a real network is funded: send BSV to the fund address
+init printed, wait for one confirmation, and import it.
+
+Without -txid, mine coinbase to the fund address through the node's
+generatetoaddress, which only a chain you run answers. Coinbase can be
+spent 100 blocks after it is mined, so the first fund mines 101 or more.
+-rescan re-reads recent blocks for coinbase the pool lacks.
+
+The fund address is bsecret's own, under its own protocol: a borg home's
+coin is not this home's, even when both are made around one identity key.`
+
+// addressNetwork is the network a base58 P2PKH address is for.
+func addressNetwork(addr string) (string, error) {
+	b, err := base58.Decode(addr)
+	if err != nil || len(b) != 25 {
+		return "", fmt.Errorf("fund address %q does not decode", addr)
+	}
+	switch b[0] {
+	case 0x00:
+		return "main", nil
+	case 0x6f:
+		return "test", nil
+	}
+	return "", fmt.Errorf("fund address %q has version byte 0x%02x", addr, b[0])
+}
+
+// checkFundAddress refuses an address for another network than the
+// configured one: above all a mainnet address on a test network.
+func checkFundAddress(addr, network string) error {
+	n, err := addressNetwork(addr)
+	if err != nil {
+		return err
+	}
+	if (n == "main") != (network == "main") {
+		return usage("the fund address %s is a %s address and network is %s; refusing to mine to it", addr, n, network)
+	}
+	return nil
+}
+
+func cmdFund(ctx context.Context, g *global, args []string) error {
+	fs := g.flagSet("fund", fundHelp)
+	blocks := fs.Int("blocks", 101, "blocks to mine to the fund address")
+	batch := fs.Int("batch", bwallet.DefaultFundBatch, "blocks per generatetoaddress call")
+	rescan := fs.Bool("rescan", false, "re-read the last -blocks blocks for coinbase the pool lacks instead of mining")
+	txid := fs.String("txid", "", "import this mined payment to the fund address instead of mining")
+	if pos, err := parse(fs, args); err != nil {
+		return err
+	} else if len(pos) > 0 {
+		return usage("fund takes no arguments")
+	}
+	if *txid != "" {
+		if *rescan {
+			return usage("-txid and -rescan are exclusive")
+		}
+		return g.importPayment(ctx, *txid)
+	}
+	if *blocks < 1 {
+		return usage("-blocks must be at least 1")
+	}
+	if g.cfg.Network == "main" {
+		return usage("fund without -txid mines coinbase, which only a chain you run does; on network main, import a payment with fund -txid")
+	}
+	e, err := g.openWallet()
+	if err != nil {
+		return err
+	}
+	addr, err := e.FundAddress(e.Mainnet)
+	if err != nil {
+		return err
+	}
+	if err := checkFundAddress(addr, g.cfg.Network); err != nil {
+		return err
+	}
+	rpc, asset, err := g.node(true)
+	if err != nil {
+		return err
+	}
+	unlock, err := g.lockHome()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	tip, err := asset.BestHeader(ctx)
+	if err != nil {
+		return fmt.Errorf("node tip: %w", err)
+	}
+	fmt.Fprintf(g.stdout, "pool before: %d output(s), %d sat; node tip %d; fund address %s\n", e.Pool.Count(), e.Pool.Balance(), tip.Height, addr)
+	var added int
+	if *rescan {
+		from := uint32(0)
+		if uint32(*blocks) < tip.Height { //nolint:gosec // a flag value
+			from = tip.Height - uint32(*blocks) //nolint:gosec // a flag value
+		}
+		added, err = bwallet.Rescan(ctx, e.Signer(), e.Pool, asset, from, tip.Height)
+	} else {
+		added, _, err = bwallet.FundFromCoinbase(ctx, e.Signer(), e.Pool, rpc, asset, *blocks, *batch)
+	}
+	if err != nil {
+		return err
+	}
+	h := tip.Height
+	if t2, err := asset.BestHeader(ctx); err == nil {
+		h = t2.Height
+	}
+	fmt.Fprintf(g.stdout, "pool after:  %d output(s), %d sat (+%d); immature %d; node tip %d\n",
+		e.Pool.Count(), e.Pool.Balance(), added, len(e.Pool.Immature(h)), h)
+	return nil
+}
+
+// importPayment adds the outputs a mined payment pays to the fund address
+// to the pool, once its proof holds against the header source.
+func (g *global) importPayment(ctx context.Context, txid string) error {
+	if h, err := chainhash.NewHashFromHex(txid); err != nil || h.String() != txid {
+		return usage("-txid %q is not a transaction id (64 lowercase hex characters)", termsafe.Abbrev(txid))
+	}
+	e, err := g.openWallet()
+	if err != nil {
+		return err
+	}
+	hc, err := g.headerClient()
+	if err != nil {
+		return err
+	}
+	_, asset, err := g.node(false)
+	if err != nil {
+		return usage("fund -txid reads the payment from the node: %v", err)
+	}
+	raw, err := asset.TxRaw(ctx, txid)
+	if err != nil {
+		return fmt.Errorf("payment %s: %w", txid, err)
+	}
+	tx, err := guard.ParseTransaction(raw, guard.DefaultBound)
+	if err != nil || tx.TxID().String() != txid {
+		return refused("payment %s: the node answered other bytes", txid)
+	}
+	mp, _, err := asset.Proof(ctx, txid)
+	if err != nil {
+		return fmt.Errorf("payment %s: its proof: %w (wait for it to mine)", txid, err)
+	}
+	tx.MerklePath = mp
+	ok, err := mp.Verify(ctx, tx.TxID(), hc)
+	if err != nil {
+		return fmt.Errorf("payment %s: checking its proof against %s: %w", txid, g.cfg.HeaderURL, err)
+	}
+	if !ok {
+		return refused("payment %s: its proof does not hold against the header source %s", txid, g.cfg.HeaderURL)
+	}
+	fund, err := e.Signer().FundScript()
+	if err != nil {
+		return err
+	}
+	var outs []bwallet.Output
+	var sats uint64
+	for i, o := range tx.Outputs {
+		if o.LockingScript == nil || !bytes.Equal(*o.LockingScript, *fund) {
+			continue
+		}
+		outs = append(outs, bwallet.Output{TxID: txid, Vout: uint32(i), Satoshis: o.Satoshis, //nolint:gosec // an output index
+			LockingScript: o.LockingScript.String(), Height: mp.BlockHeight, Coinbase: tx.IsCoinbase(),
+			Raw: tx.Hex(), Bump: mp.Hex()})
+		sats += o.Satoshis
+	}
+	addr, _ := e.FundAddress(e.Mainnet)
+	if len(outs) == 0 {
+		return usage("payment %s pays nothing to the fund address %s", txid, addr)
+	}
+	unlock, err := g.lockHome()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	added, err := e.Pool.Add(outs...)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(g.stdout, "imported %d of %d output(s) paying %s, %d sat, mined at height %d; pool %d output(s), %d sat\n",
+		added, len(outs), addr, sats, mp.BlockHeight, e.Pool.Count(), e.Pool.Balance())
+	if added < len(outs) {
+		g.say("note: %d output(s) were in the pool already", len(outs)-added)
+	}
+	return nil
+}
+
+const cryptHelp = `usage: bsecret crypt new <name>
+       bsecret crypt list
+
+new draws the crypt's 10-letter suffix uniformly at random and prints the
+crypt identifier <name>_<suffix>, its topic, and the line a host's
+BSECRET_CRYPTS takes to carry it. <name> is 1 to 28 lowercase letters and
+single underscores, starting and ending with a letter. The suffix is not a
+secret and not an access control: it keeps unrelated crypts off each
+other's topic. Many organisations may share one crypt. When a home exists,
+the crypt is recorded in it, and list prints the crypts recorded.`
+
+func cmdCrypt(_ context.Context, g *global, args []string) error {
+	fs := g.flagSet("crypt", cryptHelp)
+	pos, err := parse(fs, args)
+	if err != nil {
+		return err
+	}
+	switch {
+	case len(pos) == 2 && pos[0] == "new":
+		if secrec.CheckCryptName(pos[1]) != nil {
+			return usage("crypt name %q: 1 to %d lowercase letters and single underscores, starting and ending with a letter", termsafe.Abbrev(pos[1]), secrec.MaxCryptName)
+		}
+		crypt, err := secrec.NewCrypt(pos[1], rand.Reader)
+		if err != nil {
+			return err
+		}
+		if e, err := g.openWallet(); err == nil {
+			unlock, err := g.lockHome()
+			if err != nil {
+				return err
+			}
+			defer unlock()
+			st, err := state.Load(g.cfg.Home, e.Signer().IdentityHex())
+			if err != nil {
+				return err
+			}
+			st.AddCrypt(crypt)
+			if err := st.Save(); err != nil {
+				return err
+			}
+		}
+		fmt.Fprintf(g.stdout, "crypt %s\ntopic %s\nhost  BSECRET_CRYPTS=%s\n", crypt, secrec.Topic(crypt), crypt)
+		return nil
+	case len(pos) == 1 && pos[0] == "list":
+		st := g.peekState()
+		if st == nil {
+			return usage("no home at %s (run `bsecret init`)", g.cfg.Home)
+		}
+		for _, c := range st.Crypts {
+			fmt.Fprintln(g.stdout, c)
+		}
+		return nil
+	}
+	return usage("crypt new <name> | crypt list")
+}
+
+// ping asks a host a question it must refuse: the host is up and runs the
+// service.
+func ping(ctx context.Context, base string, timeout time.Duration) string {
+	c := &vread.Client{Timeout: timeout, HTTP: httpClient}
+	err := c.Ping(ctx, base)
+	switch {
+	case err == nil:
+		return "answering"
+	case strings.Contains(err.Error(), "status 5"):
+		return "answering with an ERROR (" + firstLine(err.Error()) + ")"
+	}
+	return "NOT ANSWERING: " + firstLine(err.Error())
+}
+
+func termsClient(timeout time.Duration) *http.Client {
+	if httpClient != nil {
+		return httpClient
+	}
+	return &http.Client{Timeout: timeout}
+}
+
+// firstLine is the first line of a message, at most 160 bytes, filtered
+// for the terminal: a host's error text is someone else's.
+func firstLine(s string) string {
+	s, _, _ = strings.Cut(s, "\n")
+	if len(s) > 160 {
+		s = s[:160] + "..."
+	}
+	return termsafe.Text(s)
+}

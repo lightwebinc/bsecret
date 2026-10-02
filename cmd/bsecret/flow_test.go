@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,11 +12,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bsv-blockchain/go-sdk/chainhash"
 	"github.com/bsv-blockchain/go-sdk/transaction"
+
+	"github.com/lightwebinc/bcommon/nodeapi"
 
 	"github.com/lightwebinc/bsecret/internal/engine"
 	"github.com/lightwebinc/bsecret/internal/secrec"
+	"github.com/lightwebinc/bsecret/internal/state"
 	"github.com/lightwebinc/bsecret/internal/testhost"
+	"github.com/lightwebinc/bsecret/internal/vread"
 )
 
 // The exit criterion: a revoke forces rotation. The removed member reads
@@ -930,4 +937,102 @@ func TestASweepIsKeptUnlessAnotherSpends(t *testing.T) {
 		t.Fatalf("the sweep was not finished by the next run:\n%s\n%s", r.stdout, r.stderr)
 	}
 	h.want(h.run("alice", "", "get", "db/password"), exitIncomplete, "no host answers its carrier")
+}
+
+type fakeHeaders struct {
+	ok  bool
+	err error
+}
+
+func (f fakeHeaders) IsValidRootForHeight(context.Context, *chainhash.Hash, uint32) (bool, error) {
+	return f.ok, f.err
+}
+func (f fakeHeaders) CurrentHeight(context.Context) (uint32, error) { return 1 << 20, f.err }
+
+type fakeSource struct {
+	mp  *transaction.MerklePath
+	err error
+}
+
+func (f fakeSource) Spender(context.Context, string, uint32) (string, error) { return "", nil }
+func (f fakeSource) TxRaw(context.Context, string) ([]byte, error)           { return nil, errors.New("none") }
+func (f fakeSource) MerkleProof(context.Context, string) (*transaction.MerklePath, error) {
+	return f.mp, f.err
+}
+
+// The floor a reader keeps is never forgotten because a source failed: a
+// header source that errors, or a copy of the chain that does not read
+// back, leaves the highest seq verified in force, and hosts that roll the
+// vault back are still refused. Only the node's word that the remembered
+// token is not mined, after its stored proof stopped verifying, is a
+// reorganisation.
+func TestTheFloorSurvivesAFailingSource(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	id := h.vault()
+	h.put("db/password", "one")
+	h.put("db/password", "two")
+	if r := h.must("alice", "get", "db/password"); r.stdout != "two" {
+		t.Fatal("setup")
+	}
+	org, _ := hex.DecodeString(h.env["BSECRET_ORG"])
+	vault, _ := vread.Hex32(id)
+	home := filepath.Join(h.dir, "alice")
+	kept := state.LoadChain(home, h.crypt, h.env["BSECRET_ORG"], id)
+	if len(kept) != 3 {
+		t.Fatalf("alice kept %d tokens", len(kept))
+	}
+	ctx := context.Background()
+	rem := func(beefs [][]byte, hd fakeHeaders, src vread.ChainSource) vread.Memory {
+		_, m := vread.Remembered(ctx, beefs, h.crypt, org, vault, hd, src)
+		return m
+	}
+	_, last, err := secrec.StoredToken(kept[2])
+	if err != nil || last == nil {
+		t.Fatal(err)
+	}
+	tx, _, _ := secrec.StoredToken(kept[2])
+	for _, c := range []struct {
+		what string
+		got  vread.Memory
+		want vread.Memory
+	}{
+		{"the proof verifies", rem(kept, fakeHeaders{ok: true}, nil), vread.MemoryHeld},
+		{"the header source errors", rem(kept, fakeHeaders{err: errors.New("down")}, fakeSource{err: nodeapi.ErrNotMined}), vread.MemoryUnknown},
+		{"the proof fails and there is no chain source", rem(kept, fakeHeaders{}, nil), vread.MemoryUnknown},
+		{"the proof fails and the chain source errors", rem(kept, fakeHeaders{}, fakeSource{err: errors.New("down")}), vread.MemoryUnknown},
+		{"the proof fails and the chain source's proof fails too", rem(kept, fakeHeaders{}, fakeSource{mp: tx.MerklePath}), vread.MemoryUnknown},
+		{"the proof fails and the chain source says not mined", rem(kept, fakeHeaders{}, fakeSource{err: nodeapi.ErrNotMined}), vread.MemoryDisplaced},
+		{"a token is missing from the copy", rem(kept[1:], fakeHeaders{ok: true}, nil), vread.MemoryCorrupt},
+		{"the copy is not a token", rem([][]byte{{1, 2, 3}}, fakeHeaders{ok: true}, nil), vread.MemoryCorrupt},
+		{"nothing kept", rem(nil, fakeHeaders{ok: true}, nil), vread.MemoryNone},
+	} {
+		if c.got != c.want {
+			t.Errorf("%s: memory %d, want %d", c.what, c.got, c.want)
+		}
+	}
+	// A read while the header source is down fails, and forgets nothing.
+	url := h.env["BSECRET_HEADER_URL"]
+	h.env["BSECRET_HEADER_URL"] = "http://127.0.0.1:1"
+	if r := h.run("alice", "", "get", "db/password"); r.code == exitOK {
+		t.Fatalf("a read with no header source passed:\n%s", r.stderr)
+	}
+	h.env["BSECRET_HEADER_URL"] = url
+	// The copy of the chain is damaged too.
+	if err := state.SaveChain(home, h.crypt, h.env["BSECRET_ORG"], id, [][]byte{{1, 2, 3}}); err != nil {
+		t.Fatal(err)
+	}
+	// Both hosts roll the vault back.
+	r := h.must("carol", "vault", "show")
+	for _, l := range strings.Split(r.stdout, "\n") {
+		if strings.HasPrefix(l, "token   seq 2 ") {
+			h.a.Forget(strings.Fields(l)[3])
+			h.b.Forget(strings.Fields(l)[3])
+		}
+	}
+	r = h.run("alice", "", "get", "db/password")
+	h.want(r, exitRefused, "rollback")
+	if r.stdout != "" || !strings.Contains(r.stderr, "does not read back") {
+		t.Fatalf("a rolled-back value after a failing source: %q\n%s", r.stdout, r.stderr)
+	}
 }

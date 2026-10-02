@@ -239,8 +239,18 @@ func (g *global) open(ctx context.Context, t *target, st *state.State) (*opened,
 	var known []*vread.Tok
 	if st != nil {
 		kept := state.LoadChain(g.cfg.Home, t.crypt, t.orgHex, t.vaultHex())
-		if known = vread.Remembered(ctx, kept, t.crypt, t.org, t.vault, t.rd.Headers); known == nil && len(kept) > 0 {
-			g.say("the token this home remembered of the vault no longer verifies against the header source: a reorganisation displaced it; the chain is read again from its first token")
+		var mem vread.Memory
+		known, mem = vread.Remembered(ctx, kept, t.crypt, t.org, t.vault, t.rd.Headers, t.rd.Source)
+		switch mem {
+		case vread.MemoryUnknown:
+			// Nothing is forgotten because a source failed: the seq this
+			// home verified stays the floor.
+			g.say("whether the token this home remembered of the vault is still mined could not be settled (the header source or the node did not answer for it): the chain is read again from its first token, and what this home verified stays its floor")
+		case vread.MemoryCorrupt:
+			g.say("the copy of the vault's chain this home kept does not read back; it is dropped and the chain is read again from its first token. What this home verified stays its floor")
+			state.DropChain(g.cfg.Home, t.crypt, t.orgHex, t.vaultHex())
+		case vread.MemoryDisplaced:
+			g.say("the token this home remembered of the vault no longer verifies against the header source, and the node says it is not mined: a reorganisation displaced it. It is forgotten, and the chain is read again from its first token")
 			state.DropChain(g.cfg.Home, t.crypt, t.orgHex, t.vaultHex())
 			st.Forget(t.crypt, t.orgHex, t.vaultHex())
 		}

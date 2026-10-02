@@ -10,6 +10,7 @@ import (
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	"github.com/bsv-blockchain/go-sdk/transaction/chaintracker"
 	"github.com/lightwebinc/bcommon/lookup"
+	"github.com/lightwebinc/bcommon/nodeapi"
 
 	"github.com/lightwebinc/bsecret/internal/limits"
 	"github.com/lightwebinc/bsecret/internal/secrec"
@@ -253,33 +254,106 @@ func (c *Client) Chain(ctx context.Context, crypt string, org []byte, vault [32]
 	return v, nil
 }
 
+// Memory is what became of the chain a reader kept.
+type Memory int
+
+// What Remembered found.
+const (
+	// MemoryNone: the reader kept nothing.
+	MemoryNone Memory = iota
+	// MemoryHeld: the chain kept is returned; its last token is mined in
+	// the reader's headers.
+	MemoryHeld
+	// MemoryUnknown: whether the last token is still mined could not be
+	// settled (the header source failed, or its stored proof does not
+	// verify and no chain source could give a current one). Nothing is
+	// forgotten on that: the reader walks the chain again, and what it
+	// verified before stays its floor.
+	MemoryUnknown
+	// MemoryDisplaced: the last token's stored proof does not verify and
+	// the chain source says the transaction is not mined: a reorganisation
+	// displaced it. The reader forgets it and reads the chain again (spec
+	// section 14).
+	MemoryDisplaced
+	// MemoryCorrupt: what was kept does not read back as the vault's
+	// chain. The copy is dropped; the floor is not.
+	MemoryCorrupt
+)
+
 // Remembered rebuilds the chain a reader verified before from the tokens it
 // kept, each as a host answered it (Tok.Beef), in seq order from 0. Every
-// token is read again as a well-formed token of the vault; the last one's
-// proof must still verify against the reader's headers. When it does not,
-// a reorganisation displaced it: the reader forgets what it kept and reads
-// the chain again (spec section 14), so nothing is returned. The tokens
-// before the last are held to it by spends when the chain is walked, and a
-// transaction that is spent by a mined one is mined.
-func Remembered(ctx context.Context, beefs [][]byte, crypt string, org []byte, vault [32]byte, headers chaintracker.ChainTracker) []*Tok {
+// token is read again as a well-formed token of the vault, and the last
+// one's proof must verify against the reader's headers. When the stored
+// proof no longer does, the chain source is asked for the transaction's
+// current proof (spec section 14): one that verifies replaces the stored
+// one; only the source's word that the transaction is not mined is a
+// reorganisation. A header source or chain source that fails proves
+// nothing, and nothing is forgotten on its account: forgetting would let a
+// host that rolled the vault back be believed by a reader whose header
+// source blinked. The tokens before the last are held to it by spends when
+// the chain is walked, and a transaction a mined one spends is mined.
+func Remembered(ctx context.Context, beefs [][]byte, crypt string, org []byte, vault [32]byte, headers chaintracker.ChainTracker, source ChainSource) ([]*Tok, Memory) {
+	if len(beefs) == 0 {
+		return nil, MemoryNone
+	}
 	var out []*Tok
 	for i, b := range beefs {
+		if len(b) > limits.MaxBEEF {
+			return nil, MemoryCorrupt
+		}
 		tx, tok, err := secrec.StoredToken(b)
 		if err != nil || tok.Vault.Crypt != crypt || !bytes.Equal(tok.Vault.Org, org) || tok.Vault.Vault != vault || tok.Vault.Seq != uint64(i) || tx.MerklePath == nil {
-			return nil
+			return nil, MemoryCorrupt
 		}
-		t := &Tok{Txid: tx.TxID().String(), Tx: tx, Token: tok, Height: tx.MerklePath.BlockHeight, Beef: b}
-		for _, l := range tx.MerklePath.Path[0] {
-			if l.Hash != nil && *l.Hash == *tx.TxID() {
-				t.Pos = l.Offset
-			}
-		}
+		t := &Tok{Txid: tx.TxID().String(), Tx: tx, Token: tok, Beef: b}
+		t.place()
 		out = append(out, t)
 	}
-	if len(out) == 0 || !secrec.IsMined(ctx, out[len(out)-1].Tx, headers) {
-		return nil
+	last := out[len(out)-1]
+	if headers == nil {
+		return nil, MemoryUnknown
 	}
-	return out
+	ok, err := last.Tx.MerklePath.Verify(ctx, last.Tx.TxID(), headers)
+	switch {
+	case err != nil:
+		return nil, MemoryUnknown
+	case ok:
+		return out, MemoryHeld
+	case source == nil:
+		return nil, MemoryUnknown
+	}
+	mp, err := source.MerkleProof(ctx, last.Txid)
+	switch {
+	case errors.Is(err, nodeapi.ErrNotMined):
+		return nil, MemoryDisplaced
+	case err != nil || mp == nil:
+		return nil, MemoryUnknown
+	}
+	if ok, err := mp.Verify(ctx, last.Tx.TxID(), headers); err != nil || !ok {
+		return nil, MemoryUnknown
+	}
+	// Mined again elsewhere: the same transaction under its current proof.
+	last.Tx.MerklePath = mp
+	beef, err := last.Tx.AtomicBEEF(false)
+	if err != nil {
+		return nil, MemoryUnknown
+	}
+	last.Beef = beef
+	last.place()
+	return out, MemoryHeld
+}
+
+// place sets the token's height and position from its proof.
+func (t *Tok) place() {
+	t.Height, t.Pos = t.Tx.MerklePath.BlockHeight, 0
+	if len(t.Tx.MerklePath.Path) == 0 {
+		return
+	}
+	for _, l := range t.Tx.MerklePath.Path[0] {
+		if l.Hash != nil && *l.Hash == *t.Tx.TxID() {
+			t.Pos = l.Offset
+		}
+	}
 }
 
 // FromTokens establishes a chain from tokens a reader was handed (the audit

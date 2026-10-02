@@ -225,3 +225,61 @@ func TestPagesAreBounded(t *testing.T) {
 		t.Fatalf("a page of 5000 outputs: %d kept, truncated %v, %d page(s) asked, %v", len(ho.Outputs), ho.Truncated, asked, ho.Err)
 	}
 }
+
+// history is a chain of three tokens: an empty first one, one that creates
+// a secret, and one that updates it under the commitment the first version
+// was listed with.
+func history(t *testing.T) (*ChainView, *Car, *Car) {
+	t.Helper()
+	h := func(s string) [32]byte { return sha256.Sum256([]byte(s)) }
+	org, _ := hex.DecodeString("02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5")
+	base := secrec.Vault{Crypt: "example_crypt_hmqzvtkwrx", Org: org, Vault: h("vault"), Name: "ops", Hall: "example_hall_vkqzmtrwxp",
+		EpochID: h("epoch 0"), Labels: []string{"confidential"}, Created: 1}
+	id, _ := secrec.SecretID(base.Vault, "db/password")
+	car := func(version uint64, key string) (*Car, secrec.Entry) {
+		rec := &secrec.Secret{Crypt: base.Crypt, Org: org, Vault: base.Vault, ID: id, Version: version, Label: "confidential",
+			Epoch: 0, EpochID: base.EpochID, Commitment: h(key), Segment: 16384, Length: 272, Created: 1}
+		cid, err := rec.ContentID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &Car{Carrier: &secrec.Carrier{Secret: rec, ContentID: cid, Commitment: rec.Commitment}},
+			secrec.Entry{ID: id, Version: version, ContentID: cid, Commitment: rec.Commitment}
+	}
+	one, e1 := car(1, "key")
+	two, e2 := car(2, "key")
+	v := &ChainView{Crypt: base.Crypt, Org: org, Vault: base.Vault, fold: secrec.NewVaultFold(), reused: map[[32]byte]bool{}}
+	first, second, third := base, base, base
+	first.Root = secrec.SetRoot(nil)
+	second.Seq, second.Create, second.Count = 1, []secrec.Entry{e1}, 1
+	second.Root = secrec.SetRoot([]secrec.Current{{ID: id, Version: 1, ContentID: e1.ContentID}})
+	third.Seq, third.Update, third.Count = 2, []secrec.Entry{e2}, 1
+	third.Root = secrec.SetRoot([]secrec.Current{{ID: id, Version: 2, ContentID: e2.ContentID}})
+	for _, rec := range []*secrec.Vault{&first, &second, &third} {
+		v.take(&Tok{Token: &secrec.VaultToken{Vault: rec}})
+	}
+	return v, one, two
+}
+
+// A version read as history is held to the token that listed it: one listed
+// under a commitment an earlier token listed is refused, as it is when it
+// is the current version, and one no token listed is refused.
+func TestHistoryRefusesAReusedCommitment(t *testing.T) {
+	v, one, two := history(t)
+	if got := v.Statuses; len(got) != 3 || got[2] != secrec.StatusCommitmentReuse || v.Usable() != 3 {
+		t.Fatalf("the chain folds %v, usable %d", got, v.Usable())
+	}
+	if seq, err := v.History(one); err != nil || seq != 1 {
+		t.Fatalf("version 1 as history: seq %d, %v", seq, err)
+	}
+	var f *Failure
+	if _, err := v.History(two); !errors.As(err, &f) || f.Label != "listing" || !contains(err.Error(), "commitment-reuse") {
+		t.Fatalf("a version listed under a used commitment, read as history: %v", err)
+	}
+	other := *two.Carrier.Secret
+	other.Length = 528
+	cid, _ := other.ContentID()
+	if _, err := v.History(&Car{Carrier: &secrec.Carrier{Secret: &other, ContentID: cid, Commitment: other.Commitment}}); !errors.As(err, &f) || f.Label != "listing" {
+		t.Fatalf("another record at a listed version, read as history: %v", err)
+	}
+}

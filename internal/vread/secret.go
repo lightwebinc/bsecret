@@ -204,6 +204,36 @@ func (v *ChainView) Listed(car *Car) (pathOK bool, err error) {
 	return pathOK, nil
 }
 
+// History is the check a reader makes on a carrier it reads as history, a
+// version the set no longer holds (spec section 7.2): the first usable
+// token that lists the record's identifier at its version is the one that
+// listed it, and it lists this record as it is; and the version was not
+// listed under a commitment an earlier token of the vault listed. A later
+// token that names the same version proves nothing about a record the
+// first did not list. It returns the seq of the token that listed it.
+func (v *ChainView) History(car *Car) (uint64, error) {
+	rec := car.Carrier.Secret
+	for _, tok := range v.Tokens[:v.Usable()] {
+		lists := false
+		for _, l := range [][]secrec.Entry{tok.Token.Vault.Create, tok.Token.Vault.Update} {
+			for _, e := range l {
+				lists = lists || (e.ID == rec.ID && e.Version == rec.Version)
+			}
+		}
+		if !lists {
+			continue
+		}
+		if secrec.CheckListed(tok.Token.Vault, rec) != nil {
+			return 0, failed("listing", "the token at seq %d listed version %d of the secret as another record than the one the host answered", tok.Token.Vault.Seq, rec.Version)
+		}
+		if v.Reused(car.Carrier.ContentID) {
+			return 0, failed("listing", "the version's commitment is one an earlier token of the vault listed (commitment-reuse): its key is one an earlier version's readers hold")
+		}
+		return tok.Token.Vault.Seq, nil
+	}
+	return 0, failed("listing", "no token of the vault listed version %d of the secret", rec.Version)
+}
+
 // Linked takes, for an interval vault, the highest version that links to
 // the listed one successor by successor (spec section 4.4). links are the
 // carriers held above the listed version. It returns the run, lowest

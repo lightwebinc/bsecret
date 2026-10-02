@@ -447,6 +447,12 @@ func (v *ChainView) extend(cands []*Tok) bool {
 			v.Forks = append(v.Forks, t)
 		}
 	}
+	v.take(best)
+	return true
+}
+
+// take joins a token to the chain and folds it.
+func (v *ChainView) take(best *Tok) {
 	v.Tokens = append(v.Tokens, best)
 	st := v.fold.Apply(best.Token.Vault)
 	v.Statuses = append(v.Statuses, st)
@@ -464,7 +470,6 @@ func (v *ChainView) extend(cands []*Tok) bool {
 			}
 		}
 	}
-	return true
 }
 
 // Commitments are every commitment a usable token of the chain listed.

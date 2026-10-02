@@ -498,12 +498,17 @@ func (g *global) pick(ctx context.Context, o *opened, id [32]byte, name string, 
 	if version != 0 {
 		cars, refusedCars, errs := t.rd.Version(ctx, o.chain, id, version)
 		g.reportRefused(refusedCars)
+		var why error
 		for _, c := range cars {
-			for _, tok := range o.chain.Tokens[:o.chain.Usable()] {
-				if secrec.CheckListed(tok.Token.Vault, c.Carrier.Secret) == nil {
-					return c, false, false, nil
-				}
+			if _, herr := o.chain.History(c); herr != nil {
+				why = herr
+				g.say("host %s: answered a carrier of version %d that is not read: %v", c.Host, version, herr)
+				continue
 			}
+			return c, false, false, nil
+		}
+		if why != nil {
+			return nil, false, false, failure(why)
 		}
 		return nil, false, false, notHeld(fmt.Sprintf("no host answers a carrier of %s version %d that a token of the vault listed", name, version), errs)
 	}

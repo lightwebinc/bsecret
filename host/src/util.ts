@@ -25,6 +25,18 @@ export const hashOrder = (txid: string): Uint8Array => fromHex(txid).reverse()
 
 export const toBase64 = (b: Uint8Array): string => Utils.toBase64(Array.from(b))
 
+const b64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
+
+/**
+ * Decodes s when it is non-empty standard base64 with padding and zero pad
+ * bits, the one spelling of its bytes; undefined otherwise.
+ */
+export function strictBase64(s: string): Uint8Array | undefined {
+  if (s.length === 0 || !b64.test(s)) return undefined
+  const b = Uint8Array.from(Utils.toArray(s, 'base64'))
+  return Utils.toBase64(Array.from(b)) === s ? b : undefined
+}
+
 export const sha256 = (b: Uint8Array): Uint8Array => Uint8Array.from(Hash.sha256(Array.from(b)))
 
 const text = new TextEncoder()

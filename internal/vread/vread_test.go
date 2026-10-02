@@ -283,3 +283,29 @@ func TestHistoryRefusesAReusedCommitment(t *testing.T) {
 		t.Fatalf("another record at a listed version, read as history: %v", err)
 	}
 }
+
+// A content source that serves other bytes, or cuts them, is passed over:
+// the next source is tried, and the ciphertext is taken from the first that
+// serves exactly what the record names.
+func TestAWrongContentSourceIsPassedOver(t *testing.T) {
+	ctx := context.Background()
+	ct := []byte("ciphertext bytes, public")
+	hash := sha256.Sum256(ct)
+	name := hex.EncodeToString(hash[:])
+	bad, cut, good := t.TempDir(), t.TempDir(), t.TempDir()
+	for dir, b := range map[string][]byte{bad: []byte("ciphertext bytes, forged"), cut: ct[:8], good: ct} {
+		if err := os.WriteFile(filepath.Join(dir, name), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := &Store{Sources: []string{bad, cut, good}, Max: 1 << 20}
+	if got, err := s.Get(ctx, hash, uint64(len(ct))); err != nil || string(got) != string(ct) {
+		t.Fatalf("the third source holds it: %q %v", got, err)
+	}
+	// With no source that serves it, the wrong bytes go to the reader's own
+	// check, which names the failure.
+	s = &Store{Sources: []string{bad, cut}, Max: 1 << 20}
+	if got, err := s.Get(ctx, hash, uint64(len(ct))); err != nil || sha256.Sum256(got) == hash {
+		t.Fatalf("only wrong sources: %q %v", got, err)
+	}
+}

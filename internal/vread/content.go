@@ -78,9 +78,14 @@ func (s *Store) Put(ct []byte) (string, error) {
 }
 
 // Get fetches the ciphertext of hash, of length bytes, from the first
-// source that holds it. A length over the reader's budget is refused before
-// anything is fetched, and no source is read past length: a record is a
-// fetch instruction, and a reader bounds it. The caller checks the hash.
+// source that serves exactly it: every source's bytes are held to the
+// length and the hash the record names before they are taken, so a source
+// that serves other bytes, or cuts them, is passed over and the next is
+// tried. A length over the reader's budget is refused before anything is
+// fetched, and no source is read past length: a record is a fetch
+// instruction, and a reader bounds it. When no source serves the
+// ciphertext and one served other bytes, those are returned, so that the
+// reader's own check names the failure (hash) rather than an absence.
 func (s *Store) Get(ctx context.Context, hash [32]byte, length uint64) ([]byte, error) {
 	if s == nil || len(s.Sources) == 0 {
 		return nil, fmt.Errorf("%w: none is configured (config key content)", ErrUnavailable)
@@ -90,6 +95,7 @@ func (s *Store) Get(ctx context.Context, hash [32]byte, length uint64) ([]byte, 
 	}
 	name := hex.EncodeToString(hash[:])
 	var last error
+	var wrong []byte
 	for _, src := range s.Sources {
 		var b []byte
 		var err error
@@ -98,10 +104,19 @@ func (s *Store) Get(ctx context.Context, hash [32]byte, length uint64) ([]byte, 
 		} else {
 			b, err = readBounded(filepath.Join(src, name), length)
 		}
-		if err == nil {
+		if err != nil {
+			last = err
+			continue
+		}
+		if uint64(len(b)) == length && sha256.Sum256(b) == hash {
 			return b, nil
 		}
-		last = err
+		if wrong == nil {
+			wrong = b
+		}
+	}
+	if wrong != nil {
+		return wrong, nil
 	}
 	return nil, fmt.Errorf("%w: %v", ErrUnavailable, last)
 }

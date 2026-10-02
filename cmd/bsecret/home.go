@@ -340,8 +340,13 @@ func (g *global) openWriter(ctx context.Context) (*writer, error) {
 	}
 	p := limits.Publisher{Plane: g.cfg.Mode == config.ModePlane, Hosts: len(g.cfg.Hosts), TreeCount: g.cfg.TreeCount,
 		ChainTreeCount: g.cfg.ChainTreeCount, ObjectBound: g.cfg.ObjectBound}
+	need, err := config.Need(g.cfg.Quorum, len(g.cfg.Hosts))
+	if err != nil {
+		h.close()
+		return nil, usage("%v (config key quorum)", err)
+	}
 	if g.cfg.Mode == config.ModeUnicast {
-		p.Need, _ = config.Need(g.cfg.Quorum, len(g.cfg.Hosts))
+		p.Need = need
 	}
 	warnings, err := p.Check()
 	if err != nil {
@@ -353,7 +358,7 @@ func (g *global) openWriter(ctx context.Context) (*writer, error) {
 	}
 	o := engine.Options{TreeCount: g.cfg.TreeCount, ChainTreeCount: g.cfg.ChainTreeCount, TreeSats: limits.DefaultTreeSats,
 		Ahead: limits.DefaultAhead, Fees: mint.DefaultFees, ObjectBound: g.cfg.ObjectBound, Poll: poll, Wait: 10 * time.Minute,
-		Delay: g.cfg.Delay, Freshness: g.cfg.Freshness}
+		Delay: g.cfg.Delay, Freshness: g.cfg.Freshness, PlaneNeed: need}
 	if uint32(o.TreeCount) <= o.Ahead { //nolint:gosec // bounded by the limits
 		o.Ahead = uint32(o.TreeCount / 2) //nolint:gosec // bounded by the limits
 	}

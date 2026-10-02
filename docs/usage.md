@@ -169,7 +169,7 @@ never ignored.
 | `org` | none | the owner a reader reads: the organisation's identity key |
 | `originator` | `bsecret` | the BRC-100 originator presented to the wallet |
 | `paid_host` | none | the base URL of `ls_bsecret` on the host the priced questions are asked of (`audit`, `history`, `terms`): the host's terms route (spec section 10.3). An origin, with no path |
-| `quorum` | `all` | mode `unicast`: how many hosts must take a carrier for it to count as published: `all`, `majority`, `one`, or a number up to the host count. A token or a sweep always needs every host |
+| `quorum` | `all` | how many of `hosts` must hold a carrier for it to count as published: `all`, `majority`, `one`, or a number up to the host count. In mode `unicast` they are the hosts that took it; in mode `plane`, the hosts that answer it by lookup once the facade took it. A token or a sweep always needs every host |
 | `rpc` | none | the node's JSON-RPC URL (`fund`) |
 | `rpc_pass`, `rpc_user` | `bitcoin` | the node's basic auth, also for `settle = rpc:` |
 | `settle` | none | the settlement leg for what is mined (funding trees, tokens, sweeps, a payment a payee takes): `tcp:<host:port>`, `rpc:<url>` or `arcade:<url>` |
@@ -457,6 +457,10 @@ can run it; it needs no coin.
 On the plane the owner's own tooling does part of this as it publishes:
 every object is submitted once to the facade, then looked for at every host
 in `hosts`, and offered directly to a host the plane did not deliver it to.
+The facade's answer is not taken as publication: a carrier counts as
+published once `quorum` of the hosts answer it, and a token or a sweep once
+all do; short of that the command stops (exit 2), the object stays in the
+home, and the next command publishes it first.
 
 ## Priced questions
 

@@ -1154,3 +1154,40 @@ func TestANodeSuppliedSpenderIsNotPrinted(t *testing.T) {
 		t.Errorf("a put on a node that names no txid: exit %d %q", r.code, r.stderr)
 	}
 }
+
+// On the plane a carrier counts as published only once the hosts named
+// answer it by lookup: the facade's "nothing admitted" is a duplicate and a
+// refusal alike. A carrier no host holds is never listed by a token.
+func TestAnUnconfirmedCarrierIsNotPublished(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	tokens := len(h.a.Txids("token"))
+	carrier := func(tx *transaction.Transaction) bool { return tx.LockTime != 0 }
+	h.a.Drop, h.b.Drop = carrier, carrier
+	r := h.run("org", "two", "put", "db/password")
+	if r.code != exitUsage || !strings.Contains(r.stderr, "0 of 2 host(s) named answer it") || !strings.Contains(r.stderr, "it is persisted") {
+		t.Fatalf("a carrier no host took: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	if n := len(h.a.Txids("token")); n != tokens {
+		t.Fatalf("a token was minted for a carrier no host holds: %d tokens, %d before", n, tokens)
+	}
+	if r := h.must("org", "doctor"); !strings.Contains(r.stdout, "outbox      secret") {
+		t.Fatalf("doctor:\n%s", r.stdout)
+	}
+	// One host of two, with a quorum of all: still not published. With a
+	// quorum of one it is, and the token lists it.
+	h.b.Drop = nil
+	h.a.Drop = carrier
+	h.want(h.run("org", "three", "put", "db/password"), exitUsage, "1 of 2 host(s) named answer it and 2 must")
+	h.env["BSECRET_QUORUM"] = "one"
+	r = h.put("db/password", "four")
+	if !strings.Contains(r.stderr, "publishing what a previous run persisted") {
+		t.Fatalf("with a quorum of one:\n%s\n%s", r.stdout, r.stderr)
+	}
+	h.a.Drop = nil
+	if r := h.run("alice", "", "get", "db/password"); r.stdout != "four" {
+		t.Fatalf("alice: %q\n%s", r.stdout, r.stderr)
+	}
+}

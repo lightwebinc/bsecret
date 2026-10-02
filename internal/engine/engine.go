@@ -111,6 +111,10 @@ type Options struct {
 	Freshness time.Duration
 	// Segment is the plaintext bytes of one segment of a new version.
 	Segment uint64
+	// PlaneNeed is, in mode plane, how many of the hosts named must answer
+	// a carrier by lookup for it to count as published; zero is all of
+	// them. A mined object always needs every host.
+	PlaneNeed int
 }
 
 // Legs are the endpoints a publisher talks to. Objects go to exactly one of
@@ -532,7 +536,21 @@ func (e *Engine) publish(ctx context.Context, p state.Pending) error {
 			return fmt.Errorf("%s: a mined object reaches every host named, off the plane too: %w; it is persisted and the next command publishes it", what, err)
 		}
 	}
-	e.confirmOnPlane(ctx, what, topic, beef, confirm)
+	// The facade's answer is not a host's: it says "nothing admitted" for a
+	// duplicate and for a refusal alike, and the plane can lose an object on
+	// the way to any host. An object counts as published only once a lookup
+	// at the hosts named answers it: a mined object at every one, a carrier
+	// at the quorum.
+	held, missing := e.confirmOnPlane(ctx, what, topic, beef, confirm)
+	need := e.Opts.PlaneNeed
+	if rd := e.Legs.Reader; rd != nil && confirm != nil {
+		if p.Mined() || need <= 0 || need > len(rd.Hosts) {
+			need = len(rd.Hosts)
+		}
+		if held < need {
+			return fmt.Errorf("%s: %d of %d host(s) named answer it and %d must (%s lack it or could not be asked); it is persisted and the next command publishes it", what, held, len(rd.Hosts), need, strings.Join(missing, ", "))
+		}
+	}
 	return nil
 }
 
@@ -542,13 +560,15 @@ func (e *Engine) publish(ctx context.Context, p state.Pending) error {
 // free class as soon as a host holds it, so a host that still lacks it
 // after PlaneWait was missed: the plane repairs loss within its window, and
 // a carrier nobody confirms would leave one host unable to answer a reader.
-// A direct copy that races the plane's is a duplicate and harmless. A host
-// that cannot be asked, or does not take it, is noted and left to fill.
-func (e *Engine) confirmOnPlane(ctx context.Context, what, topic string, beef []byte, confirm unicast.Confirm) {
+// A direct copy that races the plane's is a duplicate and harmless. It
+// returns how many hosts answer the object, and those that do not.
+func (e *Engine) confirmOnPlane(ctx context.Context, what, topic string, beef []byte, confirm unicast.Confirm) (int, []string) {
 	rd := e.Legs.Reader
 	if rd == nil || confirm == nil {
-		return
+		return 0, nil
 	}
+	n := 0
+	var missing []string
 	for _, host := range rd.Hosts {
 		held, asked := false, true
 		for i := 0; ; i++ {
@@ -566,16 +586,24 @@ func (e *Engine) confirmOnPlane(ctx context.Context, what, topic string, beef []
 				break
 			}
 		}
-		if held || !asked {
+		if held {
+			n++
+			continue
+		}
+		if !asked {
+			missing = append(missing, host)
 			continue
 		}
 		set := &unicast.Set{Hosts: []string{host}, Need: 1, Retries: Retries, HTTP: rd.HTTP, Note: e.Note}
 		if err := set.Send(ctx, what, topic, beef, 1, confirm).Err(); err != nil {
-			e.note("%s: host %s lacks it after the plane's delivery and did not take it directly: %v (bsecret fill offers it again)", what, host, err)
+			e.note("%s: host %s lacks it after the plane's delivery and did not take it directly: %v", what, host, err)
+			missing = append(missing, host)
 			continue
 		}
 		e.note("%s: host %s lacked it after the plane's delivery; offered directly and confirmed", what, host)
+		n++
 	}
+	return n, missing
 }
 
 func (e *Engine) submitFacade(ctx context.Context, what, topic string, beef []byte) error {

@@ -109,9 +109,9 @@ global flags:
   -mode MODE          plane (submit once to the facade; the default) or
                       unicast (submit to each of hosts)
   -network NET        main, test or regtest (default main)
-  -quorum Q           mode unicast: hosts that must take a carrier for it to
-                      count as published: all (default), majority, one or N;
-                      tokens and sweeps always need every host
+  -quorum Q           hosts that must hold a carrier for it to count as
+                      published: all (default), majority, one or N; tokens
+                      and sweeps always need every host
   -timeout DUR        per request (default 15s)
   -v                  verbose
   -version            print the version and exit

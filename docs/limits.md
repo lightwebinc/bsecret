@@ -91,7 +91,7 @@ tokens costs each one twice.
 | Limit | Default | Hard cap | Why | Plane and unicast |
 | --- | --- | --- | --- | --- |
 | Hosts named | none | 16 | A reader asks every host it names; a unicast publisher uploads every object to each | Unicast warns above 5 |
-| Quorum | `all` | the host count | Tokens and sweeps always need every host named | Unicast only, for carriers |
+| Quorum (`quorum`) | `all` | the host count | How many hosts named must hold a carrier for it to count as published. Tokens and sweeps always need every host named | Unicast: the hosts that took it. Plane: the hosts that answer it by lookup after the facade took it |
 | Confirmation of every object at every named host | on | fixed | An object the plane took can still miss a host, with nothing to show it | Plane: looked for at each host for up to 3.5 s (0.5, 1 and 2 s apart), then offered to it directly. Unicast: an answer that admits nothing is confirmed by lookup before it counts |
 | Tries per submission | 4, waiting 1, 2 and 4 s | fixed | A host that fails four tries is reported missed; the object is resent by the next command | Same |
 | Request timeout | 15 s | 1 s to 5 min | Bounds every request | Same |

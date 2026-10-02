@@ -241,7 +241,7 @@ that spends is running, the coin pool as it last stood (`taking`), so that
 a coin a run took and never recorded a spend of is found by the next
 command and put back when the node shows it unspent; and, for a reader,
 the latest token of each vault it verified, with that vault's chain beside
-it under `chains/`. It holds no content key and no epoch key. **The home holds a
+it under `chains/`, and the latest token of each vault's group. It holds no content key and no epoch key. **The home holds a
 secret all the same**: the identity key, which for an owner opens every
 version it ever wrote through its self wrap. Back it up as one, and keep it
 at 0700. One command at a time uses a home; a second is refused (exit 2),
@@ -435,7 +435,17 @@ answers), or by something else (the vault is terminated, exit 1). Without
 reported current. `get` holds the group's latest token, as the hall's
 hosts answer it, to `asset` in the same way: when it is spent, or the node
 cannot say, the group may have removed a member since, and the value is
-not reported current (`-strict`: exit 3).
+not reported current (`-strict`: exit 3). The evidence is taken at the
+read: a value kept afterwards keeps its age.
+
+A home also remembers the latest token of the vault's group it verified
+(`seenGroups` in `state.json`), through the `Floor` of borg's reader. Hosts
+of the hall that answer the group's chain only below it are answering an
+older state, one in which a member since removed is still a member, and
+every token of it verifies: the read is refused (exit 1, `rollback`), and a
+writing command refuses the same before it builds anything. Only the
+node's word that the remembered token is not mined makes the home forget
+it.
 
 **`get <name>`** makes the checks of spec section 7.2 in their order and
 stops at the first that fails, which names its culprit:
@@ -457,8 +467,10 @@ whether it is current or **exposed**: keyed under an epoch before the
 group's latest, so that a key the group has since removed, or rotated away
 from, opens it. Names, labels and every other text a host or an owner
 wrote is filtered before it reaches a terminal, and held to the line it is
-printed on: a display name with a line break in it writes no line of its
-own. `audit -json` writes such characters as escapes.
+printed on. A vault's display name cannot hold a line break or a control
+character at all (the record refuses it, spec section 3), and what a name
+may hold that a terminal acts on all the same, an override or a zero-width
+character, is filtered. `audit -json` writes such characters as escapes.
 
 In an interval vault the versions above the listed one are asked for one
 by one, only while they are answered in a row, and at most 64 of them: a

@@ -2,6 +2,7 @@ package vread
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
@@ -9,6 +10,7 @@ import (
 
 	ec "github.com/bsv-blockchain/go-sdk/primitives/ec"
 	"github.com/bsv-blockchain/go-sdk/wallet"
+	"github.com/lightwebinc/bcommon/nodeapi"
 
 	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/reader"
@@ -29,15 +31,45 @@ type Group struct {
 	Epochs []secrec.EpochEvent
 }
 
+// Forgetter is a reader's Floor that can forget one chain: what ReadGroup
+// asks of the floor when the token it remembers was displaced by a
+// reorganisation.
+type Forgetter interface {
+	Forget(hall, org, chain string)
+}
+
 // ReadGroup establishes the chain of group of org in hall through borg's
 // reader. org is the vault's owner: borg's reader verifies every token as
 // that organisation's, so a group it returns is the vault's organisation's
 // (spec section 7.2).
+//
+// When the reader has a Floor (borg's reader.Client.Floor), the group is
+// held to the latest token this caller verified of it before (spec section
+// 14, no going back): hosts that answer the group's chain only below it
+// are answering an older state, one in which a member since removed is
+// still a member and the epoch that removal began does not exist. That is
+// refused (rollback). Only the chain source's word that the remembered
+// token is no longer mined, a reorganisation, makes the floor forget it;
+// a source that fails proves nothing, and nothing is forgotten on its
+// account.
 func ReadGroup(ctx context.Context, rd *reader.Client, hall string, org []byte, group [secrec.GroupIDLen]byte) (*Group, error) {
 	if rd == nil || len(rd.Hosts) == 0 {
 		return nil, errors.New("no overlay host configured for the group's hall (config key hall_hosts, or hosts)")
 	}
-	gv, err := rd.Group(ctx, hall, org, reader.GroupHex(group))
+	gid := reader.GroupHex(group)
+	gv, err := rd.Group(ctx, hall, org, gid)
+	var back *reader.RollbackError
+	if errors.As(err, &back) {
+		if f, ok := rd.Floor.(Forgetter); ok && rd.Source != nil {
+			if _, perr := rd.Source.MerkleProof(ctx, back.Txid); errors.Is(perr, nodeapi.ErrNotMined) {
+				f.Forget(hall, hex.EncodeToString(org), gid)
+				gv, err = rd.Group(ctx, hall, org, gid)
+			}
+		}
+	}
+	if errors.As(err, &back) {
+		return nil, &Failure{Label: LabelRollback, Err: fmt.Errorf("the hosts of hall %s answer group %s to seq %d, and this home verified seq %d (%s): an older state of the group, in which a member since removed may still be one; ask other hosts", hall, gid, back.Answered, back.Seq, back.Txid)}
+	}
 	if err != nil {
 		return nil, err
 	}

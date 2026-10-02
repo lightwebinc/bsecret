@@ -272,7 +272,7 @@ the race for the next token; it says so, and `sync` catches it up.
 | `commitment`, `tag`, `payload` | the owner wrapped or encrypted something other than what it committed to | this names the owner; nothing a host did |
 | `listing` | a host answered another version than the vault lists | another host; `bsecret fill` |
 | `retracted` | the owner swept this version | it is gone on purpose |
-| `rollback` | the hosts answer an older state than this home verified | other hosts |
+| `rollback` | the hosts answer an older state of the vault, or of its group, than this home verified | other hosts |
 | `DISAGREES` (exit 3) | one host lacks what another answered | `bsecret fill` |
 | `WITHHELD` (exit 3) | the hosts answer tokens of the vault above the last one that links: a token between is missing | other hosts; `bsecret fill` |
 | `REFUSED token` (exit 3) | a host answered something that does not verify; the vault is read from what did | that host is at fault; tell its operator |

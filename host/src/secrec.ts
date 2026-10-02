@@ -276,10 +276,20 @@ export const records = rec
 const zero32 = (b: Uint8Array): boolean => b.every((x) => x === 0)
 const k = (n: number): bigint => BigInt(n)
 
-/** The display-name rule: 1 to 64 bytes of UTF-8 text. */
+/**
+ * The display-name rule (spec section 3): 1 to 64 bytes of UTF-8 text that
+ * is one line of plain text, holding no control character (U+0000 to
+ * U+001F, U+007F to U+009F) and no line or paragraph separator (U+2028,
+ * U+2029). Fixed code points, so every implementation refuses the same
+ * names.
+ */
 function checkName(s: string): void {
   const n = utf8(s).length
   if (n < 1 || n > MaxName) throw new Refusal('name')
+  for (const ch of s) {
+    const c = ch.codePointAt(0)!
+    if (c < 0x20 || (c >= 0x7f && c <= 0x9f) || c === 0x2028 || c === 0x2029) throw new Refusal('name')
+  }
 }
 
 // ---- the vault record ----

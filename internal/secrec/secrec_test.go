@@ -220,6 +220,17 @@ func TestNames(t *testing.T) {
 			t.Errorf("name %q: %v", s, got)
 		}
 	}
+	// A display name is one line of plain text: any UTF-8 without a control
+	// character or a line or paragraph separator.
+	for s, ok := range map[string]bool{
+		"ops": true, "Ops vault (prod)": true, "caf\u00e9 \u91d1\u5eab": true, strings.Repeat("a", 64): true, strings.Repeat("a", 65): false, "": false,
+		"a\nb": false, "a\rb": false, "a\tb": false, "a\x00b": false, "a\x1bb": false, "a\x7fb": false, "a\u0080b": false, "a\u0085b": false, "a\u009fb": false,
+		"a\u00a0b": true, "a\u2028b": false, "a\u2029b": false, "a\u2027b": true, "a\u202ab": true, "\xff": false,
+	} {
+		if got := checkName(s) == nil; got != ok {
+			t.Errorf("display name %q: %v", s, got)
+		}
+	}
 	for s, ok := range map[string]bool{
 		"public": true, "top-secret": true, "l2": true, "2l": false, "a-": false, "a--b": false, "a_b": false, "": false,
 		strings.Repeat("a", 32): true, strings.Repeat("a", 33): false,

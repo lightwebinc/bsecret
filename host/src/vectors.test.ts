@@ -136,6 +136,15 @@ test('every .hex record decodes and re-encodes byte for byte', () => {
   assert.ok(n >= 17, `${n} hex files`)
 })
 
+test('a display name is one line of plain text: no control character, no line or paragraph separator', () => {
+  const v = decodeVault(hexFile(readdirSync(dir).filter((n) => n.startsWith('vault-') && n.endsWith('.hex')).sort()[0]!))
+  const named = (name: string): string => reason(() => decodeVault(encodeVault({ ...v, name })))
+  for (const ok of ['ops', 'Ops vault (prod)', 'caf\u00e9 \u91d1\u5eab', 'a'.repeat(64), 'a\u00a0b', 'a\u2027b', 'a\u202ab']) assert.equal(named(ok), 'ok', JSON.stringify(ok))
+  for (const bad of ['', 'a'.repeat(65), 'a\nb', 'a\rb', 'a\tb', 'a\u0000b', 'a\u001bb', 'a\u007fb', 'a\u0080b', 'a\u0085b', 'a\u009fb', 'a\u2028b', 'a\u2029b']) {
+    assert.equal(named(bad), 'name', JSON.stringify(bad))
+  }
+})
+
 test('refusal-v1: every record refused for the same reason, unknown keys kept', () => {
   const f = load('refusal-v1.json')
   assert.ok(f.refusals.length >= 70)

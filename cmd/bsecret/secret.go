@@ -68,9 +68,13 @@ func (g *global) ready(ctx context.Context, w *writer) (*engine.Writer, error) {
 func werr(err error) error {
 	var lost *engine.LostError
 	var swept *engine.SweepRefusedError
+	var check *vread.Failure
 	switch {
 	case err == nil:
 		return nil
+	case errors.As(err, &check):
+		// The group answered below what this home verified (rollback).
+		return refused("%v", err)
 	case errors.Is(err, engine.ErrStale), errors.Is(err, secrec.ErrReuse), errors.As(err, &lost), errors.As(err, &swept):
 		return refused("%v", err)
 	case errors.Is(err, engine.ErrUnwrapped):

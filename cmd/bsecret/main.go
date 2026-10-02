@@ -31,6 +31,7 @@ import (
 	"github.com/lightwebinc/bcommon/termsafe"
 
 	"github.com/lightwebinc/bsecret/internal/config"
+	"github.com/lightwebinc/bsecret/internal/vread"
 )
 
 // version is stamped by the build; "dev" otherwise.
@@ -293,6 +294,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	g := &global{cfg: cfg, verbose: *verbose, stdin: stdin, stdout: stdout, stderr: stderr, getenv: getenv, terminal: isTerminal(stdout)}
 	err = cmd(ctx, g, rest[1:])
 	var ee *exitError
+	var check *vread.Failure
 	switch {
 	case err == nil:
 		return exitOK
@@ -301,6 +303,11 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 			fmt.Fprintln(stderr, "bsecret:", termsafe.Text(ee.msg))
 		}
 		return ee.code
+	case errors.As(err, &check):
+		// A reader's check that failed, from wherever it was made, names
+		// its culprit: refused.
+		fmt.Fprintln(stderr, "bsecret:", termsafe.Text(err.Error()))
+		return exitRefused
 	default:
 		fmt.Fprintln(stderr, "bsecret:", termsafe.Text(err.Error()))
 		return exitUsage

@@ -120,8 +120,9 @@ func (g *global) vaultCreate(ctx context.Context, group, name, hall, anchor, lab
 	if name == "" || len(name) > secrec.MaxName {
 		return usage("-name: the vault's display name, 1 to %d bytes", secrec.MaxName)
 	}
-	// The record takes any UTF-8. This tooling writes a name every reader
-	// can print as it is: one line, with nothing a terminal would act on.
+	// The record refuses a line break and every control character (spec
+	// section 3). This tooling refuses more: whatever a terminal filter
+	// would strip, so a name every reader can print as it is.
 	if field(name) != name {
 		return usage("-name holds a line break or a character a terminal would act on; a display name is one line of plain text")
 	}

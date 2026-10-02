@@ -303,7 +303,14 @@ func (g *global) open(ctx context.Context, t *target, st *state.State) (*opened,
 		return nil, refused("vault %s: its first token breaks the fold (%s): nothing is taken from it", vread.Short(t.vaultHex()), cv.Statuses[0])
 	}
 	rec := head.Token.Vault
+	// The group is held to the latest token of it this home verified, as
+	// the vault is.
+	hold(t.groups, held)
 	if o.group, err = vread.ReadGroup(ctx, t.groups, rec.Hall, t.org, rec.Group); err != nil {
+		var f *vread.Failure
+		if errors.As(err, &f) {
+			return nil, failure(err)
+		}
 		if errors.Is(err, reader.ErrNoChain) {
 			return nil, incomplete("the vault's group %s in hall %s: %v", reader.GroupHex(rec.Group), rec.Hall, err)
 		}

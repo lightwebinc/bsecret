@@ -161,8 +161,13 @@ func cmdAudit(ctx context.Context, g *global, args []string) error {
 		}
 	}
 	first := cv.Tokens[0].Token.Vault
+	hold(t.groups, t.st)
 	group, err := vread.ReadGroup(ctx, t.groups, first.Hall, t.org, first.Group)
 	if err != nil {
+		var f *vread.Failure
+		if errors.As(err, &f) {
+			return failure(err)
+		}
 		if errors.Is(err, reader.ErrNoChain) {
 			return incomplete("the vault's group %s in hall %s: %v", reader.GroupHex(first.Group), first.Hall, err)
 		}

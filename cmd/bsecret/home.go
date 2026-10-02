@@ -243,7 +243,14 @@ func (g *global) groups() (*reader.Client, error) {
 	if len(hosts) == 0 {
 		return nil, usage("no overlay host configured for the group's hall (config key hall_hosts, or hosts)")
 	}
-	return &reader.Client{Hosts: hosts, Headers: hc, Timeout: g.cfg.Timeout, HTTP: httpClient}, nil
+	rd := &reader.Client{Hosts: hosts, Headers: hc, Timeout: g.cfg.Timeout, HTTP: httpClient}
+	// The node, when one is configured, gives the current proof of a group
+	// token whose stored proof no longer verifies, and says whether a
+	// token this home remembered is still mined.
+	if sp := g.spends(); sp != nil {
+		rd.Source = sp
+	}
+	return rd, nil
 }
 
 // content is where ciphertexts that are not carried are kept, or nil.
@@ -361,6 +368,10 @@ func (g *global) openWriterFor(ctx context.Context, lenient bool) (*writer, erro
 		h.close()
 		return nil, err
 	}
+	// A writer holds the group to what this home verified before: a hall
+	// that answers the group without its latest removal would have it
+	// write under an epoch that has ended.
+	hold(legs.Groups, h.st)
 	p := limits.Publisher{Plane: g.cfg.Mode == config.ModePlane, Hosts: len(g.cfg.Hosts), TreeCount: g.cfg.TreeCount,
 		ChainTreeCount: g.cfg.ChainTreeCount, ObjectBound: g.cfg.ObjectBound}
 	need, err := config.Need(g.cfg.Quorum, len(g.cfg.Hosts))
@@ -800,9 +811,10 @@ func firstLine(s string) string {
 
 // field is someone else's text that fills one field of a line this command
 // prints (a vault's display name, a class name, a media type): filtered for
-// the terminal, and held to that line. A display name is any UTF-8, and a
-// name with a line break in it would otherwise write lines of its own in a
-// report, in this command's voice.
+// the terminal, and held to that line. A record refuses a display name with
+// a line break (spec section 3); other text a host or an owner wrote is
+// held to no such rule, and a line break in it would otherwise write lines
+// of its own in a report, in this command's voice.
 func field(s string) string {
 	s = strings.Map(func(r rune) rune {
 		switch r {

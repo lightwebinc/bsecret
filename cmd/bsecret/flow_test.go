@@ -817,9 +817,14 @@ func TestTheTerminal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// This tooling writes no such name; a vault's owner can sign one all
-	// the same, with any other.
-	h.env["BSECRET_VAULT"] = h.namedVault(gid, "ops\x1b[2J\x1b]0;owned\x07")
+	// This tooling writes no such name. A vault's owner can sign one all
+	// the same with any other: the record refuses control characters, not
+	// the overrides and zero-width characters a terminal also acts on.
+	id, err := h.namedVault(gid, "ops\u202eowned\u200b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.env["BSECRET_VAULT"] = id
 	h.put("db/password", "hunter2")
 	ctx := context.Background()
 	g, out, errb := h.global("alice")
@@ -830,7 +835,7 @@ func TestTheTerminal(t *testing.T) {
 	if out.Len() != 0 || !strings.Contains(errb.String(), "not written: standard output is a terminal") {
 		t.Fatalf("a terminal was written a value: %q\n%s", out, errb)
 	}
-	if strings.ContainsAny(errb.String(), "\x1b\x07") {
+	if strings.ContainsAny(errb.String(), "\u202e\u200b") {
 		t.Fatalf("the vault's name reached the terminal unfiltered: %q", errb.String())
 	}
 	g, out, _ = h.global("alice")
@@ -840,12 +845,12 @@ func TestTheTerminal(t *testing.T) {
 	}
 	for _, args := range [][]string{{"vault", "show"}, {"vault", "list"}, {"audit", "-free"}, {"due"}} {
 		r := h.run("alice", "", args...)
-		if strings.ContainsAny(r.stdout+r.stderr, "\x1b\x07") {
-			t.Fatalf("%v wrote a control sequence: %q", args, r.stdout+r.stderr)
+		if strings.ContainsAny(r.stdout+r.stderr, "\u202e\u200b") {
+			t.Fatalf("%v wrote a character a terminal acts on: %q", args, r.stdout+r.stderr)
 		}
 	}
-	if r := h.must("org", "doctor"); strings.ContainsAny(r.stdout, "\x1b\x07") {
-		t.Fatalf("doctor wrote a control sequence: %q", r.stdout)
+	if r := h.must("org", "doctor"); strings.ContainsAny(r.stdout, "\u202e\u200b") {
+		t.Fatalf("doctor wrote a character a terminal acts on: %q", r.stdout)
 	}
 }
 

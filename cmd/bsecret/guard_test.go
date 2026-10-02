@@ -571,9 +571,10 @@ func TestAPaymentIsRecordedBeforeItIsSent(t *testing.T) {
 	}
 }
 
-// namedVault creates a vault of the organisation under any display name, as
-// tooling that does not check the name would, and returns its identifier.
-func (h *harness) namedVault(group, name string) string {
+// namedVault creates a vault of the organisation under a display name this
+// command would not write, as tooling that checks only the record's rule
+// would, and returns its identifier.
+func (h *harness) namedVault(group, name string) (string, error) {
 	h.t.Helper()
 	ctx := context.Background()
 	g, _, errb := h.global("org")
@@ -588,41 +589,49 @@ func (h *harness) namedVault(group, name string) string {
 	}
 	v, err := w.eng.CreateVault(ctx, h.crypt, name, h.borg.Hall, gid, []string{"confidential", "internal", "restricted"}, secrec.AnchorVersion)
 	if err != nil {
-		h.t.Fatalf("%v\n%s", err, errb)
+		return "", err
 	}
-	return v.ID
+	return v.ID, nil
 }
 
-// A vault's display name is any UTF-8, and its owner chooses it: one with a
-// line break in it writes no line of its own in a report, and one with a
-// character a terminal acts on reaches no terminal, in a JSON report
-// either.
+// A vault's display name is its owner's text. The record refuses a line
+// break and every control character (spec section 3), so no tooling can
+// sign a name that writes a line of its own in a report. What the record
+// allows and a terminal acts on all the same (a bidirectional override)
+// reaches no terminal, in a JSON report either.
 func TestAHostileDisplayNameForgesNoLine(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.vault()
 	// This tooling refuses to write such a name.
 	h.want(h.run("org", "", "vault", "create", h.group, "-name", "ops\naudit   OK"), exitUsage, "a display name is one line of plain text")
-	// Another tooling would not: the owner's key signs one all the same.
-	name := "ops\naudit   OK: forged\r\ntoken   seq 9 ‮forged\u0085vault   x"
-	id := h.namedVault(h.group, name)
+	h.want(h.run("org", "", "vault", "create", h.group, "-name", "ops \u202eforged"), exitUsage, "a display name is one line of plain text")
+	// Another tooling cannot write a line break or a control character
+	// either: the record's own rule refuses it before anything is signed.
+	for _, name := range []string{"ops\naudit   OK: forged", "ops\r\ntoken   seq 9", "ops\u0085vault   x", "ops\x1b[2J", "ops\u2028audit"} {
+		if _, err := h.namedVault(h.group, name); err == nil || secrec.Reason(err) != "name" {
+			t.Fatalf("a vault named %q: %v, want the record refused (name)", name, err)
+		}
+	}
+	// It can write what the record allows: a bidirectional override.
+	name := "ops \u202eforged"
+	id, err := h.namedVault(h.group, name)
+	if err != nil {
+		t.Fatal(err)
+	}
 	h.mustIn("org", "one", "-vault", id, "put", "db/password")
 	for _, args := range [][]string{
 		{"-vault", id, "vault", "show"}, {"vault", "list"}, {"-vault", id, "audit", "-free"},
 		{"-vault", id, "get", "db/password", "-show"}, {"-vault", id, "due"},
 	} {
 		r := h.run("alice", "", args...)
-		for _, out := range []string{r.stdout, r.stderr} {
-			for _, line := range strings.Split(out, "\n") {
-				if strings.HasPrefix(line, "audit   OK: forged") || strings.HasPrefix(line, "token   seq 9") || strings.ContainsAny(line, "\r‮\u0085") {
-					t.Fatalf("%v: the name wrote a line of its own, or reached the terminal:\n%s\n%s", args, r.stdout, r.stderr)
-				}
-			}
+		if strings.ContainsAny(r.stdout+r.stderr, "\u202e") {
+			t.Fatalf("%v: the name's override reached the terminal:\n%s\n%s", args, r.stdout, r.stderr)
 		}
 	}
 	r := h.must("alice", "-vault", id, "audit", "-free", "-json")
-	if strings.ContainsAny(r.stdout, "‮\u0085") {
-		t.Fatalf("the JSON report carries the name's control characters raw:\n%s", r.stdout)
+	if strings.ContainsAny(r.stdout, "\u202e") {
+		t.Fatalf("the JSON report carries the name's override raw:\n%s", r.stdout)
 	}
 	var rep auditReport
 	if err := json.Unmarshal([]byte(r.stdout), &rep); err != nil || rep.Name != name {
@@ -704,4 +713,41 @@ func TestAWithheldRemovalIsNotCurrent(t *testing.T) {
 	if r.code != exitIncomplete || r.stdout != "" {
 		t.Fatalf("-strict with the removal withheld: exit %d %q\n%s", r.code, r.stdout, r.stderr)
 	}
+}
+
+// A home remembers the latest token of the vault's group it verified, as
+// it remembers the vault's. Hosts of the hall that then answer the group
+// without its latest token, the removal, answer a group in which the
+// removed member still is one and every token of which verifies: a reader
+// and a writer that saw the removal refuse it (rollback), where a reader
+// that never did has only the node's word that the token answered is
+// spent.
+func TestAGroupRolledBackIsRefused(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	if err := h.borg.Remove(h.group, h.keys["bob"]); err != nil {
+		t.Fatal(err)
+	}
+	h.must("org", "rotate", "-same-all")
+	if r := h.must("alice", "get", "db/password"); r.stdout != "one" || !strings.Contains(r.stderr, "settled at epoch 1") {
+		t.Fatalf("alice after the rotation: %q\n%s", r.stdout, r.stderr)
+	}
+	removal := h.borg.LatestToken(h.group)
+	h.a.ForgetHall(removal)
+	h.b.ForgetHall(removal)
+	// The reader that verified the removal refuses the older group, and
+	// writes no value.
+	r := h.run("alice", "", "get", "db/password")
+	h.want(r, exitRefused, "rollback")
+	if r.stdout != "" || !strings.Contains(r.stderr, "an older state of the group") {
+		t.Fatalf("a group rolled back: %q\n%s", r.stdout, r.stderr)
+	}
+	h.want(h.run("alice", "", "list"), exitRefused, "rollback")
+	// So does the writer, before it builds anything.
+	r = h.run("org", "two", "put", "db/password")
+	h.want(r, exitRefused, "rollback")
+	// Nothing was forgotten: the node says the removal is mined.
+	h.want(h.run("alice", "", "get", "db/password"), exitRefused, "rollback")
 }

@@ -85,6 +85,11 @@ type State struct {
 	// Seen is the latest token of each vault this identity verified as a
 	// reader: a host that answers an older one is answering an old state.
 	Seen []Seen `json:"seen,omitempty"`
+	// SeenGroups is the latest token of each group's chain this identity
+	// verified through borg's reader: hosts of the hall that answer the
+	// group only below it are answering an old state, in which a member
+	// since removed is still a member.
+	SeenGroups []SeenGroup `json:"seenGroups,omitempty"`
 
 	// Payments are the payments this identity made for priced questions
 	// that have not mined yet, each as the BEEF the host was handed: the
@@ -327,6 +332,17 @@ type Seen struct {
 	Txid  string `json:"txid"`
 }
 
+// SeenGroup is the latest token of one group's chain this identity
+// verified: borg's hall, the organisation, and the chain borg's reader
+// names (a group id).
+type SeenGroup struct {
+	Hall  string `json:"hall"`
+	Org   string `json:"org"`
+	Chain string `json:"chain"`
+	Seq   uint64 `json:"seq"`
+	Txid  string `json:"txid"`
+}
+
 // Payment is a payment this identity made that has not mined yet.
 type Payment struct {
 	Txid string `json:"txid"`
@@ -518,6 +534,36 @@ func (s *State) See(v Seen) {
 // mined, so a reorganisation displaced it (spec section 14).
 func (s *State) Forget(crypt, org, vault string) {
 	s.Seen = slices.DeleteFunc(s.Seen, func(x Seen) bool { return x.Crypt == crypt && x.Org == org && x.Vault == vault })
+}
+
+// SeenGroupOf is the latest token of a group's chain this identity
+// verified, or nil.
+func (s *State) SeenGroupOf(hall, org, chain string) *SeenGroup {
+	for i := range s.SeenGroups {
+		x := &s.SeenGroups[i]
+		if x.Hall == hall && x.Org == org && x.Chain == chain {
+			return x
+		}
+	}
+	return nil
+}
+
+// SeeGroup records a verified latest token of a group's chain, never
+// moving the group backwards.
+func (s *State) SeeGroup(v SeenGroup) {
+	if old := s.SeenGroupOf(v.Hall, v.Org, v.Chain); old != nil {
+		if v.Seq >= old.Seq {
+			*old = v
+		}
+		return
+	}
+	s.SeenGroups = append(s.SeenGroups, v)
+}
+
+// ForgetGroup drops what was seen of a group's chain: the token remembered
+// is no longer mined, so a reorganisation displaced it.
+func (s *State) ForgetGroup(hall, org, chain string) {
+	s.SeenGroups = slices.DeleteFunc(s.SeenGroups, func(x SeenGroup) bool { return x.Hall == hall && x.Org == org && x.Chain == chain })
 }
 
 // WriteAtomic writes data to path through a temporary file in the same

@@ -312,6 +312,17 @@ func checkCarrier(w *chaintoken.Wire, tx *transaction.Transaction, h Host) (*Car
 	return c, nil
 }
 
+// CarrierRecord decodes the secret record a carrier's output script holds:
+// its first push. The owner's tooling reads its own kept carriers with it;
+// a reader holds a carrier to every rule first (Admit).
+func CarrierRecord(lock []byte) (*Secret, error) {
+	p, ok := pushdrop.FirstPush(lock)
+	if !ok {
+		return nil, ErrShape
+	}
+	return DecodeSecret(p)
+}
+
 // checkToken is the vault token's rules 1 to 10.
 func (a *Admission) checkToken(ctx context.Context, w *chaintoken.Wire, tx *transaction.Transaction, at int, h Host) error {
 	out := tx.Outputs[at]

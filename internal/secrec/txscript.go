@@ -25,3 +25,15 @@ func FundingScript(key *ec.PublicKey) []byte {
 // IsFundingShape reports a funding-shaped script under any key: the whole
 // script is 0x21, 33 bytes, 0xac, 03 73 65 02, 75 (Classify's funding).
 func IsFundingShape(s []byte) bool { return Classify(s) == KindFunding }
+
+// FundingScriptOf is the funding output script of an owner's tree under a
+// derivation: SecretDerivation for a tree that funds carriers,
+// ChainDerivation for one that pays for vaults' first tokens (docs/spec.md
+// section 12.4). The key is derived from the identity key alone, as a
+// reader derives it.
+func FundingScriptOf(d pushdrop.Derivation, owner []byte) ([]byte, error) {
+	if err := CheckOrgKey(owner); err != nil {
+		return nil, err
+	}
+	return FundingScript(lockingKey(d, owner)), nil
+}

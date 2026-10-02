@@ -1,0 +1,55 @@
+{
+  "brc369": {
+    "borgAcceptsHeader": false,
+    "commitment": "2013064f87db545aa20f273b3abc8bdb470ddc69349cac55b7b397585af15797",
+    "contentId": "4506d4b11347776160524138f6711c7c747d65e6bf0ea2d3f5947b98dec25a97",
+    "epoch": 0,
+    "key": "0ff730f7b66f7bb6626229ca20c5b4c2c47ecc32248203a14cd247ef7ed298d8",
+    "payload": "3310424203e69fe2022f968ea1bc233f6a97ab885d16965d747fdab152dc7e71675d856d6902f409d574960001d82cfc470956b1c13aa60e98fb88101cdf69797d597745c3f77c588ec5954b41fb98efd3a7b30210a3c5f9bc44777e623df365e9637c74b36efef88a7d999ae66f952cc1cef07af27ea4538a999ec5cd15038dd7a8636899298eff7a4477ee7c62fbc7f177a189749f2a17a3f7c57d89bc78ba39f6b1143ed222f3a3d1a7a71e62206123f7e998f676",
+    "payloadOpensWith": "the vector's listed shared secret used as the AES-256-GCM key (32-byte IV, 16-byte tag): BRC-2's symmetric key, the raw x-coordinate of the child keys' shared point",
+    "payloadPlaintext": "0ff730f7b66f7bb6626229ca20c5b4c2c47ecc32248203a14cd247ef7ed298d8",
+    "payloadVersion": "33104242",
+    "releaseInvoice": "2-keyed content release-fFiOxZVLQfuY79OnswIQo8X5vER3fmI982XpY3x0s24=",
+    "releaseKeyId": "7c588ec5954b41fb98efd3a7b30210a3c5f9bc44777e623df365e9637c74b36e",
+    "sdkVersion": "42421033",
+    "source": "BRC-369 Test Vectors: content key, release payload",
+    "symmetricKey": "42dcb945809f42a6f827c8336affc7a04c284dfd6e4b65c6663f6e864240ad0e"
+  },
+  "domains": {
+    "commitment": "metanet keyed content commitment v1",
+    "symmetric": "metanet keyed content symmetric v1"
+  },
+  "epochs": [
+    {
+      "epoch": 0,
+      "key": "f32d56bd890f105f1e9731d9607b464078644b0ce1df8e7a87196589bd0266ca",
+      "symmetricKey": "3d67c0041301c203085c253fb02a70d5d86ebdbe411759a18c7e63a40af8bd35",
+      "commitment": "ceeed5d6813b5155763f35d7209ce29228cd9625bb6527946fcdf6ee1b30f4ee",
+      "epochId": "f177512800bb4d36592b8d1828c32da6573fd256908efb8f0a234cd6911e79dc",
+      "beganAtSeq": 0,
+      "releaseKeyId": "370dc9423cf6f0e9e0c38cf005087db50f8b57d99aee22b2ffb853c874d95546",
+      "releaseInvoice": "2-keyed content release-Nw3JQjz28Ongw4zwBQh9tQ+LV9ma7iKy/7hTyHTZVUY="
+    },
+    {
+      "epoch": 1,
+      "key": "2502fa9da5b7f889d8de37defbdda85531e2c6b20626a3e59efa6815aac06189",
+      "symmetricKey": "836a3cd360f7eb2a083d0fd085c537f6fb6d29df6fbca8b68835e48d07d62dc0",
+      "commitment": "33446213fbf23b1a12c81c0b6679ff8cb4345db876f39affabc0050bb46604eb",
+      "epochId": "2f7d1933ba956338f37d5b60627c5ba30e86dbde98192030d8c0bed41fe3f421",
+      "beganAtSeq": 2,
+      "releaseKeyId": "a8a2f6b6733d0050f93edfe53061061f0564096be6822fc0059d0d4bf3ccee94",
+      "releaseInvoice": "2-keyed content release-qKL2tnM9AFD5Pt/lMGEGHwVkCWvmgi/ABZ0NS/PM7pQ="
+    },
+    {
+      "epoch": 2,
+      "key": "ceebd5308ddfaee2f1fb4f5f2dc96b596b58f4ad1643136ec53eb35071587947",
+      "symmetricKey": "b73945e40061c4823d1d9cf528a76b2e7a33a2b97ef182828c6aaeca48fea003",
+      "commitment": "16a5a7e954bc2b7400de9f24edd5d81c62e9d0c88557ee6cf2298e3dd39a62be",
+      "epochId": "2eb099db87764574f67fa85ef85a6b467e003a109aaef169755cf2edb56f8ab2",
+      "beganAtSeq": 3,
+      "releaseKeyId": "90295ec9e3b16f0912a79876584ba60ab1fa96003aa393b6c793fe31c6e24055",
+      "releaseInvoice": "2-keyed content release-kCleyeOxbwkSp5h2WEumCrH6lgA6o5O2x5P+McbiQFU="
+    }
+  ],
+  "note": "Epoch keys are fixed stand-ins for CSPRNG draws: SHA-256(\"borg/vector/epoch/<n>\"), each checked to be a scalar in [1, n-1]."
+}

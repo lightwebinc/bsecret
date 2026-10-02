@@ -2,7 +2,7 @@
   "name": "@lightwebinc/bsecret-host",
   "version": "0.1.0",
   "private": true,
-  "description": "The bsecret record layer in TypeScript for an overlay host: vault and secret records, crypt, label and name grammars, lookup questions, the set root and inclusion contexts, the topic manager's transaction rules and the index's chain rules, held to the Go codec's vectors",
+  "description": "The bsecret record layer in TypeScript and the host module for an overlay host: vault and secret records, crypt, label and name grammars, lookup questions, the set root and inclusion contexts, the topic manager's transaction rules and the index's chain rules, held to the Go codec's vectors, and tm_bsecret with ls_bsecret as a module the host loads by path",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
@@ -11,8 +11,9 @@
   "scripts": {
     "prebuild": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "build": "tsc",
+    "bundle": "node scripts/bundle.js",
     "check": "tsc --noEmit",
-    "pretest": "npm run build",
+    "pretest": "npm run build && npm run bundle",
     "test": "node --test \"dist/**/*.test.js\"",
     "vectors": "node dist/tsvectors.js",
     "vectors-check": "node dist/tsvectors.js -check"
@@ -22,7 +23,9 @@
     "@lightwebinc/bcommon": "file:vendor/lightwebinc-bcommon-0.6.0.tgz"
   },
   "devDependencies": {
+    "@bsv/overlay": "2.3.1",
     "@types/node": "^24.10.1",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2"
   }
 }

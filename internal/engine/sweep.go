@@ -68,7 +68,12 @@ func (e *Engine) Retract(ctx context.Context, crypt, txid string, vouts []uint32
 		return nil, err
 	}
 	if len(left) == 0 {
-		return e.SweptBy(txid, vouts[0]), nil
+		for _, v := range vouts {
+			if sw := e.SweptBy(txid, v); sw != nil {
+				return sw, nil
+			}
+		}
+		return nil, fmt.Errorf("every output named of funding tree %s is spent by a transaction that has not mined yet, or that the node could not show: nothing is swept now; the next run takes that spend as the sweep once it mines", Short(txid))
 	}
 	vouts = left
 	tree, err := e.kept.Tx(txid)

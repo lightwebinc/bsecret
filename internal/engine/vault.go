@@ -257,6 +257,9 @@ func (e *Engine) EpochKey(ctx context.Context, g *vread.Group, epoch uint64) ([3
 		return [32]byte{}, err
 	}
 	sym, err := vread.OpenEpoch(ctx, e.Legs.Groups, w, pub, g, epoch)
+	if errors.Is(err, vread.ErrNoWrap) {
+		return [32]byte{}, fmt.Errorf("the organisation's signer key %s: %w; a borg command run in the organisation's borg home publishes the wraps it still owes", hex.EncodeToString(pub), err)
+	}
 	if err != nil {
 		return [32]byte{}, fmt.Errorf("the organisation's signer key %s opens no wrap of epoch %d of the group: %w; run `borg org signer` in the organisation's borg home, which makes the signer key a member of every group so that the organisation's tooling holds each epoch's key (docs/usage.md)", hex.EncodeToString(pub), epoch, err)
 	}

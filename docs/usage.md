@@ -103,7 +103,7 @@ both the hall and the crypt.
 | --- | --- | --- | --- |
 | `init [-borg DIR \| -from FILE]` | creates it | nothing | identity key and empty coin pool; prints the identity and the fund address. `-borg` makes the home around a borg home's identity, `-from` around an identity file |
 | `fund -txid TXID` | yes | `asset`, `header_url` | imports a mined payment to the fund address, once its proof checks |
-| `fund [-blocks N]` | yes | `rpc`, `asset` | mines coinbase to the fund address through `generatetoaddress`: a chain you run. Refused on network `main` |
+| `fund [-blocks N]` | yes | `rpc`, `asset` | mines coinbase to the fund address through `generatetoaddress`: a chain you run. Refused on network `main`. `-batch N` blocks a call; `-rescan` re-reads the last `-blocks` blocks for coinbase the pool lacks and mines nothing |
 | `crypt new <name>` | optional | nothing | draws the 10-letter random suffix; prints the crypt, its topic, and the host's `BSECRET_CRYPTS` line |
 | `crypt list` | yes | nothing | the crypts this home created |
 | `vault create <group> -name N` | yes, the owner's, funded | `crypt`, `hall`, a publisher's settings (below) | a vault keyed to a group of the organisation (its id, or its name in the hall): a chain tree, and the vault's first token naming the group's current epoch. `-anchor version` (default) or `interval`; `-labels a,b,c`. The name is one line of plain text |
@@ -117,9 +117,9 @@ both the hall and the crypt.
 | `kill -confirm KILL [-yes]` | yes, the owner's | with `-yes` a publisher's | the kill switch: one sweep per secret tree the home holds, published in every crypt the tree funded a version in. Every version it published is retracted. Without `-yes` it lists the sweeps and sends nothing |
 | `get <name>` | yes (the key that reads) | a reader's settings; `content` for a large secret | reads a secret's value, every check in the signed order; the value raw on standard output, only when it is not a terminal or with `-show`. `-version N` reads history; `-strict` refuses an exposed or possibly stale value |
 | `list` | yes (the key that reads) | a reader's settings | the vault's secrets by name, each host's answer compared with the set's root; no value is printed |
-| `due` | optional | a reader's settings | what the vault owes: an acknowledgement, re-keyings, and for the owner the rotations it scheduled. Exit 3 when anything is due |
+| `due` | optional | a reader's settings | what the vault owes: an acknowledgement, re-keyings, and for the owner the rotations it scheduled and the values whose `-not-after` falls within `-within` (720h). Exit 3 when anything is due |
 | `audit` | no; one with coin to pay | a reader's settings; `paid_host`, `asset`, `settle` to pay | verifies the vault's trail from headers and prints the exposure window of every epoch the group began. Paid through the 402 when a paid host is named, at most `-max-sats` a page and `-budget` in all; `-free` walks the free class. `-json` |
-| `history <name>` | yes, funded | a reader's settings, `paid_host`, `asset`, `settle` | the priced question: pays the host's 402 and prints every version of a secret the host holds |
+| `history <name>` | yes, funded | a reader's settings, `paid_host`, `asset`, `settle` | the priced question: pays the host's 402 and prints every version of a secret the host holds, 16 a page; `-after VERSION` asks for the next page |
 | `terms [URL]` | no | `paid_host` or URL | prints a host's terms document |
 | `fill` | optional | a reader's settings, `asset` | replays to each host what another host answered and it lacks: the vault's chain, its set's carriers, and sweeps; signs nothing |
 | `payee key -out FILE` | yes | nothing | writes `BSECRET_PAYEE_KEY` for this home's identity to a new file, mode 0600 |
@@ -225,7 +225,7 @@ paid_host    = https://terms.host-a.example.com
 | 0 | done, or everything asked verified |
 | 1 | refused: a reader's check failed and names its culprit (`listing`, `retracted`, `hash`, `undecryptable`, `commitment`, `tag`, `payload`, `successor`, `rollback`); a vault that is ahead of its group, broken or terminated; an audit that fails; a writer's evidence that failed closed; a content key used before; a transition another one beat to the chain (`lost`); a readiness check (`rotate -check`) that found a secret with no choice; `get -strict` on an exposed value; or a sweep or payment the network refuses |
 | 2 | usage, configuration, local or transport error, a home another command is using, a quorum not met, or a price over `-max-sats` or `-budget`; what was persisted is published by the next command |
-| 3 | incomplete: the hosts disagree, a host answered something that does not verify, verified tokens of the vault exist above the chain read, a host could not be asked, no host answered what was asked (an empty answer proves nothing), a ciphertext no content source holds, the token read is spent by a later one no host answers, something is due (`due`), borg's wraps of a new epoch are not published yet, or with `-strict` nothing says the token read is the latest. It proves nothing either way |
+| 3 | incomplete: the hosts disagree, a host answered something that does not verify, verified tokens of the vault exist above the chain read, a host could not be asked, no host answered what was asked (an empty answer proves nothing), a ciphertext no content source holds, the token read is spent by a later one no host answers, something is due (`due`), borg's wraps of a new epoch are not published yet, no host of the hall answers a member the wrap of an epoch it was a member of, or with `-strict` nothing says the token read is the latest. It proves nothing either way |
 
 ## A home
 
@@ -468,7 +468,15 @@ named (`REFUSED`), the vault is read from what verified, and the command
 is incomplete (exit 3): one host at fault does not make a check fail.
 Verified tokens of the vault above the last one the walk could link are
 reported (`WITHHELD`, exit 3): a token between was withheld, and what was
-read may be an older state. The walk is bounded by the chain itself: a seq
+read may be an older state. A carrier is held to the same rule: a host that
+answers one that does not verify (bytes substituted or damaged on the way,
+a carrier that breaks the carrier rules) is named (`REFUSED carrier`), and
+so is a host that answers the carrier of another version than the one the
+vault lists; the value is read from a host that answered the listed one,
+and the command is incomplete (exit 3). When no host answers the listed
+one, a carrier that does not verify leaves nothing to read (exit 3), and
+one that verifies and is another version fails the first of a reader's
+checks (`listing`, exit 1). The walk is bounded by the chain itself: a seq
 is asked for only once the one before it is on the chain, and an answer is
 read up to 16 MiB and the outputs a page of the contract holds. The group is read from the hall's hosts by borg's
 reader, and the vault is held to it: its owner is the group's
@@ -513,8 +521,8 @@ stops at the first that fails, which names its culprit:
 | --- | --- | --- |
 | 0 | `listing` | the set folded here holds this version; the token that listed it lists this record's content id and commitment, under the record's epoch; no earlier token listed the commitment; the record's epoch and epoch id are on the group's chain |
 | 0 | `retracted` | no mined sweep, answered by any host or shown by its proof, spends the record's funding output |
-| 1 | `hash` | the ciphertext, inline or fetched by hash, is the length and hash the record names: before any wrap is opened |
-| 2a | `undecryptable` | the wrap opens under the key of the epoch the record names, and of no other (the owner: its self wrap); a key that was not a member of that epoch stops here |
+| 1 | `hash` | the ciphertext, inline or fetched by hash, is the length and hash the record names: before any wrap is opened. A ciphertext fetched by hash names the content source that served other bytes |
+| 2a | `undecryptable` | the wrap opens under the key of the epoch the record names, and of no other (the owner: its self wrap); a key that was not a member of that epoch stops here. A key that was a member, by the group's own chain, and whose wrap of that epoch's key no host of the hall answers was refused nothing: that read is incomplete (exit 3), and a host of the hall that answered a wrap that does not verify is named |
 | 2b | `commitment` | the key is the one committed to |
 | 3 | `tag` | every segment's tag verifies |
 | 4 | `payload` | the plaintext is a payload whose name hashes to the record's identifier |

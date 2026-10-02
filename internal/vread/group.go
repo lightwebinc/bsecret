@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -155,10 +156,44 @@ func OpenEpoch(ctx context.Context, rd *reader.Client, w wallet.Interface, me []
 	}
 	op := rd.Open(ctx, w, me, g.GroupView, uint32(epoch)) //nolint:gosec // bounded above
 	if op.Label != "" {
+		// The group's own chain says whether me was a member of the epoch.
+		// A member's wrap exists, so when no host answers one that verifies
+		// and holds its entry (entry), or the only ones answered are of
+		// another epoch (token), the hosts are what failed: nothing was
+		// opened and found wrong, and it proves nothing about the record.
+		if (op.Label == "entry" || op.Label == "token") && slices.Contains(g.EpochsOf(me), uint32(epoch)) { //nolint:gosec // bounded above
+			_, refused := rd.Wraps(ctx, g.GroupView, uint32(epoch)) //nolint:gosec // bounded above
+			return [32]byte{}, &NoWrapError{Epoch: epoch, Label: op.Label, Err: op.Err, Refused: refused}
+		}
 		return [32]byte{}, fmt.Errorf("epoch %d (%s): %w", epoch, op.Label, op.Err)
 	}
 	return borgrec.SymmetricKey(op.Key), nil
 }
+
+// ErrNoWrap is the key of an epoch that a member of that epoch could not
+// open because no host of the hall answered its wrap: an absence, which
+// names nobody and proves nothing.
+var ErrNoWrap = errors.New("vread: no host of the hall answers the wrap")
+
+// NoWrapError is ErrNoWrap for one epoch: Label and Err are borg's reader's
+// last word, and Refused what the hall's hosts answered for the epoch's
+// wraps that did not verify, each naming its host.
+type NoWrapError struct {
+	Epoch   uint64
+	Label   string
+	Err     error
+	Refused []reader.Refusal
+}
+
+func (e *NoWrapError) Error() string {
+	msg := fmt.Sprintf("this key was a member of epoch %d by the group's own chain, and no host of the hall answers a wrap of that epoch's key to it that verifies (%s: %v): that proves nothing about the record; ask other hosts of the hall (config key hall_hosts)", e.Epoch, e.Label, e.Err)
+	for _, r := range e.Refused {
+		msg += fmt.Sprintf("; hall host %s answered wrap carrier %s, which does not verify (%s)", r.Host, Short(r.Txid), r.Reason)
+	}
+	return msg
+}
+
+func (e *NoWrapError) Unwrap() error { return ErrNoWrap }
 
 // SignerWallet is the wallet of the organisation's signer key: the key
 // derived from the organisation's identity key that borg keeps a member of

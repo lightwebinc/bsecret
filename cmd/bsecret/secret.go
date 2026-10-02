@@ -520,7 +520,7 @@ func (g *global) pick(ctx context.Context, o *opened, id [32]byte, name string, 
 	}
 	if version != 0 {
 		cars, refusedCars, errs := t.rd.Version(ctx, o.chain, id, version)
-		g.reportRefused(refusedCars)
+		o.leave(g.reportRefused(refusedCars))
 		var why error
 		for _, c := range cars {
 			if _, herr := o.chain.History(c); herr != nil {
@@ -539,17 +539,28 @@ func (g *global) pick(ctx context.Context, o *opened, id [32]byte, name string, 
 		return nil, false, false, refused("the vault's set, folded here from its chain, holds no secret named %s", name)
 	}
 	cars, refusedCars, errs := t.rd.Secret(ctx, o.chain, id)
-	g.reportRefused(refusedCars)
+	o.leave(g.reportRefused(refusedCars))
 	var listed *vread.Car
 	var why error
+	// Every carrier answered is looked at, the listed one found or not: a
+	// host that answers another version than the one the vault lists
+	// answered something other than what was asked, and is named.
+	another := false
 	for _, c := range cars {
 		if _, lerr := o.chain.Listed(c); lerr != nil {
-			why = lerr
+			if listed == nil {
+				why = lerr
+			}
 			g.say("host %s: answered a carrier that is not the version the vault lists: %v", c.Host, lerr)
+			another = another || c.Carrier.Secret.Version != cur.Version
 			continue
 		}
-		listed = c
-		break
+		if listed == nil {
+			listed = c
+		}
+	}
+	if listed != nil && another {
+		o.leave(incomplete("a host answered another version than the one the vault lists; the value is read from a host that answered the listed one"))
 	}
 	if listed == nil {
 		if why != nil {
@@ -563,7 +574,7 @@ func (g *global) pick(ctx context.Context, o *opened, id [32]byte, name string, 
 	// An interval vault: the versions above the listed one, and the
 	// highest that links successor by successor.
 	run, more, refusedCars, errs, lerr := t.rd.Run(ctx, o.chain, listed)
-	g.reportRefused(refusedCars)
+	o.leave(g.reportRefused(refusedCars))
 	if lerr != nil {
 		return nil, false, false, failure(lerr)
 	}
@@ -602,9 +613,25 @@ func (g *global) pick(ctx context.Context, o *opened, id [32]byte, name string, 
 	return run[len(run)-1], false, more, nil
 }
 
-func (g *global) reportRefused(rs []vread.Refusal) {
+// reportRefused names each host that answered a carrier that does not
+// verify, and returns what that leaves open (spec section 13): what does
+// not verify is not used, the value is read from what did verify, and the
+// read is incomplete, never refused. One host at fault does not make a
+// read fail.
+func (g *global) reportRefused(rs []vread.Refusal) error {
 	for _, r := range rs {
-		g.say("host %s: REFUSED carrier %s (%s): %v", r.Host, termsafe.Abbrev(r.Txid), r.Reason, r.Err)
+		g.say("host %s: REFUSED carrier %s (%s): what this host answered does not verify as that carrier, so it is not used: %v", r.Host, termsafe.Abbrev(r.Txid), r.Reason, r.Err)
+	}
+	if len(rs) == 0 {
+		return nil
+	}
+	return incomplete("a host answered a carrier that does not verify; it is not used")
+}
+
+// leave records what a host's answer left open, when nothing did before.
+func (o *opened) leave(problem error) {
+	if o.problem == nil {
+		o.problem = problem
 	}
 }
 
@@ -663,13 +690,21 @@ func cmdList(ctx context.Context, g *global, args []string) error {
 		switch {
 		case sa.Err != nil:
 			g.say("host %s: NOT ASKED: %s", sa.Host, firstLine(sa.Err.Error()))
+			if problem == nil {
+				problem = incomplete("a host could not be asked for the set")
+			}
 		case sa.Matches:
 			matched = true
 			g.say("host %s: %d secret(s), the set's root reproduced", sa.Host, len(o.chain.Set()))
 		default:
 			g.say("host %s: its answer DOES NOT REPRODUCE the set's root: it withheld or added a record", sa.Host)
+			if problem == nil {
+				problem = incomplete("a host's answer does not reproduce the set's root; the set is read from the hosts whose answers do")
+			}
 		}
-		g.reportRefused(sa.Refused)
+		if p := g.reportRefused(sa.Refused); p != nil && problem == nil {
+			problem = p
+		}
 		for _, c := range sa.Cars {
 			if _, lerr := o.chain.Listed(c); lerr == nil && best[c.Carrier.Secret.ID] == nil {
 				best[c.Carrier.Secret.ID] = c
@@ -695,8 +730,11 @@ func cmdList(ctx context.Context, g *global, args []string) error {
 		if err != nil {
 			var f *vread.Failure
 			label := "unreadable"
-			if errors.As(err, &f) {
+			switch {
+			case errors.As(err, &f):
 				label = f.Label
+			case errors.Is(err, vread.ErrNoWrap):
+				label = "no host of the hall answers this key's wrap of its epoch"
 			}
 			rows = append(rows, row{"~" + id, fmt.Sprintf("id:%s  %s: %s", id, tail, label)})
 			continue

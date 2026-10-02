@@ -366,7 +366,7 @@ func failure(err error) error {
 	if errors.As(err, &f) {
 		return refused("%s: %v", f.Label, f.Err)
 	}
-	if errors.Is(err, vread.ErrUnavailable) {
+	if errors.Is(err, vread.ErrUnavailable) || errors.Is(err, vread.ErrNoWrap) {
 		return incomplete("%v", err)
 	}
 	return err

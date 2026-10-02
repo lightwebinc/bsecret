@@ -81,6 +81,9 @@ type Host struct {
 	// Rewrite, when set, rewrites the answer to an ls_bsecret question: a
 	// host that withholds, adds or repeats outputs.
 	Rewrite func(q *secrec.Question, outs []Output) []Output
+	// RewriteBorg, when set, rewrites the answer to an ls_borg question: a
+	// hall's host that withholds a wrap, or serves other bytes for one.
+	RewriteBorg func(q *borgrec.Question, outs []Output) []Output
 	// Stale answers every token, carrier and sweep under a proof that names
 	// another block than the one the chain mined it in: a host whose stored
 	// proofs a reorganisation left behind.
@@ -408,7 +411,11 @@ func (h *Host) lookup(w http.ResponseWriter, r *http.Request) {
 		if carried {
 			outs, err = h.borg.answer(qq)
 		}
+		rewrite := h.RewriteBorg
 		h.mu.Unlock()
+		if rewrite != nil && err == nil {
+			outs = rewrite(qq, outs)
+		}
 		if !carried {
 			err = errors.New("this host does not carry the hall")
 		}

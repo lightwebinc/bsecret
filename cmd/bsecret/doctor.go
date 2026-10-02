@@ -60,7 +60,16 @@ func cmdDoctor(ctx context.Context, g *global, args []string) error {
 		fmt.Fprintf(out, "identity    %s\n", e.Signer().IdentityHex())
 		fmt.Fprintf(out, "pool        %d output(s), %d sat", e.Pool.Count(), e.Pool.Balance())
 		if tip > 0 {
-			fmt.Fprintf(out, ", %d immature", len(e.Pool.Immature(tip)))
+			// Coinbase short of its maturity. Change held until its
+			// transaction mines is not spendable either, and has a line
+			// of its own below.
+			immature := 0
+			for _, o := range e.Pool.Immature(tip) {
+				if !o.Unproven {
+					immature++
+				}
+			}
+			fmt.Fprintf(out, ", %d immature", immature)
 		}
 		if n := len(e.Pool.UnprovenTxids()); n > 0 {
 			fmt.Fprintf(out, ", change from %d transaction(s) held until mined", n)

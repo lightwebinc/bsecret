@@ -10,12 +10,14 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/bsv-blockchain/go-sdk/transaction"
 
 	"github.com/lightwebinc/bcommon/carrier"
 
+	"github.com/lightwebinc/borg/borgrec"
 	"github.com/lightwebinc/borg/reader"
 
 	"github.com/lightwebinc/bsecret/internal/engine"
@@ -886,5 +888,123 @@ func TestATreeMintedAheadDoesNotEmptyTheWallet(t *testing.T) {
 	}
 	if r := h.must("org", "doctor"); strings.Contains(r.stdout, "outbox      ") || strings.Contains(r.stdout, "unlisted    ") {
 		t.Fatalf("the home owes something:\n%s", r.stdout)
+	}
+}
+
+// A member whose wrap of the epoch's key no host of the hall answers was
+// refused nothing: the read is incomplete (exit 3), not undecryptable. A
+// host of the hall that answers a wrap that does not verify is named. A key
+// that was never a member of the epoch holds no key to try, and is told so
+// (exit 1).
+func TestAMemberWhoseWrapNoHostAnswers(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	if r := h.must("alice", "get", "db/password"); r.stdout != "one" {
+		t.Fatalf("alice: %q\n%s", r.stdout, r.stderr)
+	}
+	wraps := func(q *borgrec.Question) bool { return q.Class.Name == "wrap" || q.Class.Name == "wraps" }
+	// Both hosts withhold every wrap.
+	withhold := func(q *borgrec.Question, outs []testhost.Output) []testhost.Output {
+		if wraps(q) {
+			return nil
+		}
+		return outs
+	}
+	h.a.RewriteBorg, h.b.RewriteBorg = withhold, withhold
+	r := h.run("alice", "", "get", "db/password")
+	if r.code != exitIncomplete || r.stdout != "" || !strings.Contains(r.stderr, "this key was a member of epoch 0 by the group's own chain, and no host of the hall answers a wrap") ||
+		strings.Contains(r.stderr, "undecryptable") {
+		t.Fatalf("a member whose wrap is withheld: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	if r := h.run("alice", "", "list"); !strings.Contains(r.stdout, "no host of the hall answers this key's wrap of its epoch") {
+		t.Fatalf("list, the wrap withheld:\n%s\n%s", r.stdout, r.stderr)
+	}
+	// Host a serves other bytes for every wrap; host b still withholds.
+	h.a.RewriteBorg = func(q *borgrec.Question, outs []testhost.Output) []testhost.Output {
+		if !wraps(q) {
+			return outs
+		}
+		lied := make([]testhost.Output, len(outs))
+		for i, o := range outs {
+			lied[i] = o
+			lied[i].Beef = append([]byte(nil), o.Beef...)
+			lied[i].Beef[len(o.Beef)*6/10] ^= 1
+		}
+		return lied
+	}
+	r = h.run("alice", "", "get", "db/password")
+	if r.code != exitIncomplete || r.stdout != "" || !strings.Contains(r.stderr, "hall host "+h.aS.URL+" answered wrap carrier") ||
+		!strings.Contains(r.stderr, "which does not verify") {
+		t.Fatalf("a member whose wrap a host substituted: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	// One honest host of the hall is enough.
+	h.b.RewriteBorg = nil
+	if r := h.must("alice", "get", "db/password"); r.stdout != "one" {
+		t.Fatalf("alice, one hall host honest: %q\n%s", r.stdout, r.stderr)
+	}
+	// A key the group never named.
+	h.identity("dave", false)
+	h.want(h.run("dave", "", "get", "db/password"), exitRefused, "undecryptable: this key holds no key of epoch 0")
+}
+
+// A host that substitutes bytes in a carrier it answers is named, and what
+// it answered is not used: with an honest host beside it the value is read
+// from that one and the read is incomplete (exit 3), never refused; alone,
+// nothing is read. A host that answers another version's carrier, which
+// verifies, is named the same way, and alone it fails the listing check
+// (exit 1), which is the first of a reader's checks.
+func TestAHostSubstitutingACarrierIsNamed(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	flip := func(beef []byte) []byte {
+		out := append([]byte(nil), beef...)
+		out[len(out)-60] ^= 1
+		return out
+	}
+	h.b.Substitute = flip
+	r := h.run("alice", "", "get", "db/password")
+	if r.code != exitIncomplete || r.stdout != "one" || !strings.Contains(r.stderr, "host "+h.bS.URL+": REFUSED carrier") ||
+		!strings.Contains(r.stderr, "what this host answered does not verify as that carrier") || strings.Contains(r.stderr, "host "+h.aS.URL+": REFUSED") {
+		t.Fatalf("one host substitutes a carrier's bytes: exit %d %q\n%s", r.code, r.stdout, r.stderr)
+	}
+	if r := h.run("alice", "", "list"); r.code != exitIncomplete || !strings.Contains(r.stderr, "host "+h.bS.URL+": REFUSED carrier") ||
+		!strings.Contains(r.stderr, "host "+h.bS.URL+": its answer DOES NOT REPRODUCE the set's root") || !strings.Contains(r.stdout, "db/password") {
+		t.Fatalf("list, one host substituting: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	h.a.Substitute = flip
+	r = h.run("alice", "", "get", "db/password")
+	if r.code != exitIncomplete || r.stdout != "" || !strings.Contains(r.stderr, "host "+h.aS.URL+": REFUSED carrier") ||
+		!strings.Contains(r.stderr, "no host answers its carrier") {
+		t.Fatalf("every host substitutes: exit %d %q\n%s", r.code, r.stdout, r.stderr)
+	}
+	h.a.Substitute, h.b.Substitute = nil, nil
+	// Host b answers version 1's carrier where the vault lists version 2.
+	var mu sync.Mutex
+	var old []testhost.Output
+	h.b.Rewrite = func(q *secrec.Question, outs []testhost.Output) []testhost.Output {
+		if q.Class.Name != "secret" {
+			return outs
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if old == nil {
+			old = outs
+		}
+		return old
+	}
+	h.must("alice", "get", "db/password")
+	h.put("db/password", "two")
+	r = h.run("alice", "", "get", "db/password")
+	if r.code != exitIncomplete || r.stdout != "two" || !strings.Contains(r.stderr, "host "+h.bS.URL+": answered a carrier that is not the version the vault lists") {
+		t.Fatalf("one host answers the version before: exit %d %q\n%s", r.code, r.stdout, r.stderr)
+	}
+	h.a.Rewrite = h.b.Rewrite
+	r = h.run("alice", "", "get", "db/password")
+	if r.code != exitRefused || r.stdout != "" || !strings.Contains(r.stderr, "listing: the set holds version 2 of the secret, and the host answered version 1") {
+		t.Fatalf("every host answers the version before: exit %d %q\n%s", r.code, r.stdout, r.stderr)
 	}
 }

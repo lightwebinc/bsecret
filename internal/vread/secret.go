@@ -495,6 +495,10 @@ func readValue(ctx context.Context, rec *secrec.Secret, ct []byte, keys Keys) (*
 			return nil, failed("undecryptable", "this reader holds no key")
 		}
 		sym, kerr := keys.Epoch(ctx, rec.Epoch)
+		if errors.Is(kerr, ErrNoWrap) {
+			// A member whose wrap no host answers was refused nothing.
+			return nil, kerr
+		}
 		if kerr != nil {
 			return nil, failed("undecryptable", "this key holds no key of epoch %d, the epoch the record names: %v", rec.Epoch, kerr)
 		}

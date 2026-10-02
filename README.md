@@ -44,12 +44,19 @@ does anything else.
 ## Build and test
 
 ```console
-$ make verify    # gofmt, vet, dependency set, vectors, tests
-$ make vectors   # regenerate the golden vectors
+$ (cd host && npm ci)   # once: the TypeScript codec's dependencies
+$ make verify           # gofmt, vet, dependency set, typecheck, vectors, tests
+$ make vectors          # regenerate the golden vectors, both languages
 ```
 
-Go 1.27.1 or later. The direct dependencies are go-sdk v1.5.2 and bcommon
-v0.6.0, and nothing else.
+Go 1.27.1 or later, and Node 24 for the TypeScript codec under `host/`
+(`make verify NODE=/path/to/node24` when it is not on `PATH`). The direct Go
+dependencies are go-sdk v1.5.2 and bcommon v0.6.0, and nothing else.
+
+The record layer exists twice, held to one set of vectors: `internal/secrec`
+in Go, and `host/` in TypeScript for an overlay host's topic manager and
+lookup service. Each reads what the other writes (`testdata/vectors`,
+`testdata/ts`).
 
 ## License
 

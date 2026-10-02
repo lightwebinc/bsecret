@@ -678,3 +678,30 @@ func TestUsageNamesNoMissingFlag(t *testing.T) {
 		t.Fatalf("the usage text:\n%s%s", r.stdout, r.stderr)
 	}
 }
+
+// A value is reported current only while the group's latest token, as the
+// hall's hosts answer it, is unspent per the node: hosts that withhold a
+// removal do not get an exposed value read as current.
+func TestAWithheldRemovalIsNotCurrent(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	if r := h.must("alice", "get", "db/password"); !strings.Contains(r.stderr, "anchored, current") {
+		t.Fatalf("before the removal:\n%s", r.stderr)
+	}
+	if err := h.borg.Remove(h.group, h.keys["bob"]); err != nil {
+		t.Fatal(err)
+	}
+	removal := h.borg.LatestToken(h.group)
+	h.a.ForgetHall(removal)
+	h.b.ForgetHall(removal)
+	r := h.must("alice", "get", "db/password")
+	if strings.Contains(r.stderr, "anchored, current") || !strings.Contains(r.stderr, "not known to be current") || !strings.Contains(r.stderr, "the group may have removed a member since") {
+		t.Fatalf("with the removal withheld:\n%s", r.stderr)
+	}
+	r = h.run("alice", "", "get", "db/password", "-strict")
+	if r.code != exitIncomplete || r.stdout != "" {
+		t.Fatalf("-strict with the removal withheld: exit %d %q\n%s", r.code, r.stdout, r.stderr)
+	}
+}

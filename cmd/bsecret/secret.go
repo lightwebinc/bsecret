@@ -443,6 +443,18 @@ func cmdGet(ctx context.Context, g *global, args []string) error {
 		return lerr
 	}
 	fmt.Fprintf(g.stderr, "latest  %s\n", word)
+	// A version is current only while the group is where the hall's hosts
+	// say it is: a removal those hosts have not answered, or withhold,
+	// leaves the vault looking settled and the value looking current. The
+	// group's latest token is held to the spend source as the vault's is.
+	if fresh {
+		if sp := g.spends(); sp != nil {
+			if gerr := vread.GroupFresh(ctx, sp, sp.TxRaw, o.group, time.Now()); gerr != nil {
+				fresh = false
+				g.say("group   the latest token the hall's hosts answer for the group is not known to be its latest (%s): the group may have removed a member since, so the value is not reported current", firstLine(gerr.Error()))
+			}
+		}
+	}
 	rec := car.Carrier.Secret
 	state := "anchored"
 	switch {

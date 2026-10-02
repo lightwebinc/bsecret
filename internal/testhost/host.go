@@ -180,6 +180,20 @@ func (h *Host) Forget(txid string) {
 	h.gen++
 }
 
+// ForgetHall drops a borg object, as a hall's host that lost it, or
+// withholds it, would.
+func (h *Host) ForgetHall(txid string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.borg.tokens, txid)
+	delete(h.borg.wraps, txid)
+	for k := range h.applied {
+		if strings.HasSuffix(k, "/"+txid) {
+			delete(h.applied, k)
+		}
+	}
+}
+
 // Questions is how many ls_bsecret questions of a class the host answered.
 func (h *Host) Questions(class string) int {
 	h.mu.Lock()

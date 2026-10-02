@@ -432,7 +432,10 @@ token read is the latest is settled by `asset`: its output is unspent, or
 spent by the vault's next token (exit 3: a later token exists that no host
 answers), or by something else (the vault is terminated, exit 1). Without
 `asset` the answer is said to be possibly stale, and a version is never
-reported current.
+reported current. `get` holds the group's latest token, as the hall's
+hosts answer it, to `asset` in the same way: when it is spent, or the node
+cannot say, the group may have removed a member since, and the value is
+not reported current (`-strict`: exit 3).
 
 **`get <name>`** makes the checks of spec section 7.2 in their order and
 stops at the first that fails, which names its culprit:

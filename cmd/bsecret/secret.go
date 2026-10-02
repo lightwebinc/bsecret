@@ -565,6 +565,27 @@ func (g *global) pick(ctx context.Context, o *opened, id [32]byte, name string, 
 	if len(run) == 0 {
 		return listed, true, more, nil
 	}
+	// A retracted record is not used, as a link either (spec sections 4.4
+	// and 14): the run ends below the first retracted version, and a
+	// listed version that is retracted links nothing.
+	for i, c := range append([]*vread.Car{listed}, run...) {
+		by, serr := t.rd.Swept(ctx, o.chain.Crypt, c.Carrier.Funding)
+		if serr != nil {
+			return nil, false, false, incomplete("whether version %d of %s is retracted could not be asked: %s", c.Carrier.Secret.Version, name, firstLine(serr.Error()))
+		}
+		if by == "" {
+			continue
+		}
+		if i == 0 {
+			return nil, false, false, failure(&vread.Failure{Label: vread.LabelRetracted, Err: fmt.Errorf("the owner swept the listed version's funding output in %s: it is retracted, and nothing links through it", by)})
+		}
+		g.say("version %d is retracted (swept in %s): nothing links through it", c.Carrier.Secret.Version, by)
+		run, more = run[:i-1], true
+		break
+	}
+	if len(run) == 0 {
+		return listed, true, more, nil
+	}
 	return run[len(run)-1], false, more, nil
 }
 

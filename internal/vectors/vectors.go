@@ -44,7 +44,7 @@ func Generate() (map[string][]byte, error) {
 	}
 	files := map[string][]byte{}
 	for _, f := range []func(*Scenario, map[string][]byte) error{
-		genDerivation, genBRC369, genKeyed, genSecret, genVault, genAudit, genRefusal, genQuery, genScript,
+		genDerivation, genBRC369, genKeyed, genSecret, genVault, genAudit, genRefusal, genQuery, genScript, genTransaction,
 	} {
 		if err := f(s, files); err != nil {
 			return nil, err

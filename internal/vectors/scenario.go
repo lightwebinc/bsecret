@@ -40,7 +40,19 @@ type Scenario struct {
 	VaultTxids [][32]byte
 	Heights    []uint32
 	Labels     []string
-	set        map[[32]byte]secrec.Current
+	// Name is the vault's display name; "Example vault" when empty.
+	Name string
+	// Used is the tooling's record of every commitment it published or
+	// listed, shared by every vault of the owner (docs/spec.md section 6.2).
+	Used *secrec.Commitments
+	set  map[[32]byte]secrec.Current
+}
+
+func (s *Scenario) name() string {
+	if s.Name == "" {
+		return "Example vault"
+	}
+	return s.Name
 }
 
 func vkey(name string, n uint64) string { return fmt.Sprintf("%s@%d", name, n) }
@@ -141,11 +153,15 @@ func (s *Scenario) version(name string, n, epoch uint64, lbl string, value []byt
 	if p, err = secrec.ReadAsMember(back, v.Cipher, ge.Symmetric); err != nil || !bytes.Equal(p.Value, value) {
 		return nil, fmt.Errorf("%s: a member of its epoch does not read it: %v", vkey(name, n), err)
 	}
-	// A stand-in key is used once.
+	// A stand-in key is used once, and the tooling refuses a commitment it
+	// published before, in this vault or another of the owner's.
 	for _, o := range s.Versions {
 		if o.Key == v.Key {
 			return nil, errors.New("a content key repeats")
 		}
+	}
+	if err := s.Used.Use(rec.Commitment); err != nil {
+		return nil, fmt.Errorf("%s: %w", vkey(name, n), err)
 	}
 	v.File = fmt.Sprintf("secret-%s-v%d.hex", fileName(name), n)
 	s.Versions[vkey(name, n)] = v
@@ -189,8 +205,29 @@ func sort32(a [][32]byte) [][32]byte {
 // to the running set and writes the count, stale and root they give.
 func (s *Scenario) token(epoch uint64, create, update []*Version, retire []string, height uint32) error {
 	seq := uint64(len(s.Vaults))
+	raw, back, err := s.record(epoch, create, update, retire)
+	if err != nil {
+		return err
+	}
+	s.push(back, raw, label("txid/vault/%d", seq), height)
+	return nil
+}
+
+// push appends a token to the chain: its record, the txid of its
+// transaction and the height of its block.
+func (s *Scenario) push(v *secrec.Vault, raw []byte, txid [32]byte, height uint32) {
+	s.Vaults = append(s.Vaults, v)
+	s.VaultRecs = append(s.VaultRecs, raw)
+	s.VaultTxids = append(s.VaultTxids, txid)
+	s.Heights = append(s.Heights, height)
+}
+
+// record builds the record of the chain's next token, applying the changes
+// to the running set; push then appends it under its transaction's txid.
+func (s *Scenario) record(epoch uint64, create, update []*Version, retire []string) ([]byte, *secrec.Vault, error) {
+	seq := uint64(len(s.Vaults))
 	v := &secrec.Vault{
-		Crypt: Crypt, Org: Org.Pub(), Vault: s.VaultID, Seq: seq, Name: "Example vault", Hall: Hall, Group: GroupID,
+		Crypt: Crypt, Org: Org.Pub(), Vault: s.VaultID, Seq: seq, Name: s.name(), Hall: Hall, Group: GroupID,
 		Epoch: epoch, EpochID: GroupEpochs[epoch].EpochID, Labels: s.Labels, Anchor: secrec.AnchorVersion,
 		Create: []secrec.Entry{}, Update: []secrec.Entry{}, Retire: [][32]byte{}, Created: Created + 600*seq,
 	}
@@ -209,7 +246,7 @@ func (s *Scenario) token(epoch uint64, create, update []*Version, retire []strin
 	}{{create, &v.Create}, {update, &v.Update}} {
 		for _, x := range list.in {
 			if x.Epoch != epoch {
-				return fmt.Errorf("seq %d lists %s, keyed under epoch %d, at epoch %d", seq, vkey(x.Name, x.Number), x.Epoch, epoch)
+				return nil, nil, fmt.Errorf("seq %d lists %s, keyed under epoch %d, at epoch %d", seq, vkey(x.Name, x.Number), x.Epoch, epoch)
 			}
 			*list.out = append(*list.out, entry(x))
 			s.set[x.Rec.ID] = secrec.Current{ID: x.Rec.ID, Version: x.Number, ContentID: x.CID, Epoch: epoch, Seq: seq}
@@ -226,31 +263,27 @@ func (s *Scenario) token(epoch uint64, create, update []*Version, retire []strin
 	v.Count, v.Root = uint64(len(set)), secrec.SetRoot(set)
 	raw, err := v.Encode()
 	if err != nil {
-		return fmt.Errorf("vault seq %d: %w", seq, err)
+		return nil, nil, fmt.Errorf("vault seq %d: %w", seq, err)
 	}
 	back, err := secrec.DecodeVault(raw)
 	if err != nil {
-		return fmt.Errorf("vault seq %d: %w", seq, err)
+		return nil, nil, fmt.Errorf("vault seq %d: %w", seq, err)
 	}
 	if re, err := back.Encode(); err != nil || !bytes.Equal(re, raw) {
-		return fmt.Errorf("vault seq %d does not round-trip", seq)
+		return nil, nil, fmt.Errorf("vault seq %d does not round-trip", seq)
 	}
 	if seq > 0 {
 		if err := secrec.CheckVaultTransition(s.Vaults[seq-1], s.VaultTxids[seq-1], back); err != nil {
-			return fmt.Errorf("vault seq %d: %w", seq, err)
+			return nil, nil, fmt.Errorf("vault seq %d: %w", seq, err)
 		}
 	}
-	s.Vaults = append(s.Vaults, back)
-	s.VaultRecs = append(s.VaultRecs, raw)
-	s.VaultTxids = append(s.VaultTxids, label("txid/vault/%d", seq))
-	s.Heights = append(s.Heights, height)
-	return nil
+	return raw, back, nil
 }
 
 // Build makes the scenario: one vault of the organisation, keyed to the
 // group's epochs, through a removal and a scheduled rotation.
 func Build() (*Scenario, error) {
-	s := &Scenario{Versions: map[string]*Version{}, set: map[[32]byte]secrec.Current{}, Labels: secrec.DefaultLabels}
+	s := &Scenario{Versions: map[string]*Version{}, set: map[[32]byte]secrec.Current{}, Labels: secrec.DefaultLabels, Used: secrec.NewCommitments()}
 	s.Genesis = label("txid/chain-tree")
 	s.VaultID = secrec.VaultID(s.Genesis, 0)
 	const seg = 16384

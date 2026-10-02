@@ -56,7 +56,7 @@ tokens costs each one twice.
 | Secrets in a vault | as needed | 4096 (the record bound) | Every secret is re-keyed after every removal from the vault's group, 64 a block at most | Warns above 256: a removal then takes more than 4 blocks to settle even at 64 a token |
 | Changes per transition (`create`, `update`, `retire`) | as needed | 64 each (the record bound) | A larger change is several tokens, one block apart | Plane warns above 16 in all, except while the vault is in debt: a re-keying after a removal uses the full 64, because every block it takes is a block the removed member can still read |
 | Transitions per vault | one at a time | one a block | Each token spends the one before it, mined | Same |
-| Vaults of an owner | as needed | none in the records; a client lists 4096 a host | Each vault is its own chain; vaults do not slow each other | Same |
+| Vaults of an owner | as needed | none in the records; a client reads 256 pages of 64 a host | Each vault is its own chain; vaults do not slow each other | Same |
 | Inline ciphertext | up to 16384 bytes | 16384 (the record bound) | A larger secret is found by its hash | Plane warns above 4096 bytes of value (7 packets) |
 | Ciphertext a reader fetches by hash | 16 MiB | the reader's setting; 2^27 bytes (the record bound) | A record is a fetch instruction; a reader bounds it. A read holds the ciphertext and the plaintext in memory at once | Not on the plane |
 | Padding block | 256 bytes | a writer's | A ciphertext's length then says little about a short value's | Same |
@@ -92,15 +92,18 @@ tokens costs each one twice.
 | --- | --- | --- | --- | --- |
 | Hosts named | none | 16 | A reader asks every host it names; a unicast publisher uploads every object to each | Unicast warns above 5 |
 | Quorum | `all` | the host count | Tokens and sweeps always need every host named | Unicast only, for carriers |
-| Confirmation of every object at every named host | on | fixed | An object the plane took can still miss a host, with nothing to show it | Plane and unicast |
+| Confirmation of every object at every named host | on | fixed | An object the plane took can still miss a host, with nothing to show it | Plane: looked for at each host for up to 3.5 s (0.5, 1 and 2 s apart), then offered to it directly. Unicast: an answer that admits nothing is confirmed by lookup before it counts |
 | Tries per submission | 4, waiting 1, 2 and 4 s | fixed | A host that fails four tries is reported missed; the object is resent by the next command | Same |
 | Request timeout | 15 s | 1 s to 5 min | Bounds every request | Same |
 | Answers | 8 a question; 64 tokens or 16 secret carriers a page | spec | Bounds an answer | Same |
 | Pages a client reads per question | until an answer is short | 256 pages | Each page is a lookup and its verifications | Same |
 | First read of a vault | the whole chain from seq 0, folded | none | Descent from the first token is the only proof a token is the vault's; afterwards a reader starts from the token it remembers | Same |
-| Writer freshness | 60 s | 600 s | The age of the evidence that the vault's and the group's latest tokens are unspent | Same |
-| Reader freshness, for a value it acts on | 60 s | the reader's setting | The same evidence, for a reader | Same |
+| Writer freshness (`freshness`) | 60 s | 600 s | The age of the evidence that the vault's and the group's latest tokens are unspent when a version is published; every token retakes it as it is built | Same |
+| Reader freshness, for a value it acts on | taken at the read | none: a reader that keeps a value keeps its age | The same evidence, for a reader; `get -strict` refuses a value without it | Same |
 | Highest verified `seq` per vault | kept | the reader's storage | A reader that keeps it refuses an older state from any host | Same |
+| Price paid for one priced question (`-max-sats`) | 1000 sat | the flag | A host names its own price in the 402; a client pays no more than it was told to | Not on the plane |
+| A payer's unmined payments in a row | 16 | fixed | Each payment spends the change of the last and carries it; a longer run would make every payment's BEEF grow | Not on the plane |
+| Payments a payee broadcasts and awaits at once (`-in-flight`) | 16 | 64 | A run then takes about one block, however many payments there are | Not on the plane |
 
 ### The host
 

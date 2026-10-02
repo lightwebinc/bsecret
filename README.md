@@ -37,19 +37,47 @@ does anything else.
 
 | If you want to | Read |
 | --- | --- |
+| Try it on one machine in ten minutes | [QUICKSTART.md](QUICKSTART.md) |
+| Understand the ideas and use it day to day | [docs/user-guide.md](docs/user-guide.md) |
+| Look up a command, a setting or an exit code | [docs/usage.md](docs/usage.md) |
 | Implement a compatible owner, reader, auditor or host | [docs/spec.md](docs/spec.md) (the specification) |
 | Know what cannot change once published | [docs/frozen.md](docs/frozen.md) |
 | Know the defaults and caps, and why each is set where it is | [docs/limits.md](docs/limits.md) |
 | Run an overlay host that carries a crypt | [docs/host.md](docs/host.md) |
 
+## The command
+
+`bsecret` is the owner's tooling, the member's reader and the auditor's
+check in one command ([docs/usage.md](docs/usage.md)).
+
+```console
+$ bsecret init -borg ~/.borg                    # a home around the organisation's identity
+$ bsecret vault create engineering -name ops    # a vault on a borg group
+$ bsecret put db/password < new-password.txt    # a version, listed in a mined token
+$ bsecret get db/password | psql ...            # a member reads, every check in order
+$ borg org remove <key> -group engineering      # the removal is borg's: a new epoch
+$ bsecret rotate -set db/password=new.txt -same-all   # acknowledge, re-key, sweep
+$ bsecret -org <key> -vault <id> audit -free    # anyone: the trail, from headers
+```
+
+A vault's owner is a borg organisation, so an owner's bsecret home is made
+around the identity of its borg home and shares nothing else with it: the
+group's chain and its epoch keys are read from the hall's hosts by borg's
+own packages.
+
 ## Build and test
 
 ```console
 $ (cd host && npm ci)   # once: the TypeScript package's dependencies
-$ make verify           # gofmt, vet, dependency set, typecheck, vectors, tests
+$ make verify           # gofmt, vet, dependency set, licences, typecheck, vectors, tests
+$ make bsecret          # the command, bin/bsecret
 $ make module           # the host module, host/bundle/bsecret-module.js
 $ make vectors          # regenerate the golden vectors, both languages
 $ make e2e REFERENCE_HOST=/path/to/host   # the module on a local reference overlay host
+$ make e2e-client REFERENCE_HOST=/path/to/host BORG_MODULE=/path/to/borg-module.js
+                        # the command and borg's, against two local hosts loading both modules
+$ make docker-build     # the command's and the local chain's images
+$ make quickstart-check # QUICKSTART.md, run as written
 ```
 
 Go 1.27.1 or later, and Node 24 for the TypeScript package under `host/`

@@ -27,6 +27,25 @@ BSECRET_STATE_DIR=/var/lib/bsecret
 BSECRET_HEADERS_URL=https://headers.example.com
 ```
 
+### As an image
+
+`host/Dockerfile` adds the module to borg's host image, which is a
+reference overlay host with the borg module in it, so one image carries a
+crypt and the hall its vaults' groups live in:
+
+```console
+$ make docker-build-host BORG_HOST_IMAGE=<borg's host image>
+```
+
+The image's entrypoint requires `BSECRET_CRYPTS` and, when `OVERLAY_TOPICS`
+and `OVERLAY_MODULES` are unset, derives them: `tm_bsecret_<crypt>` for each
+crypt and the bsecret module, and, when `BORG_HALLS` is set,
+`tm_borg_<hall>` for each hall and the borg module beside it. A host that
+carries only crypts, with the groups' hall on other hosts, sets no
+`BORG_HALLS` and loads only the bsecret module. `BSECRET_STATE_DIR` is
+`/var/lib/bsecret`: mount a volume there. An unset `OVERLAY_ADMIN_TOKEN` is
+replaced by a random one for the run.
+
 The host must run with no broadcaster, and must not enable an unordered
 synchronisation of unspent outputs for `tm_bsecret_` topics (spec sections
 11.1 and 11.6). The module refuses to start on a host whose

@@ -817,7 +817,9 @@ func TestTheTerminal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h.must("org", "vault", "create", gid, "-name", "ops\x1b[2J\x1b]0;owned\x07")
+	// This tooling writes no such name; a vault's owner can sign one all
+	// the same, with any other.
+	h.env["BSECRET_VAULT"] = h.namedVault(gid, "ops\x1b[2J\x1b]0;owned\x07")
 	h.put("db/password", "hunter2")
 	ctx := context.Background()
 	g, out, errb := h.global("alice")

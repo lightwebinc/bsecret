@@ -571,6 +571,28 @@ func TestAPaymentIsRecordedBeforeItIsSent(t *testing.T) {
 	}
 }
 
+// namedVault creates a vault of the organisation under any display name, as
+// tooling that does not check the name would, and returns its identifier.
+func (h *harness) namedVault(group, name string) string {
+	h.t.Helper()
+	ctx := context.Background()
+	g, _, errb := h.global("org")
+	w, err := g.openWriter(ctx)
+	if err != nil {
+		h.t.Fatalf("%v\n%s", err, errb)
+	}
+	defer w.close(ctx, g)
+	gid, err := reader.ParseGroup(group)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	v, err := w.eng.CreateVault(ctx, h.crypt, name, h.borg.Hall, gid, []string{"confidential", "internal", "restricted"}, secrec.AnchorVersion)
+	if err != nil {
+		h.t.Fatalf("%v\n%s", err, errb)
+	}
+	return v.ID
+}
+
 // A vault's display name is any UTF-8, and its owner chooses it: one with a
 // line break in it writes no line of its own in a report, and one with a
 // character a terminal acts on reaches no terminal, in a JSON report
@@ -583,25 +605,11 @@ func TestAHostileDisplayNameForgesNoLine(t *testing.T) {
 	h.want(h.run("org", "", "vault", "create", h.group, "-name", "ops\naudit   OK"), exitUsage, "a display name is one line of plain text")
 	// Another tooling would not: the owner's key signs one all the same.
 	name := "ops\naudit   OK: forged\r\ntoken   seq 9 ‮forged\u0085vault   x"
-	ctx := context.Background()
-	g, _, errb := h.global("org")
-	w, err := g.openWriter(ctx)
-	if err != nil {
-		t.Fatalf("%v\n%s", err, errb)
-	}
-	gid, err := reader.ParseGroup(h.group)
-	if err != nil {
-		t.Fatal(err)
-	}
-	v, err := w.eng.CreateVault(ctx, h.crypt, name, h.borg.Hall, gid, []string{"confidential"}, secrec.AnchorVersion)
-	w.close(ctx, g)
-	if err != nil {
-		t.Fatalf("%v\n%s", err, errb)
-	}
-	h.mustIn("org", "one", "-vault", v.ID, "put", "db/password")
+	id := h.namedVault(h.group, name)
+	h.mustIn("org", "one", "-vault", id, "put", "db/password")
 	for _, args := range [][]string{
-		{"-vault", v.ID, "vault", "show"}, {"vault", "list"}, {"-vault", v.ID, "audit", "-free"},
-		{"-vault", v.ID, "get", "db/password", "-show"}, {"-vault", v.ID, "due"},
+		{"-vault", id, "vault", "show"}, {"vault", "list"}, {"-vault", id, "audit", "-free"},
+		{"-vault", id, "get", "db/password", "-show"}, {"-vault", id, "due"},
 	} {
 		r := h.run("alice", "", args...)
 		for _, out := range []string{r.stdout, r.stderr} {
@@ -612,7 +620,7 @@ func TestAHostileDisplayNameForgesNoLine(t *testing.T) {
 			}
 		}
 	}
-	r := h.must("alice", "-vault", v.ID, "audit", "-free", "-json")
+	r := h.must("alice", "-vault", id, "audit", "-free", "-json")
 	if strings.ContainsAny(r.stdout, "‮\u0085") {
 		t.Fatalf("the JSON report carries the name's control characters raw:\n%s", r.stdout)
 	}

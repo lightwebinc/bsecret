@@ -177,11 +177,7 @@ func cmdAudit(ctx context.Context, g *global, args []string) error {
 	rep := secrec.Audit(mined, group.Epochs)
 	out := auditReport{OK: rep.OK, Vault: t.vaultHex(), Owner: t.orgHex, Crypt: t.crypt, Name: first.Name,
 		Group: reader.GroupHex(first.Group), Hall: first.Hall, Anchor: anchorName(first.Anchor)}
-	for i, tok := range cv.Tokens {
-		v := tok.Token.Vault
-		out.Tokens = append(out.Tokens, auditToken{Seq: v.Seq, Txid: tok.Txid, Height: tok.Height, Epoch: v.Epoch,
-			Create: len(v.Create), Update: len(v.Update), Retire: len(v.Retire), Count: v.Count, Stale: v.Stale, Status: rep.Statuses[i]})
-	}
+	out.Tokens = auditTokens(cv.Tokens, rep.Statuses)
 	out.EndsAt = out.Tokens[len(out.Tokens)-1]
 	for _, f := range rep.Findings {
 		out.Findings = append(out.Findings, auditFinding{Seq: f.Seq, Problem: f.Problem, Detail: f.Detail})
@@ -241,6 +237,24 @@ func cmdAudit(ctx context.Context, g *global, args []string) error {
 		return refused("the audit FAILS: %d finding(s); from the first of them on the vault's own counts are not believed", len(out.Findings))
 	}
 	return problem
+}
+
+// auditTokens are the trail's tokens as a report lists them, each with the
+// status the audit's fold gave it. An audit that stops before it folds (no
+// token, or a group whose epochs are not one chain) gives no status, and a
+// token is then listed as not folded.
+func auditTokens(toks []*vread.Tok, statuses []string) []auditToken {
+	out := make([]auditToken, 0, len(toks))
+	for i, tok := range toks {
+		v := tok.Token.Vault
+		status := "not folded"
+		if i < len(statuses) {
+			status = statuses[i]
+		}
+		out = append(out, auditToken{Seq: v.Seq, Txid: tok.Txid, Height: tok.Height, Epoch: v.Epoch,
+			Create: len(v.Create), Update: len(v.Update), Retire: len(v.Retire), Count: v.Count, Stale: v.Stale, Status: status})
+	}
+	return out
 }
 
 func (g *global) printAudit(r *auditReport) {

@@ -79,7 +79,8 @@ a member, or anyone reading:
   due                           what a vault owes: an acknowledgement, re-keying,
                                 a rotation its owner scheduled
   audit                         verify a vault's trail from headers and report
-                                the exposure windows; -pay asks the priced class
+                                the exposure windows; -free reads it at no price,
+                                -budget bounds what the priced class is paid
   history <name>                a priced question: every version of a secret a
                                 host holds
   terms [URL]                   a host's terms document

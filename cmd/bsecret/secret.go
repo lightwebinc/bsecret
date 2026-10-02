@@ -62,15 +62,16 @@ func (g *global) ready(ctx context.Context, w *writer) (*engine.Writer, error) {
 }
 
 // werr puts a publisher's refusals in the command's exit codes: evidence
-// that failed closed, a content key used before and a transition another
-// beat to the chain are refused (exit 1); wraps not yet published are
+// that failed closed, a content key used before, a transition another beat
+// to the chain and a sweep the network refused are refused (exit 1); wraps not yet published are
 // incomplete (exit 3).
 func werr(err error) error {
 	var lost *engine.LostError
+	var swept *engine.SweepRefusedError
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, engine.ErrStale), errors.Is(err, secrec.ErrReuse), errors.As(err, &lost):
+	case errors.Is(err, engine.ErrStale), errors.Is(err, secrec.ErrReuse), errors.As(err, &lost), errors.As(err, &swept):
 		return refused("%v", err)
 	case errors.Is(err, engine.ErrUnwrapped):
 		return incomplete("%v", err)
@@ -208,7 +209,7 @@ func cmdPut(ctx context.Context, g *global, args []string) error {
 	if swept > 0 {
 		fmt.Fprintf(g.stdout, "swept   %d version(s) published earlier and never listed\n", swept)
 	}
-	return err
+	return werr(err)
 }
 
 // printTip prints a vault's latest token.
@@ -262,7 +263,7 @@ func cmdAnchor(ctx context.Context, g *global, args []string) error {
 	if swept > 0 {
 		fmt.Fprintf(g.stdout, "swept   %d version(s) that came and went between two tokens\n", swept)
 	}
-	return err
+	return werr(err)
 }
 
 const retireHelp = `usage: bsecret retire <name>... [-keep]
@@ -314,7 +315,7 @@ func cmdRetire(ctx context.Context, g *global, args []string) error {
 	if swept > 0 {
 		fmt.Fprintf(g.stdout, "swept   %d version(s): retracted at every honest host\n", swept)
 	}
-	return err
+	return werr(err)
 }
 
 // keysFor is how this home opens a content key: as the owner through the
@@ -399,9 +400,15 @@ func cmdGet(ctx context.Context, g *global, args []string) error {
 		return err
 	}
 	// The home is locked when there is one, so that the highest seq
-	// verified is remembered.
+	// verified is remembered. A home that is in use, or does not read, is
+	// an error: reading on without it would be reading with no memory of
+	// what this identity verified before.
 	var st *state.State
-	if h, err := g.openHome(); err == nil {
+	h, err := g.readerHome()
+	if err != nil {
+		return err
+	}
+	if h != nil {
 		defer h.close()
 		st = h.st
 		defer func() { _ = st.Save() }()
@@ -608,8 +615,16 @@ func cmdList(ctx context.Context, g *global, args []string) error {
 	if err != nil {
 		return err
 	}
+	// The home is locked when there is one, so that the highest seq
+	// verified is remembered. A home that is in use, or does not read, is
+	// an error: reading on without it would be reading with no memory of
+	// what this identity verified before.
 	var st *state.State
-	if h, err := g.openHome(); err == nil {
+	h, err := g.readerHome()
+	if err != nil {
+		return err
+	}
+	if h != nil {
 		defer h.close()
 		st = h.st
 		defer func() { _ = st.Save() }()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -618,5 +619,54 @@ func TestAHostileDisplayNameForgesNoLine(t *testing.T) {
 	var rep auditReport
 	if err := json.Unmarshal([]byte(r.stdout), &rep); err != nil || rep.Name != name {
 		t.Fatalf("the JSON report does not decode to the name: %q %v", rep.Name, err)
+	}
+}
+
+// A sweep the network refused is a refusal (exit 1), from every command
+// that sweeps.
+func TestARefusedSweepIsARefusal(t *testing.T) {
+	var ee *exitError
+	if err := werr(&engine.SweepRefusedError{Txid: "aa", Why: "spent"}); !errors.As(err, &ee) || ee.code != exitRefused {
+		t.Fatalf("a refused sweep: %v", err)
+	}
+}
+
+// A reader whose home is in use does not read on without it: it would be
+// reading with no memory of what it verified before.
+func TestAReaderWaitsForItsHome(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	unlock, err := state.Lock(filepath.Join(h.dir, "alice", "lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"get", "db/password"}, {"list"}} {
+		r := h.run("alice", "", args...)
+		if r.code != exitUsage || r.stdout != "" || !strings.Contains(r.stderr, "another bsecret command is using the home") {
+			t.Fatalf("%v with the reader's home in use: exit %d %q\n%s", args, r.code, r.stdout, r.stderr)
+		}
+	}
+	unlock()
+	if r := h.must("alice", "get", "db/password"); r.stdout != "one" {
+		t.Fatalf("alice: %q", r.stdout)
+	}
+	// A reader with no home at all reads, and remembers nothing.
+	env := map[string]string{}
+	for k, v := range h.env {
+		env[k] = v
+	}
+	env["BSECRET_HOME"] = filepath.Join(h.dir, "nobody")
+	if r := bare(t, env, "vault", "show"); r.code != exitOK {
+		t.Fatalf("a reader with no home: exit %d\n%s", r.code, r.stderr)
+	}
+}
+
+// The usage text names only flags that exist.
+func TestUsageNamesNoMissingFlag(t *testing.T) {
+	r := bare(t, map[string]string{}, "-h")
+	if strings.Contains(r.stdout+r.stderr, "-pay ") || !strings.Contains(r.stdout+r.stderr, "-budget bounds") {
+		t.Fatalf("the usage text:\n%s%s", r.stdout, r.stderr)
 	}
 }

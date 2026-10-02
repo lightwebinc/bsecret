@@ -221,5 +221,5 @@ func (g *global) sweepEnded(ctx context.Context, w *writer, vid string, keep boo
 		fmt.Fprintf(g.stdout, "swept   %d version(s) keyed under epochs that have ended, or never listed: retracted at every honest host\n", n)
 		g.say("a sweep is not erasure: a copy anyone kept stays a copy, and what a removed member read stays read")
 	}
-	return err
+	return werr(err)
 }

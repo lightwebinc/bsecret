@@ -113,6 +113,17 @@ func (g *global) openHome() (*home, error) {
 	return &home{e: e, st: st, close: unlock}, nil
 }
 
+// readerHome is the home of a command that reads, opened and locked when
+// there is one, so that what it verifies is remembered; nil when there is
+// no home, and an error when there is one that cannot be opened (another
+// command is using it, or it does not read).
+func (g *global) readerHome() (*home, error) {
+	if _, err := os.Stat(filepath.Join(g.cfg.Home, "identity.json")); errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	return g.openHome()
+}
+
 // peekState reads the home's state without the lock, for a command that
 // only reads it; nil when there is no home.
 func (g *global) peekState() *state.State {

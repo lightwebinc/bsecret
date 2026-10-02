@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/lightwebinc/bcommon/nodeapi"
-	"github.com/lightwebinc/bcommon/termsafe"
 
 	"github.com/lightwebinc/borg/reader"
 
@@ -39,7 +38,7 @@ func cmdDoctor(ctx context.Context, g *global, args []string) error {
 	fmt.Fprintf(out, "home        %s\n", g.cfg.Home)
 	fmt.Fprintf(out, "network     %s\n", g.cfg.Network)
 	if g.cfg.Crypt != "" {
-		fmt.Fprintf(out, "crypt       %s\n", termsafe.Text(g.cfg.Crypt))
+		fmt.Fprintf(out, "crypt       %s\n", field(g.cfg.Crypt))
 	} else {
 		fmt.Fprintln(out, "crypt       not configured")
 	}
@@ -149,7 +148,7 @@ func doctorState(out io.Writer, st *state.State) {
 	}
 	for i := range st.Vaults {
 		v := &st.Vaults[i]
-		line := fmt.Sprintf("vault       %s %s in %s: ", v.ID, termsafe.Text(v.Name), v.Crypt)
+		line := fmt.Sprintf("vault       %s %s in %s: ", v.ID, field(v.Name), v.Crypt)
 		if recs, err := engine.Records(v); err != nil || len(recs) == 0 {
 			line += "no token yet"
 		} else {
@@ -170,7 +169,7 @@ func doctorState(out io.Writer, st *state.State) {
 		}
 		fmt.Fprintln(out, line)
 		if p := v.Pending; p != nil {
-			fmt.Fprintf(out, "transition  %s %s persisted and not yet mined; the next command finishes it\n", termsafe.Text(p.What), p.Txid)
+			fmt.Fprintf(out, "transition  %s %s persisted and not yet mined; the next command finishes it\n", field(p.What), p.Txid)
 		}
 	}
 	for _, p := range st.Outbox {
@@ -181,7 +180,7 @@ func doctorState(out io.Writer, st *state.State) {
 	}
 	for _, sw := range st.Sweeps {
 		if sw.Failed != "" {
-			fmt.Fprintf(out, "sweep       %s FAILED: %s; it retracts nothing\n", sw.Txid, termsafe.Text(sw.Failed))
+			fmt.Fprintf(out, "sweep       %s FAILED: %s; it retracts nothing\n", sw.Txid, field(sw.Failed))
 		}
 	}
 	if n := len(st.Commitments); n > 0 {

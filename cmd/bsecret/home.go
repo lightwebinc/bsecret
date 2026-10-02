@@ -13,6 +13,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	base58 "github.com/bsv-blockchain/go-sdk/compat/base58"
@@ -782,4 +785,41 @@ func firstLine(s string) string {
 		s = s[:160] + "..."
 	}
 	return termsafe.Text(s)
+}
+
+// field is someone else's text that fills one field of a line this command
+// prints (a vault's display name, a class name, a media type): filtered for
+// the terminal, and held to that line. A display name is any UTF-8, and a
+// name with a line break in it would otherwise write lines of its own in a
+// report, in this command's voice.
+func field(s string) string {
+	s = strings.Map(func(r rune) rune {
+		switch r {
+		case '\n', '\r', '\t', '\v', '\f', 0x85, 0x2028, 0x2029:
+			return ' '
+		}
+		return r
+	}, s)
+	return termsafe.Text(s)
+}
+
+// jsonSafe makes marshalled JSON safe to print: every control and format
+// character above ASCII (the C1 controls, the bidirectional controls, the
+// line and paragraph separators), which encoding/json writes as it is, is
+// written as its escape. The document decodes to the same values.
+func jsonSafe(b []byte) []byte {
+	var out []byte
+	for _, r := range string(b) {
+		if r >= 0x80 && (unicode.Is(unicode.Cc, r) || unicode.Is(unicode.Cf, r) || r == 0x2028 || r == 0x2029 || unicode.Is(unicode.Co, r)) {
+			if r > 0xffff {
+				hi, lo := utf16.EncodeRune(r)
+				out = fmt.Appendf(out, "\\u%04x\\u%04x", hi, lo)
+			} else {
+				out = fmt.Appendf(out, "\\u%04x", r)
+			}
+			continue
+		}
+		out = utf8.AppendRune(out, r)
+	}
+	return out
 }

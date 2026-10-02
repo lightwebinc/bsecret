@@ -430,7 +430,7 @@ func cmdGet(ctx context.Context, g *global, args []string) error {
 		return failure(err)
 	}
 	head := o.chain.Head().Token.Vault
-	fmt.Fprintf(g.stderr, "vault   %s %s seq %d: %s\n", t.vaultHex(), termsafe.Text(head.Name), head.Seq, o.stand)
+	fmt.Fprintf(g.stderr, "vault   %s %s seq %d: %s\n", t.vaultHex(), field(head.Name), head.Seq, o.stand)
 	word, fresh, lerr := g.latest(ctx, o)
 	if lerr != nil {
 		return lerr
@@ -453,14 +453,14 @@ func cmdGet(ctx context.Context, g *global, args []string) error {
 	default:
 		state += ", not known to be current"
 	}
-	fmt.Fprintf(g.stderr, "secret  %s version %d label %s epoch %d, read as %s: %s\n", termsafe.Text(rd.Payload.Name), rec.Version, termsafe.Text(rec.Label), rec.Epoch, who, state)
+	fmt.Fprintf(g.stderr, "secret  %s version %d label %s epoch %d, read as %s: %s\n", field(rd.Payload.Name), rec.Version, field(rec.Label), rec.Epoch, who, state)
 	if later {
 		g.say("a later version exists that does not link to the listed one; the highest that links is read")
 	}
 	if p := rd.Payload; p.Type != "" || p.NotAfter != 0 {
 		line := "claims "
 		if p.Type != "" {
-			line += " type " + termsafe.Text(p.Type)
+			line += " type " + field(p.Type)
 		}
 		if p.NotAfter != 0 {
 			line += " not after " + time.Unix(int64(p.NotAfter), 0).UTC().Format(time.RFC3339) //nolint:gosec // bounded by the record
@@ -656,7 +656,7 @@ func cmdList(ctx context.Context, g *global, args []string) error {
 			continue
 		}
 		rec := c.Carrier.Secret
-		tail := fmt.Sprintf("version %d label %s epoch %d", rec.Version, termsafe.Text(rec.Label), rec.Epoch)
+		tail := fmt.Sprintf("version %d label %s epoch %d", rec.Version, field(rec.Label), rec.Epoch)
 		if rec.Epoch < o.group.Current().Epoch {
 			tail += " EXPOSED"
 		}
@@ -672,7 +672,7 @@ func cmdList(ctx context.Context, g *global, args []string) error {
 		}
 		// The name met the name grammar when the payload was decoded; it
 		// is someone else's text all the same, and is filtered like any.
-		rows = append(rows, row{rd.Payload.Name, fmt.Sprintf("%s  %s", termsafe.Text(rd.Payload.Name), tail)})
+		rows = append(rows, row{rd.Payload.Name, fmt.Sprintf("%s  %s", field(rd.Payload.Name), tail)})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].name < rows[j].name })
 	for _, r := range rows {

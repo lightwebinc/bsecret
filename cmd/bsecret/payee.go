@@ -148,7 +148,7 @@ func payeeSettle(ctx context.Context, g *global, paths []string, inFlight int) e
 	var sats uint64
 	notSettled := func(l ledgerLine, err error) {
 		failed++
-		g.say("payment %s (%d sat, %s): NOT SETTLED: %v", l.Txid, l.Satoshis, termsafe.Text(l.Class), err)
+		g.say("payment %s (%d sat, %s): NOT SETTLED: %v", l.Txid, l.Satoshis, field(l.Class), err)
 	}
 	// Every payment is checked first, then broadcast, and the proofs are
 	// awaited together: at most inFlight are broadcast and not yet mined
@@ -208,7 +208,7 @@ func payeeSettle(ctx context.Context, g *global, paths []string, inFlight int) e
 			// It will never mine: reported once, recorded, and passed over
 			// by every later run.
 			refusedNow++
-			g.say("payment %s (%d sat, %s): REFUSED, NEVER SETTLES: %s; the payer took the coins back after the question was answered", r.l.Txid, r.l.Satoshis, termsafe.Text(r.l.Class), termsafe.Text(re.Why))
+			g.say("payment %s (%d sat, %s): REFUSED, NEVER SETTLES: %s; the payer took the coins back after the question was answered", r.l.Txid, r.l.Satoshis, field(r.l.Class), termsafe.Text(re.Why))
 			h.st.Unsettleable = append(h.st.Unsettleable, state.Unsettleable{Txid: r.l.Txid, Why: re.Why})
 			if err := h.st.Save(); err != nil {
 				return err
@@ -225,7 +225,7 @@ func payeeSettle(ctx context.Context, g *global, paths []string, inFlight int) e
 		}
 		settled++
 		sats += r.l.Satoshis
-		fmt.Fprintf(g.stdout, "settled %s: %d sat for %s from %s\n", r.l.Txid, r.l.Satoshis, termsafe.Text(r.l.Class), termsafe.Abbrev(r.l.SenderIdentityKey))
+		fmt.Fprintf(g.stdout, "settled %s: %d sat for %s from %s\n", r.l.Txid, r.l.Satoshis, field(r.l.Class), termsafe.Abbrev(r.l.SenderIdentityKey))
 	}
 	fmt.Fprintf(g.stdout, "%d payment(s) settled, %d sat; %d settled before; %d not settled; %d refused (%d before); pool %d output(s), %d sat\n",
 		settled, sats, already, failed, refusedNow, unsettleable, h.e.Pool.Count(), h.e.Pool.Balance())

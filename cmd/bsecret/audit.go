@@ -235,7 +235,7 @@ func cmdAudit(ctx context.Context, g *global, args []string) error {
 	}
 	if *asJSON {
 		b, _ := json.MarshalIndent(out, "", "  ")
-		fmt.Fprintln(g.stdout, string(b))
+		fmt.Fprintln(g.stdout, string(jsonSafe(b)))
 	} else {
 		g.printAudit(&out)
 	}
@@ -265,7 +265,7 @@ func auditTokens(toks []*vread.Tok, statuses []string) []auditToken {
 
 func (g *global) printAudit(r *auditReport) {
 	o := g.stdout
-	fmt.Fprintf(o, "vault   %s %s\nowner   %s\ncrypt   %s\ngroup   %s in hall %s\nanchor  %s\n", r.Vault, termsafe.Text(r.Name), r.Owner, r.Crypt, r.Group, r.Hall, r.Anchor)
+	fmt.Fprintf(o, "vault   %s %s\nowner   %s\ncrypt   %s\ngroup   %s in hall %s\nanchor  %s\n", r.Vault, field(r.Name), r.Owner, r.Crypt, r.Group, r.Hall, r.Anchor)
 	for _, t := range r.Tokens {
 		fmt.Fprintf(o, "token   seq %d %s height %d epoch %d +%d ~%d -%d: %d secret(s), %d stale: %s\n", t.Seq, t.Txid, t.Height, t.Epoch, t.Create, t.Update, t.Retire, t.Count, t.Stale, t.Status)
 	}

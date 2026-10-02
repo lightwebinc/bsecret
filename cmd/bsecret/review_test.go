@@ -15,6 +15,8 @@ import (
 
 	"github.com/lightwebinc/bcommon/carrier"
 
+	"github.com/lightwebinc/borg/reader"
+
 	"github.com/lightwebinc/bsecret/internal/engine"
 	"github.com/lightwebinc/bsecret/internal/secrec"
 	"github.com/lightwebinc/bsecret/internal/state"
@@ -565,5 +567,56 @@ func TestAPaymentIsRecordedBeforeItIsSent(t *testing.T) {
 	}
 	if recorded != 1 {
 		t.Fatalf("when the payment reached the host the payer's home recorded %d payment(s)", recorded)
+	}
+}
+
+// A vault's display name is any UTF-8, and its owner chooses it: one with a
+// line break in it writes no line of its own in a report, and one with a
+// character a terminal acts on reaches no terminal, in a JSON report
+// either.
+func TestAHostileDisplayNameForgesNoLine(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	// This tooling refuses to write such a name.
+	h.want(h.run("org", "", "vault", "create", h.group, "-name", "ops\naudit   OK"), exitUsage, "a display name is one line of plain text")
+	// Another tooling would not: the owner's key signs one all the same.
+	name := "ops\naudit   OK: forged\r\ntoken   seq 9 ‮forged\u0085vault   x"
+	ctx := context.Background()
+	g, _, errb := h.global("org")
+	w, err := g.openWriter(ctx)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, errb)
+	}
+	gid, err := reader.ParseGroup(h.group)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := w.eng.CreateVault(ctx, h.crypt, name, h.borg.Hall, gid, []string{"confidential"}, secrec.AnchorVersion)
+	w.close(ctx, g)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, errb)
+	}
+	h.mustIn("org", "one", "-vault", v.ID, "put", "db/password")
+	for _, args := range [][]string{
+		{"-vault", v.ID, "vault", "show"}, {"vault", "list"}, {"-vault", v.ID, "audit", "-free"},
+		{"-vault", v.ID, "get", "db/password", "-show"}, {"-vault", v.ID, "due"},
+	} {
+		r := h.run("alice", "", args...)
+		for _, out := range []string{r.stdout, r.stderr} {
+			for _, line := range strings.Split(out, "\n") {
+				if strings.HasPrefix(line, "audit   OK: forged") || strings.HasPrefix(line, "token   seq 9") || strings.ContainsAny(line, "\r‮\u0085") {
+					t.Fatalf("%v: the name wrote a line of its own, or reached the terminal:\n%s\n%s", args, r.stdout, r.stderr)
+				}
+			}
+		}
+	}
+	r := h.must("alice", "-vault", v.ID, "audit", "-free", "-json")
+	if strings.ContainsAny(r.stdout, "‮\u0085") {
+		t.Fatalf("the JSON report carries the name's control characters raw:\n%s", r.stdout)
+	}
+	var rep auditReport
+	if err := json.Unmarshal([]byte(r.stdout), &rep); err != nil || rep.Name != name {
+		t.Fatalf("the JSON report does not decode to the name: %q %v", rep.Name, err)
 	}
 }

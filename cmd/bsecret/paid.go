@@ -320,7 +320,7 @@ func cmdTerms(ctx context.Context, g *global, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(g.stdout, "service %s, terms %d\n", termsafe.Text(t.Service), t.Terms)
+	fmt.Fprintf(g.stdout, "service %s, terms %d\n", field(t.Service), t.Terms)
 	for _, c := range t.Classes {
 		cls := slices.IndexFunc(secrec.Classes, func(x secrec.Class) bool { return x.Name == c.Class })
 		switch {

@@ -120,6 +120,11 @@ func (g *global) vaultCreate(ctx context.Context, group, name, hall, anchor, lab
 	if name == "" || len(name) > secrec.MaxName {
 		return usage("-name: the vault's display name, 1 to %d bytes", secrec.MaxName)
 	}
+	// The record takes any UTF-8. This tooling writes a name every reader
+	// can print as it is: one line, with nothing a terminal would act on.
+	if field(name) != name {
+		return usage("-name holds a line break or a character a terminal would act on; a display name is one line of plain text")
+	}
 	var mode uint64
 	switch anchor {
 	case "version":
@@ -158,7 +163,7 @@ func (g *global) vaultCreate(ctx context.Context, group, name, hall, anchor, lab
 		return err
 	}
 	fmt.Fprintf(g.stdout, "vault   %s\nname    %s\ncrypt   %s\ngroup   %s in hall %s\nepoch   %d\nanchor  %s\nlabels  %s\ntoken   seq 0 %s mined at height %d\n",
-		v.ID, termsafe.Text(v.Name), v.Crypt, v.Group, v.Hall, rec.Epoch, anchor, strings.Join(v.Labels, ","), last.Txid, last.Height)
+		v.ID, field(v.Name), v.Crypt, v.Group, v.Hall, rec.Epoch, anchor, strings.Join(v.Labels, ","), last.Txid, last.Height)
 	return nil
 }
 
@@ -196,7 +201,7 @@ func (g *global) vaultList(ctx context.Context) error {
 	for _, id := range ids {
 		key, _ := vread.Hex32(id)
 		v := toks[key].Token.Vault
-		fmt.Fprintf(g.stdout, "%s  %s  seq %d epoch %d, %d secret(s), %d stale, %s\n", id, termsafe.Text(v.Name), v.Seq, v.Epoch, v.Count, v.Stale, anchorName(v.Anchor))
+		fmt.Fprintf(g.stdout, "%s  %s  seq %d epoch %d, %d secret(s), %d stale, %s\n", id, field(v.Name), v.Seq, v.Epoch, v.Count, v.Stale, anchorName(v.Anchor))
 	}
 	g.say("%d vault(s) of %s answered in crypt %s; an answer here is a host's claim, and a vault is verified when it is read", len(ids), t.orgHex, t.crypt)
 	return problem
@@ -213,7 +218,7 @@ func (g *global) vaultShow(ctx context.Context) error {
 	}
 	head := o.chain.Head().Token.Vault
 	out := g.stdout
-	fmt.Fprintf(out, "vault   %s\nname    %s\nowner   %s\ncrypt   %s\ngroup   %s in hall %s\nanchor  %s\nlabels  %s\n", t.vaultHex(), termsafe.Text(head.Name), t.orgHex, t.crypt,
+	fmt.Fprintf(out, "vault   %s\nname    %s\nowner   %s\ncrypt   %s\ngroup   %s in hall %s\nanchor  %s\nlabels  %s\n", t.vaultHex(), field(head.Name), t.orgHex, t.crypt,
 		reader.GroupHex(head.Group), head.Hall, anchorName(head.Anchor), strings.Join(head.Labels, ","))
 	for i, tok := range o.chain.Tokens {
 		v := tok.Token.Vault

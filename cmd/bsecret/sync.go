@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lightwebinc/bcommon/termsafe"
-
 	"github.com/lightwebinc/bsecret/internal/secrec"
 	"github.com/lightwebinc/bsecret/internal/state"
 )
@@ -101,7 +99,7 @@ func cmdDue(ctx context.Context, g *global, args []string) error {
 	due := 0
 	latest := o.group.Current()
 	head := o.chain.Head().Token.Vault
-	fmt.Fprintf(g.stdout, "vault   %s %s seq %d: %s\n", t.vaultHex(), termsafe.Text(head.Name), head.Seq, o.stand)
+	fmt.Fprintf(g.stdout, "vault   %s %s seq %d: %s\n", t.vaultHex(), field(head.Name), head.Seq, o.stand)
 	if o.stand.Ahead || o.chain.Broken() != "" {
 		return refused("the vault is not usable as its owner left it")
 	}

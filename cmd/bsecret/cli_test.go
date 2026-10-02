@@ -474,3 +474,20 @@ func TestTheOwnerNeedsItsSignerKey(t *testing.T) {
 	h.want(h.run("org", "v", "-vault", "ops", "put", "b"), exitUsage, "name a label")
 	h.mustIn("org", "v", "-vault", "ops", "put", "b", "-label", "prod")
 }
+
+// The null device is a character device and not a terminal: a value
+// written to it is not held back as one shown on a screen would be.
+func TestTheNullDeviceIsNoTerminal(t *testing.T) {
+	f, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Skip(err)
+	}
+	defer f.Close()
+	if isTerminal(f) {
+		t.Fatal("the null device is taken for a terminal")
+	}
+	var b bytes.Buffer
+	if isTerminal(&b) {
+		t.Fatal("a buffer is taken for a terminal")
+	}
+}

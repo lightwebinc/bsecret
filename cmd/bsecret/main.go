@@ -215,14 +215,23 @@ func init() {
 	}
 }
 
-// isTerminal reports whether w is a character device: a terminal.
+// isTerminal reports whether w is a character device other than the null
+// device: a terminal.
 func isTerminal(w io.Writer) bool {
 	f, ok := w.(*os.File)
 	if !ok {
 		return false
 	}
 	st, err := f.Stat()
-	return err == nil && st.Mode()&os.ModeCharDevice != 0
+	if err != nil || st.Mode()&os.ModeCharDevice == 0 {
+		return false
+	}
+	// The null device is a character device and no terminal: a value
+	// written to it is shown to nobody.
+	if null, err := os.Stat(os.DevNull); err == nil && os.SameFile(st, null) {
+		return false
+	}
+	return true
 }
 
 func main() {

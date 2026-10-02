@@ -77,13 +77,14 @@ tokens costs each one twice.
 | Transitions while the vault is behind its group or in debt | the acknowledgement, re-keyings and retirements only | fixed | A host refuses anything else once the vault acknowledges; a reader reports a vault that does not | Same |
 | Sweep of versions under ended epochs | after the vault settles | the owner may keep history instead | A swept version leaves every honest host's answers; a kept one is what a removed member can still fetch | Same |
 | Sweeps in flight | one | one | A sweep is settled before the next is built | Same |
+| Crypts a sweep is published in | every crypt holding a version it retracts | none | A funding tree is the identity's; a host learns of a spend only from a sweep in its own crypt's topic | Same |
 
 ### More than one instance of an owner
 
 | Limit | Default | Hard cap | Why | Plane and unicast |
 | --- | --- | --- | --- | --- |
 | Concurrent changes to one vault | one wins | one mined a block | Two transitions on one tip spend the same output; the loser catches up and builds again | Same |
-| What a catch-up reads | every token of every vault from seq 0, every current record, at every host named | the reading caps below | It trusts no host: it folds each chain and reproduces each root itself | Same |
+| What a catch-up reads | every token of every vault from seq 0, every current record and, in an interval vault, every unlisted version that links to it, at every host named | the reading caps below | It trusts no host: it folds each chain and reproduces each root itself | Same |
 | Funding trees two instances share | none | none | A funding output answers one carrier | Same |
 
 ### Publishing and reading
@@ -96,12 +97,15 @@ tokens costs each one twice.
 | Tries per submission | 4, waiting 1, 2 and 4 s | fixed | A host that fails four tries is reported missed; the object is resent by the next command | Same |
 | Request timeout | 15 s | 1 s to 5 min | Bounds every request | Same |
 | Answers | 8 a question; 64 tokens or 16 secret carriers a page | spec | Bounds an answer | Same |
-| Pages a client reads per question | until an answer is short | 256 pages | Each page is a lookup and its verifications | Same |
+| Pages a client reads per question | until an answer is short | 256 pages, 128 outputs a page, 256 MiB in all | Each page is a lookup and its verifications. A page's cursor comes only from an output that verified as the vault's or the owner's own | Same |
+| One lookup answer | read whole | 16 MiB | A full page of the largest carriers fits several times over; a host that sends more is not read | Same |
+| Unlisted versions a reader follows above a listed one (interval vaults) | every one answered in a row | 64 | Each is asked for only once the one before it was answered: a version a carrier claims never sets how far a reader walks. Past 64 the reader takes the 64th and says a later one exists; an owner anchors before then | Same |
 | First read of a vault | the whole chain from seq 0, folded | none | Descent from the first token is the only proof a token is the vault's; afterwards a reader starts from the token it remembers | Same |
 | Writer freshness (`freshness`) | 60 s | 600 s | The age of the evidence that the vault's and the group's latest tokens are unspent when a version is published; every token retakes it as it is built | Same |
 | Reader freshness, for a value it acts on | taken at the read | none: a reader that keeps a value keeps its age | The same evidence, for a reader; `get -strict` refuses a value without it | Same |
 | Highest verified `seq` per vault | kept | the reader's storage | A reader that keeps it refuses an older state from any host | Same |
-| Price paid for one priced question (`-max-sats`) | 1000 sat | the flag | A host names its own price in the 402; a client pays no more than it was told to | Not on the plane |
+| Price paid for one priced question (`-max-sats`) | 1000 sat | the flag | A host names its own price in the 402; a client pays no more than it was told to, and pays for one question once | Not on the plane |
+| Paid in all by one `audit` (`-budget`) | 16000 sat | the flag | A host sets its own pages as well as its prices; the command bounds what they add up to, and refuses a page that repeats tokens of an earlier one | Not on the plane |
 | A payer's unmined payments in a row | 16 | fixed | Each payment spends the change of the last and carries it; a longer run would make every payment's BEEF grow | Not on the plane |
 | Payments a payee broadcasts and awaits at once (`-in-flight`) | 16 | 64 | A run then takes about one block, however many payments there are | Not on the plane |
 

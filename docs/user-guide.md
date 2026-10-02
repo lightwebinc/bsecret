@@ -228,8 +228,9 @@ token unspent. Read [spec.md](spec.md) section 9.3 for what a trail does
 not prove.
 
 Without `-free`, when a paid host is configured, `audit` asks the priced
-audit class and pays the host's price for the whole chain in one question;
-the free path reads the same tokens one at a time.
+audit class and pays the host's price for each page of the chain (64
+tokens): at most `-max-sats` a page and `-budget` in all. The free path
+reads the same tokens one at a time.
 
 ## 10. More than one host
 
@@ -254,7 +255,8 @@ $ bsecret sync
 ```
 
 `sync` rebuilds the home's record from the hosts: each vault's chain, the
-current records, the names (through the owner's own wraps), and every
+current records, the names (through the owner's own wraps), the versions
+an interval vault's other home published and has not listed yet, and every
 commitment ever listed. If two homes change one vault, one of them loses
 the race for the next token; it says so, and `sync` catches it up.
 
@@ -272,6 +274,9 @@ the race for the next token; it says so, and `sync` catches it up.
 | `retracted` | the owner swept this version | it is gone on purpose |
 | `rollback` | the hosts answer an older state than this home verified | other hosts |
 | `DISAGREES` (exit 3) | one host lacks what another answered | `bsecret fill` |
+| `WITHHELD` (exit 3) | the hosts answer tokens of the vault above the last one that links: a token between is missing | other hosts; `bsecret fill` |
+| `REFUSED token` (exit 3) | a host answered something that does not verify; the vault is read from what did | that host is at fault; tell its operator |
+| `another bsecret command is using the home` (exit 2) | one command at a time uses a home, a read too | wait for it, and run the command again |
 | `no host answers its carrier` (exit 3) | the vault lists it and no host holds it; proves nothing | `bsecret fill`, or the owner publishes it again |
 | `the vault's latest token ... is spent` on a write | another home moved the vault | `bsecret sync` |
 | `borg org signer` | the organisation's signer key is not a member of the group | run `borg org signer` in the organisation's borg home |
@@ -279,5 +284,8 @@ the race for the next token; it says so, and `sync` catches it up.
 
 The kill switch, `bsecret kill -confirm KILL -yes`, sweeps every funding
 tree the home holds: every version it ever published is retracted at every
-honest host. It is irreversible, it does not reach a copy anyone kept, and
-the vaults' tokens stay.
+honest host, in every crypt the home published in. It is irreversible, it
+does not reach a copy anyone kept, and the vaults' tokens stay. It runs
+even when earlier work is stuck, and passes over an output another home
+already swept. If it exits 1 or 3, run it again: a tree already swept is
+passed over.

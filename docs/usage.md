@@ -106,7 +106,7 @@ both the hall and the crypt.
 | `fund [-blocks N]` | yes | `rpc`, `asset` | mines coinbase to the fund address through `generatetoaddress`: a chain you run. Refused on network `main` |
 | `crypt new <name>` | optional | nothing | draws the 10-letter random suffix; prints the crypt, its topic, and the host's `BSECRET_CRYPTS` line |
 | `crypt list` | yes | nothing | the crypts this home created |
-| `vault create <group> -name N` | yes, the owner's, funded | `crypt`, `hall`, a publisher's settings (below) | a vault keyed to a group of the organisation (its id, or its name in the hall): a chain tree, and the vault's first token naming the group's current epoch. `-anchor version` (default) or `interval`; `-labels a,b,c` |
+| `vault create <group> -name N` | yes, the owner's, funded | `crypt`, `hall`, a publisher's settings (below) | a vault keyed to a group of the organisation (its id, or its name in the hall): a chain tree, and the vault's first token naming the group's current epoch. `-anchor version` (default) or `interval`; `-labels a,b,c`. The name is one line of plain text |
 | `vault list` | optional | a reader's settings | the owner's vaults the hosts answer |
 | `vault show` | optional | a reader's settings | one vault's chain token by token as verified here, its standing against its group, whether its last token is the latest, and its set |
 | `put <name>` | yes, the owner's | a publisher's | the next version of a secret, its value from standard input or `-file`: sealed, wrapped, its carrier published, and listed in the vault's next token. `-label`, `-type`, `-not-after`, `-rotate-every`; `-defer` (interval vaults) |
@@ -114,11 +114,11 @@ both the hall and the crypt.
 | `retire <name>...` | yes, the owner's | a publisher's | one token retiring the secrets, then a sweep of every version of them (`-keep` leaves them answered) |
 | `rotate` | yes, the owner's | a publisher's | acknowledges the group's new epoch and re-keys or retires everything stale, 64 secrets a token, then sweeps what the ended epochs held. Each stale secret needs `-set NAME=FILE`, `-same NAME` (or `-same-all`) or `-retire NAME`. `-check` builds nothing; `-keep`; `-unwrapped` |
 | `sync` | yes, the owner's, funded to go on | a publisher's, `crypt` | rebuilds the home's record of its vaults from the hosts: chains, current records, names (through the self wraps), commitments, and the funding trees of the carriers answered |
-| `kill -confirm KILL [-yes]` | yes, the owner's | with `-yes` a publisher's | the kill switch: one sweep per secret tree the home holds. Every version it published is retracted. Without `-yes` it lists the sweeps and sends nothing |
+| `kill -confirm KILL [-yes]` | yes, the owner's | with `-yes` a publisher's | the kill switch: one sweep per secret tree the home holds, published in every crypt the tree funded a version in. Every version it published is retracted. Without `-yes` it lists the sweeps and sends nothing |
 | `get <name>` | yes (the key that reads) | a reader's settings; `content` for a large secret | reads a secret's value, every check in the signed order; the value raw on standard output, only when it is not a terminal or with `-show`. `-version N` reads history; `-strict` refuses an exposed or possibly stale value |
 | `list` | yes (the key that reads) | a reader's settings | the vault's secrets by name, each host's answer compared with the set's root; no value is printed |
 | `due` | optional | a reader's settings | what the vault owes: an acknowledgement, re-keyings, and for the owner the rotations it scheduled. Exit 3 when anything is due |
-| `audit` | no; one with coin to pay | a reader's settings; `paid_host`, `asset`, `settle` to pay | verifies the vault's trail from headers and prints the exposure window of every epoch the group began. Paid through the 402 when a paid host is named; `-free` walks the free class. `-json` |
+| `audit` | no; one with coin to pay | a reader's settings; `paid_host`, `asset`, `settle` to pay | verifies the vault's trail from headers and prints the exposure window of every epoch the group began. Paid through the 402 when a paid host is named, at most `-max-sats` a page and `-budget` in all; `-free` walks the free class. `-json` |
 | `history <name>` | yes, funded | a reader's settings, `paid_host`, `asset`, `settle` | the priced question: pays the host's 402 and prints every version of a secret the host holds |
 | `terms [URL]` | no | `paid_host` or URL | prints a host's terms document |
 | `fill` | optional | a reader's settings, `asset` | replays to each host what another host answered and it lacks: the vault's chain, its set's carriers, and sweeps; signs nothing |
@@ -224,8 +224,8 @@ paid_host    = https://terms.host-a.example.com
 | --- | --- |
 | 0 | done, or everything asked verified |
 | 1 | refused: a reader's check failed and names its culprit (`listing`, `retracted`, `hash`, `undecryptable`, `commitment`, `tag`, `payload`, `successor`, `rollback`); a vault that is ahead of its group, broken or terminated; an audit that fails; a writer's evidence that failed closed; a content key used before; a transition another one beat to the chain (`lost`); a readiness check (`rotate -check`) that found a secret with no choice; `get -strict` on an exposed value; or a sweep or payment the network refuses |
-| 2 | usage, configuration, local or transport error, a quorum not met, or a price over `-max-sats`; what was persisted is published by the next command |
-| 3 | incomplete: the hosts disagree, a host could not be asked, no host answered what was asked (an empty answer proves nothing), a ciphertext no content source holds, the token read is spent by a later one no host answers, something is due (`due`), borg's wraps of a new epoch are not published yet, or with `-strict` nothing says the token read is the latest. It proves nothing either way |
+| 2 | usage, configuration, local or transport error, a home another command is using, a quorum not met, or a price over `-max-sats` or `-budget`; what was persisted is published by the next command |
+| 3 | incomplete: the hosts disagree, a host answered something that does not verify, verified tokens of the vault exist above the chain read, a host could not be asked, no host answered what was asked (an empty answer proves nothing), a ciphertext no content source holds, the token read is spent by a later one no host answers, something is due (`due`), borg's wraps of a new epoch are not published yet, or with `-strict` nothing says the token read is the latest. It proves nothing either way |
 
 ## A home
 
@@ -236,12 +236,17 @@ vault's chain of mined tokens and every version the home published (its
 carrier, the funding output it spends, whether a token lists it); every
 object persisted and not yet confirmed published; the sweeps built; every
 content key commitment the home ever published or listed; the payments
-made and not yet mined; and, for a reader, the latest token of each vault
-it verified, with that vault's chain beside it under `chains/`. It holds no
-content key and no epoch key. **The home holds a
+made and not yet mined, each recorded before it is sent; while a command
+that spends is running, the coin pool as it last stood (`taking`), so that
+a coin a run took and never recorded a spend of is found by the next
+command and put back when the node shows it unspent; and, for a reader,
+the latest token of each vault it verified, with that vault's chain beside
+it under `chains/`. It holds no content key and no epoch key. **The home holds a
 secret all the same**: the identity key, which for an owner opens every
 version it ever wrote through its self wrap. Back it up as one, and keep it
-at 0700. One command at a time uses a home; a second is refused (exit 2).
+at 0700. One command at a time uses a home; a second is refused (exit 2),
+a reading command too: it would otherwise read with no memory of what the
+home verified before.
 
 A member's home needs no coin unless it asks a priced question.
 
@@ -356,9 +361,12 @@ has elapsed or its `-not-after` has passed.
 Any home made around the organisation's key can own its vaults. What such
 a home lacks is at the hosts, and `sync` reads it as a reader does (spec
 section 8.5): each vault's chain from its first token, verified and folded;
-every current secret's record and, through its self wrap, its name; every
-commitment any token listed; and the funding tree of each carrier answered,
-recorded as spent so that a sweep or the kill switch reaches it. A home
+every current secret's record and, through its self wrap, its name; in an
+interval vault every version published and not yet listed that links to the
+listed one, so that this home's next version follows it and is not a second
+record at a version another home deferred; every commitment any token
+listed; and the funding tree of each carrier answered, recorded as spent so
+that a sweep or the kill switch reaches it. A home
 whose vault another home moved refuses to write (its evidence fails
 closed, exit 1) until it runs `sync`.
 
@@ -376,6 +384,17 @@ version the home published. The vaults' tokens stay: they are mined, and
 they name identifiers, versions, content ids and commitments, never a
 value or a name. It does not reach a copy anyone kept.
 
+A funding tree is the identity's, not a crypt's: each sweep is published in
+every crypt that holds a version the tree funded. Work an earlier command
+left unfinished (an object a host has not taken, a transition not yet
+mined) does not stop the kill switch: it is reported and left for the next
+command. Before a sweep is built the node is asked what spends each output:
+one another transaction already spends is left out, and that transaction,
+once mined, is taken as the sweep it is and published as one (another home
+swept it, or this home built it and gave up on it). A sweep refused because
+another transaction spends its fee coin is built again. A run that leaves
+an output spent by a transaction not yet mined exits 3: run it again.
+
 ## Reading
 
 Every reading command asks every host in `hosts` and checks every answer
@@ -385,7 +404,14 @@ reader walks it itself: the first token is the one whose input's outpoint
 hashes to the vault identifier, and each later token must spend the token
 before it under the transition rules. It is folded as it is walked. A host
 that lacks a token another host answered is reported (`DISAGREES`, exit 3),
-never merged silently. The group is read from the hall's hosts by borg's
+never merged silently. A host that answers a token that does not verify is
+named (`REFUSED`), the vault is read from what verified, and the command
+is incomplete (exit 3): one host at fault does not make a check fail.
+Verified tokens of the vault above the last one the walk could link are
+reported (`WITHHELD`, exit 3): a token between was withheld, and what was
+read may be an older state. The walk is bounded by the chain itself: a seq
+is asked for only once the one before it is on the chain, and an answer is
+read up to 16 MiB and the outputs a page of the contract holds. The group is read from the hall's hosts by borg's
 reader, and the vault is held to it: its owner is the group's
 organisation, and every epoch and epoch id a token or a record names is
 one the group's chain began.
@@ -397,8 +423,11 @@ hosts only for what came after; a reader with no home walks from seq 0
 every time. A host that answers an older latest token than the home
 verified is named; when every host does, the answer is refused (exit 1,
 `rollback`), and when only some do the vault is read from the others (exit
-3). A remembered token that no longer verifies was displaced by a
-reorganisation: the home forgets the chain and reads it again. Whether the
+3). A remembered token whose kept proof no longer verifies is looked up at
+`asset`: its current proof replaces the old one, and only the node's word
+that the transaction is not mined (a reorganisation displaced it) makes
+the home forget it. A header source or a node that fails proves nothing,
+and nothing is forgotten on its account. Whether the
 token read is the latest is settled by `asset`: its output is unspent, or
 spent by the vault's next token (exit 3: a later token exists that no host
 answers), or by something else (the vault is terminated, exit 1). Without
@@ -424,7 +453,20 @@ is not a terminal, or with `-show`. Standard error says the vault's state
 whether it is current or **exposed**: keyed under an epoch before the
 group's latest, so that a key the group has since removed, or rotated away
 from, opens it. Names, labels and every other text a host or an owner
-wrote is filtered before it reaches a terminal.
+wrote is filtered before it reaches a terminal, and held to the line it is
+printed on: a display name with a line break in it writes no line of its
+own. `audit -json` writes such characters as escapes.
+
+In an interval vault the versions above the listed one are asked for one
+by one, only while they are answered in a row, and at most 64 of them: a
+version a carrier claims never sets how far a reader walks. A retracted
+version is not a link: the read takes the highest version it can link
+below it, and says that a later one exists. `get -version N` reads a
+version as history: it is held to the first token that listed that version,
+and refused (`listing`) when that token listed it under a commitment an
+earlier one listed. A ciphertext fetched by hash is taken from the first
+`content` source that serves exactly the bytes the record names; one that
+serves other bytes is passed over.
 
 **`audit`** is the auditor's check of spec section 9. It needs the owner's
 key and the vault's identifier (or its name), the hosts and a header
@@ -469,8 +511,12 @@ A host may price the `history` and `audit` classes (spec section 10.3).
 host's terms route (`paid_host`, or `-at`) over BRC-104; the host answers
 402 with its price, and the question is asked again with a BRC-29 payment
 from this home's pool (BRC-105) as output 0, which the host records and its
-payee settles. One payment buys one page. A price over `-max-sats` (default
-1000) is not paid. The change of an unmined payment is spendable by this
+payee settles. One payment buys one page, and one question is paid for
+once: a host that asks again is refused. A payment is recorded in the home
+before it is sent, and from then on it is made: its coin is not reused,
+whatever the host answers. A price over `-max-sats` (default 1000) is not
+paid, and `audit` pays at most `-budget` (default 16000) over all its
+pages. A page that repeats tokens of an earlier one is refused. The change of an unmined payment is spendable by this
 home's next payment at once, up to 16 in a row. Everything a priced class
 answers is also reachable free, one item at a time: `audit -free`, and `get
 -version N`.

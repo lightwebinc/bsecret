@@ -292,7 +292,12 @@ func FeeError(err error) error {
 // Start reads the chain tip for coinbase maturity, collects the proofs of
 // change the pool holds back, and finishes whatever a previous run
 // persisted and did not finish: a sweep, every object not confirmed
-// published, a transition, and a token mined and not yet published.
+// published, every vault's transition, and every token mined and not yet
+// published. Each piece of work is tried whatever became of the one before
+// it: one that cannot finish (a host that is down, a transition another
+// beat to the chain) does not keep the rest from the chain or the hosts.
+// The first failure is returned, a *LostError only when nothing else
+// failed; the others are noted.
 func (e *Engine) Start(ctx context.Context) error {
 	h, err := e.Legs.Asset.BestHeader(ctx)
 	if err != nil {
@@ -300,19 +305,37 @@ func (e *Engine) Start(ctx context.Context) error {
 	}
 	e.payer.Tip = h.Height
 	CollectChange(ctx, e.Pool, e.Legs.Asset)
-	var refusedErr *SweepRefusedError
-	if err := e.FinishSweep(ctx); errors.As(err, &refusedErr) {
-		e.note("%v", err)
-	} else if err != nil {
-		return err
+	var first error
+	var lost *LostError
+	keep := func(err error) {
+		var l *LostError
+		var refusedErr *SweepRefusedError
+		switch {
+		case err == nil:
+		case errors.As(err, &refusedErr):
+			e.note("%v", err)
+		case errors.As(err, &l) && lost == nil:
+			lost = l
+		case !errors.As(err, &l) && first == nil:
+			first = err
+		default:
+			e.note("%v", err)
+		}
 	}
-	if err := e.Resume(ctx); err != nil {
-		return err
+	keep(e.FinishSweep(ctx))
+	keep(e.Resume(ctx))
+	keep(e.FinishTransitions(ctx))
+	keep(e.Owed(ctx))
+	if first != nil {
+		if lost != nil {
+			e.note("%v", lost)
+		}
+		return first
 	}
-	if err := e.FinishTransitions(ctx); err != nil {
-		return err
+	if lost != nil {
+		return lost
 	}
-	return e.Owed(ctx)
+	return nil
 }
 
 // CollectChange gives every unproven coin in the pool its proof, once its
@@ -332,26 +355,36 @@ func CollectChange(ctx context.Context, pool *bwallet.Pool, asset *nodeapi.Asset
 }
 
 // Resume publishes every object a previous run persisted: the same bytes,
-// so a host that already holds one answers a duplicate.
+// so a host that already holds one answers a duplicate. Every object is
+// tried; one that cannot be published stays in the outbox, and the first
+// failure is returned.
 func (e *Engine) Resume(ctx context.Context) error {
-	for len(e.St.Outbox) > 0 {
-		p := e.St.Outbox[0]
+	var first error
+	for _, p := range slices.Clone(e.St.Outbox) {
 		e.note("%s %s: publishing what a previous run persisted", p.Kind, Short(p.Txid))
 		if err := e.publish(ctx, p); err != nil {
-			return err
+			if ctx.Err() != nil {
+				return err
+			}
+			if first == nil {
+				first = err
+			} else {
+				e.note("%v", err)
+			}
+			continue
 		}
 		e.done(p)
 		if err := e.St.Save(); err != nil {
 			return err
 		}
 	}
-	return nil
+	return first
 }
 
 // done removes a published object from the outbox and records what its
 // publication settles: a token every host named took.
 func (e *Engine) done(p state.Pending) {
-	e.St.Done(p.Txid)
+	e.St.Done(p.Txid, p.Crypt)
 	if p.Kind != state.KindToken {
 		return
 	}
@@ -383,7 +416,9 @@ func (e *Engine) Close(ctx context.Context) error {
 // spends and the output, the tree's proof cut to the minimal one a host
 // admits.
 func (e *Engine) spend(ctx context.Context, kind string) (*transaction.Transaction, uint32, error) {
-	e.promoteAhead(kind)
+	if err := e.promoteAhead(kind); err != nil {
+		return nil, 0, err
+	}
 	t := e.trees[kind]
 	if e.hasAhead(kind) || kind == state.TreeChain {
 		t.Ahead = 0
@@ -419,18 +454,24 @@ func (e *Engine) hasAhead(kind string) bool {
 	return false
 }
 
-func (e *Engine) promoteAhead(kind string) {
+func (e *Engine) promoteAhead(kind string) error {
 	ts := e.St.Set(kind)
 	if ts.Tree != nil && ts.Tree.Remaining() > 0 {
-		return
+		return nil
 	}
 	for _, t := range ts.Ahead {
 		if t.IdentityKeyHex == e.Signer.IdentityHex() && t.Remaining() > 0 {
-			_ = treeState{e, kind}.Adopt(t)
+			// Adopt saves the home: a tree that is the current one only in
+			// memory would have its outputs spent with nothing recording
+			// which.
+			if err := (treeState{e, kind}).Adopt(t); err != nil {
+				return fmt.Errorf("switching to %s funding tree %s: %w", kind, Short(t.Txid), err)
+			}
 			e.note("switching to %s funding tree %s, minted ahead by an earlier run", kind, t.Txid)
-			return
+			return nil
 		}
 	}
+	return nil
 }
 
 // prove waits for a funding tree's proof: a carrier spends only a mined
@@ -706,7 +747,7 @@ func (e *Engine) confirm(p state.Pending) unicast.Confirm {
 // queue persists p in the outbox and publishes it, removing it once
 // published.
 func (e *Engine) queue(ctx context.Context, p state.Pending) error {
-	if !e.St.Queued(p.Txid) {
+	if !e.St.Queued(p.Txid, p.Crypt) {
 		e.St.Outbox = append(e.St.Outbox, p)
 	}
 	if err := e.St.Save(); err != nil {

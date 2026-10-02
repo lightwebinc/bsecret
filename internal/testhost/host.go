@@ -149,7 +149,15 @@ func (h *Host) SetDown(down bool) {
 func (h *Host) Holds(txid string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.tokens[txid] != nil || h.cars[txid] != nil || h.sweeps[txid] != nil
+	if h.tokens[txid] != nil || h.cars[txid] != nil {
+		return true
+	}
+	for _, s := range h.sweeps {
+		if s.txid == txid {
+			return true
+		}
+	}
+	return false
 }
 
 // Forget drops an object, as a host that lost it would: an honest host
@@ -159,7 +167,11 @@ func (h *Host) Forget(txid string) {
 	defer h.mu.Unlock()
 	delete(h.tokens, txid)
 	delete(h.cars, txid)
-	delete(h.sweeps, txid)
+	for k, s := range h.sweeps {
+		if s.txid == txid {
+			delete(h.sweeps, k)
+		}
+	}
 	for k := range h.applied {
 		if strings.HasSuffix(k, "/"+txid) {
 			delete(h.applied, k)
@@ -191,8 +203,12 @@ func (h *Host) Txids(kind string) []string {
 			out = append(out, id)
 		}
 	case "sweep":
-		for id := range h.sweeps {
-			out = append(out, id)
+		seen := map[string]bool{}
+		for _, s := range h.sweeps {
+			if !seen[s.txid] {
+				seen[s.txid] = true
+				out = append(out, s.txid)
+			}
 		}
 	}
 	sort.Strings(out)
@@ -319,7 +335,9 @@ func (h *Host) submit(w http.ResponseWriter, r *http.Request) {
 			for _, op := range a.Spent {
 				row.spent = append(row.spent, op.String())
 			}
-			h.sweeps[id] = row
+			// A sweep is held per crypt: a host learns of a spend only
+			// from a sweep admitted in the crypt's own topic.
+			h.sweeps[crypt+"/"+id] = row
 		}
 		outs, retain = a.Outputs, a.Retain
 	}
@@ -489,6 +507,9 @@ func (h *Host) row(c *carRow) *secrec.OutpointRow {
 		}
 	}
 	for _, s := range h.sweeps {
+		if s.crypt != c.crypt {
+			continue
+		}
 		for _, x := range s.spent {
 			if x == op {
 				r.Swept = true

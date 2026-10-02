@@ -328,6 +328,15 @@ func (w *writer) close(ctx context.Context, g *global) {
 // openWriter opens the home and a publisher over it, and finishes whatever
 // a previous run left.
 func (g *global) openWriter(ctx context.Context) (*writer, error) {
+	return g.openWriterFor(ctx, false)
+}
+
+// openWriterFor is openWriter; with lenient set, work a previous run left
+// that cannot be finished now is reported and left for the next command,
+// and the publisher is returned all the same. The kill switch runs so: an
+// object that cannot reach a host, or a transition that cannot finish, must
+// not keep a retraction from the chain.
+func (g *global) openWriterFor(ctx context.Context, lenient bool) (*writer, error) {
 	h, err := g.openHome()
 	if err != nil {
 		return nil, err
@@ -375,13 +384,17 @@ func (g *global) openWriter(ctx context.Context) (*writer, error) {
 	}
 	if err := eng.Start(ctx); err != nil {
 		var lost *engine.LostError
-		if !errors.As(err, &lost) {
+		switch {
+		case errors.As(err, &lost):
+			// A transition a previous command left was beaten to the
+			// chain; this command goes on from what the home holds.
+			g.say("%v", lost)
+		case lenient && ctx.Err() == nil:
+			g.say("work an earlier command left is not finished, and is left for the next command: %v", err)
+		default:
 			w.close(ctx, g)
 			return nil, err
 		}
-		// A transition a previous command left was beaten to the chain;
-		// this command goes on from what the home holds.
-		g.say("%v", lost)
 	}
 	return w, nil
 }

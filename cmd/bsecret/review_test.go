@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -38,10 +41,13 @@ func TestAnAuditThatStopsEarlyListsItsTokens(t *testing.T) {
 
 // sweepVersion retracts one version of the organisation's only vault, as
 // its owner: a sweep of the funding output its carrier spent.
-func (h *harness) sweepVersion(version uint64) {
+func (h *harness) sweepVersion(version uint64) { h.sweepVersionAs("org", version) }
+
+// sweepVersionAs is sweepVersion from the home name.
+func (h *harness) sweepVersionAs(name string, version uint64) {
 	h.t.Helper()
 	ctx := context.Background()
-	g, _, errb := h.global("org")
+	g, _, errb := h.global(name)
 	w, err := g.openWriter(ctx)
 	if err != nil {
 		h.t.Fatalf("%v\n%s", err, errb)
@@ -302,5 +308,143 @@ func TestAForeignCarrierMovesNoCursor(t *testing.T) {
 	}
 	if asked := h.a.Questions("secrets") + h.a.Questions("secrets-after") - before; asked != 2 {
 		t.Fatalf("the host walked the reader through %d pages", asked)
+	}
+}
+
+// The kill switch reaches every crypt: a funding tree is the identity's,
+// and funds versions in every crypt the identity publishes in.
+func TestKillReachesEveryCrypt(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	one := h.vault()
+	h.put("db/password", "one")
+	first := h.crypt
+	m := cryptLine.FindStringSubmatch(h.must("org", "crypt", "new", "example").stdout)
+	if m == nil {
+		t.Fatal("a second crypt")
+	}
+	second := m[1]
+	h.a.Carry(second)
+	h.b.Carry(second)
+	r := h.must("org", "-crypt", second, "vault", "create", h.group, "-name", "other")
+	other := vaultLine.FindStringSubmatch(r.stdout)[1]
+	h.mustIn("org", "two", "-crypt", second, "-vault", other, "put", "api/token")
+	if r := h.must("alice", "-crypt", second, "-vault", other, "get", "api/token"); r.stdout != "two" {
+		t.Fatalf("alice in the second crypt: %q\n%s", r.stdout, r.stderr)
+	}
+	r = h.must("org", "kill", "-confirm", "KILL", "-yes")
+	if !strings.Contains(r.stdout, "killed  ") {
+		t.Fatalf("kill:\n%s\n%s", r.stdout, r.stderr)
+	}
+	// The hosts of both crypts hold the sweep: neither answers a carrier.
+	h.want(h.run("alice", "", "-crypt", first, "-vault", one, "get", "db/password"), exitIncomplete, "no host answers its carrier")
+	h.want(h.run("alice", "", "-crypt", second, "-vault", other, "get", "api/token"), exitIncomplete, "no host answers its carrier")
+}
+
+// An output of a tree that another instance of the tooling already swept
+// does not make the kill switch's sweep of the rest fail for good: it is
+// left out, and the transaction that spends it is taken as its sweep.
+func TestKillPassesOverASpentOutput(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	h.put("api/token", "tok")
+	copyHome(t, filepath.Join(h.dir, "org"), filepath.Join(h.dir, "org2"))
+	h.sweepVersionAs("org2", 1)
+	r := h.must("org", "kill", "-confirm", "KILL", "-yes")
+	if !strings.Contains(r.stdout, "killed  ") || !strings.Contains(r.stderr, "already spent by") || !strings.Contains(r.stderr, "taken as their sweep") {
+		t.Fatalf("kill with an output already swept:\n%s\n%s", r.stdout, r.stderr)
+	}
+	h.want(h.run("alice", "", "get", "api/token"), exitIncomplete, "no host answers its carrier")
+	if r := h.must("org", "kill", "-confirm", "KILL"); !strings.Contains(r.stdout, "0 tree(s) to sweep") {
+		t.Fatalf("after the kill:\n%s", r.stdout)
+	}
+}
+
+// Work an earlier command left unfinished does not stop the kill switch.
+func TestKillIsNotBlockedByOldWork(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	carrier := func(tx *transaction.Transaction) bool { return tx.LockTime != 0 }
+	h.a.Drop, h.b.Drop = carrier, carrier
+	h.want(h.run("org", "two", "put", "db/password"), exitUsage, "it is persisted")
+	r := h.must("org", "kill", "-confirm", "KILL", "-yes")
+	if !strings.Contains(r.stdout, "killed  ") || !strings.Contains(r.stderr, "is left for the next command") {
+		t.Fatalf("kill behind an object no host takes:\n%s\n%s", r.stdout, r.stderr)
+	}
+	h.want(h.run("alice", "", "get", "db/password"), exitIncomplete, "no host answers its carrier")
+}
+
+// tipOf is the txid of the latest token of a vault, as its owner shows it.
+func (h *harness) tipOf(vault string) string {
+	h.t.Helper()
+	tip := ""
+	for _, l := range strings.Split(h.must("org", "-vault", vault, "vault", "show").stdout, "\n") {
+		if strings.HasPrefix(l, "token   seq ") {
+			tip = strings.Fields(l)[3]
+		}
+	}
+	if tip == "" {
+		h.t.Fatal("vault show printed no token")
+	}
+	return tip
+}
+
+// A transition of one vault that was beaten to the chain does not keep the
+// rest of what the home owes from being finished: a token of another vault
+// that is mined and not yet published is published by the same run.
+func TestALostTransitionDoesNotStopOtherWork(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	one := h.vault()
+	other := vaultLine.FindStringSubmatch(h.must("org", "vault", "create", h.group, "-name", "other").stdout)[1]
+	h.mustIn("org", "one", "-vault", one, "put", "db/password")
+	h.mustIn("org", "tok", "-vault", other, "put", "api/token")
+	// A second home of the organisation, with coin and funding trees of
+	// its own, caught up by sync.
+	h.identity("org2", true, "-borg", h.borg.Home)
+	h.must("org2", "sync")
+	tipA, tipB := h.tipOf(one), h.tipOf(other)
+	// The first home's transition of the first vault is persisted and not
+	// taken by the node; the second home's then takes the vault's tip.
+	h.chain.Refuse = func(tx *transaction.Transaction) string {
+		for _, in := range tx.Inputs {
+			if in.SourceTXID != nil && in.SourceTXID.String() == tipA {
+				return "txn-mempool-conflict"
+			}
+		}
+		return ""
+	}
+	h.want(h.run("org", "ours", "-vault", one, "put", "db/password"), exitUsage, "it is persisted; the next command sends it again")
+	h.chain.Refuse = nil
+	h.mustIn("org2", "theirs", "-vault", one, "put", "db/password")
+	// The second vault's latest token is mined, and no host holds it: the
+	// home owes it.
+	path := filepath.Join(h.dir, "org", state.File)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var st map[string]any
+	if err := json.Unmarshal(raw, &st); err != nil {
+		t.Fatal(err)
+	}
+	toks := st["vaults"].([]any)[1].(map[string]any)["tokens"].([]any)
+	delete(toks[len(toks)-1].(map[string]any), "published")
+	out, _ := json.Marshal(st)
+	if err := os.WriteFile(path, out, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h.a.Forget(tipB)
+	h.b.Forget(tipB)
+	r := h.run("org", "", "sync")
+	if !strings.Contains(r.stderr, "lost: its predecessor is spent by") {
+		t.Fatalf("the lost transition: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	if !h.a.Holds(tipB) || !h.b.Holds(tipB) {
+		t.Fatalf("the token the home owed was not published by the run that found a transition lost:\n%s\n%s", r.stdout, r.stderr)
 	}
 }

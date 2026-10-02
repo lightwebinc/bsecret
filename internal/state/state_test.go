@@ -33,7 +33,7 @@ func TestSaveLoadRoundTripAndModes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(back.Crypts) != 1 || len(back.Commitments) != 1 || !back.Committed("k1") || back.Committed("k2") || !back.Queued("t2") {
+	if len(back.Crypts) != 1 || len(back.Commitments) != 1 || !back.Committed("k1") || back.Committed("k2") || !back.Queued("t2", "") {
 		t.Fatalf("%+v", back)
 	}
 	if x := back.SeenOf("c", "o", "v"); x == nil || x.Seq != 4 || x.Txid != "x4" {
@@ -46,8 +46,8 @@ func TestSaveLoadRoundTripAndModes(t *testing.T) {
 	if x := v.VersionOf("ia", "c3"); x == nil || x.Version != 3 || v.VersionOf("ia", "c9") != nil || v.VersionOf("ib", "") != nil {
 		t.Fatal("VersionOf by content id")
 	}
-	back.Done("t1")
-	if back.Queued("t1") || !back.Outbox[0].Mined() || (Pending{Kind: KindSecret}).Mined() || !(Pending{Kind: KindSweep}).Mined() {
+	back.Done("t1", "")
+	if back.Queued("t1", "") || !back.Outbox[0].Mined() || (Pending{Kind: KindSecret}).Mined() || !(Pending{Kind: KindSweep}).Mined() {
 		t.Fatal("the outbox")
 	}
 	back.Forget("c", "o", "v")

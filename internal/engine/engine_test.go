@@ -4,8 +4,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	ec "github.com/bsv-blockchain/go-sdk/primitives/ec"
+
+	"github.com/lightwebinc/bcommon/bwallet"
+	"github.com/lightwebinc/bcommon/funding"
 
 	"github.com/lightwebinc/bsecret/internal/secrec"
 	"github.com/lightwebinc/bsecret/internal/state"
@@ -203,5 +209,27 @@ func TestLostErrorSaysWhatToDo(t *testing.T) {
 	fee := &LostError{What: "x", Txid: strings.Repeat("a", 64), By: strings.Repeat("b", 64), Fee: true}
 	if !strings.Contains(fee.Error(), "fee coin") {
 		t.Fatal(fee)
+	}
+}
+
+// A tree minted ahead becomes the current one only once the home has
+// recorded it: a switch that could not be saved is an error, and nothing
+// is spent from a tree the home does not know is current.
+func TestATreeSwitchThatCannotBeSavedIsAnError(t *testing.T) {
+	pub, err := ec.PublicKeyFromBytes(testOwner(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer := &bwallet.Signer{Identity: pub}
+	// A home that does not exist: nothing can be saved in it.
+	st, err := state.Load(filepath.Join(t.TempDir(), "gone"), signer.IdentityHex())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := st.Set(state.TreeSecret)
+	ts.Ahead = []funding.Tree{{IdentityKeyHex: signer.IdentityHex(), Txid: strings.Repeat("22", 32), Count: 8}}
+	e := &Engine{St: st, Signer: signer}
+	if err := e.promoteAhead(state.TreeSecret); err == nil || !strings.Contains(err.Error(), "switching to secret funding tree") {
+		t.Fatalf("a switch that could not be saved: %v", err)
 	}
 }

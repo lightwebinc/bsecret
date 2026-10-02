@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/lightwebinc/bcommon/funding"
 
+	"github.com/lightwebinc/bsecret/internal/engine"
 	"github.com/lightwebinc/bsecret/internal/state"
 )
 
@@ -19,9 +21,16 @@ secret this identity published stops being answered. It is IRREVERSIBLE.
 
 Without -yes it prints what it would sweep and sends nothing. With -yes
 each sweep is persisted, settled, waited for until it mines (one block a
-tree) and published to the plane and to every host named. A run that stops
-part way is finished by running kill again: a tree already swept is passed
-over.
+tree) and published to the plane and to every host named, in every crypt
+that holds a version the tree funded: a funding tree is the identity's, not
+a crypt's. A run that stops part way is finished by running kill again: a
+tree already swept is passed over.
+
+Work an earlier command left unfinished (an object a host has not taken, a
+transition not yet mined) does not stop it: that work is reported and left
+for the next command. An output the chain already shows spent is left out
+of the sweep, and the transaction that spends it is taken as its sweep and
+published as one: another instance of the tooling swept it.
 
 What it does not do: the vaults' tokens are mined and stay, and they name
 identifiers, versions, content ids and commitments, never a value or a
@@ -119,7 +128,9 @@ func cmdKill(ctx context.Context, g *global, args []string) error {
 		fmt.Fprintf(g.stdout, "%d tree(s) to sweep; nothing was sent (pass -yes)\n", len(trees))
 		return nil
 	}
-	w, err := g.openWriter(ctx)
+	// Work an earlier command left unfinished does not stop the kill
+	// switch: it is reported and left.
+	w, err := g.openWriterFor(ctx, true)
 	if err != nil {
 		return err
 	}
@@ -134,7 +145,18 @@ func cmdKill(ctx context.Context, g *global, args []string) error {
 	trees := killTrees(w.h.st, func(txid string, vout uint32) bool { return w.eng.SweptBy(txid, vout) != nil })
 	failed := 0
 	for _, t := range trees {
+		// A sweep refused because another transaction spends one of its
+		// inputs (its fee coin, or an output swept since the node was
+		// asked) is built again without that input.
 		sw, err := w.eng.Retract(ctx, crypt, t.txid, t.vouts)
+		for try := 0; try < 2; try++ {
+			var again *engine.SweepRefusedError
+			if !errors.As(err, &again) {
+				break
+			}
+			g.say("%v", err)
+			sw, err = w.eng.Retract(ctx, crypt, t.txid, t.vouts)
+		}
 		if err != nil {
 			failed++
 			g.say("secret tree %s: NOT SWEPT: %v", t.txid, err)
@@ -147,6 +169,16 @@ func cmdKill(ctx context.Context, g *global, args []string) error {
 	}
 	if failed > 0 {
 		return refused("%d of %d tree(s) not swept; run bsecret kill -confirm KILL -yes again", failed, len(trees))
+	}
+	// An output another transaction spends that has not mined yet is
+	// neither swept nor sweepable: the next run takes that spend as its
+	// sweep once it mines.
+	if rest := killTrees(w.h.st, func(txid string, vout uint32) bool { return w.eng.SweptBy(txid, vout) != nil }); len(rest) > 0 {
+		n := 0
+		for _, t := range rest {
+			n += len(t.vouts)
+		}
+		return incomplete("%d output(s) of %d tree(s) are spent by a transaction that has not mined yet or that the node could not show; run bsecret kill -confirm KILL -yes again", n, len(rest))
 	}
 	fmt.Fprintf(g.stdout, "killed  %d tree(s) swept: every version they funded is retracted at every honest host\n", len(trees))
 	g.say("a sweep is not erasure: the vaults' tokens stay, a copy anyone kept stays a copy, and a value anyone read stays read")

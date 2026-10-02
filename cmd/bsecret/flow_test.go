@@ -880,7 +880,10 @@ func TestALostTransition(t *testing.T) {
 	h := newHarness(t)
 	h.vault()
 	h.put("db/password", "one")
-	copyHome(t, filepath.Join(h.dir, "org"), filepath.Join(h.dir, "org2"))
+	// A second home of the organisation, with coin and funding trees of
+	// its own, caught up by sync: two instances never share a tree.
+	h.identity("org2", true, "-borg", h.borg.Home)
+	h.must("org2", "sync")
 	// Between the first home's evidence and its send, the second home's
 	// transition takes the vault's tip.
 	var won result

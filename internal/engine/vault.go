@@ -511,11 +511,45 @@ func (e *Engine) run(ctx context.Context, v *state.Vault, tr *state.Transition, 
 }
 
 // FinishTransitions takes every persisted transition to the chain.
+// Every vault is tried: a transition that is lost, or cannot finish yet,
+// does not keep another vault's from the chain. The first failure is
+// returned, a *LostError only when nothing else failed.
 func (e *Engine) FinishTransitions(ctx context.Context) error {
+	// By identifier: a first token that is lost takes its vault out of
+	// the home.
+	ids := make([]string, 0, len(e.St.Vaults))
 	for vi := range e.St.Vaults {
-		if err := e.finish(ctx, &e.St.Vaults[vi]); err != nil {
-			return err
+		ids = append(ids, e.St.Vaults[vi].ID)
+	}
+	var first error
+	var lost *LostError
+	for _, id := range ids {
+		v := e.St.VaultByID(id)
+		if v == nil {
+			continue
 		}
+		err := e.finish(ctx, v)
+		var l *LostError
+		switch {
+		case err == nil:
+		case ctx.Err() != nil:
+			return err
+		case errors.As(err, &l) && lost == nil:
+			lost = l
+		case !errors.As(err, &l) && first == nil:
+			first = err
+		default:
+			e.note("%v", err)
+		}
+	}
+	if first != nil {
+		if lost != nil {
+			e.note("%v", lost)
+		}
+		return first
+	}
+	if lost != nil {
+		return lost
 	}
 	return nil
 }
@@ -810,16 +844,27 @@ func (e *Engine) parentTx(ctx context.Context, v *state.Vault, t *state.Token) (
 // Owed publishes what the home owes its crypts: a token of its own vaults
 // mined and not yet published.
 func (e *Engine) Owed(ctx context.Context) error {
+	var first error
 	for vi := range e.St.Vaults {
 		v := &e.St.Vaults[vi]
 		for i := range v.Tokens {
 			t := &v.Tokens[i]
-			if !t.Published && !e.St.Queued(t.Txid) {
+			if !t.Published && !e.St.Queued(t.Txid, v.Crypt) {
 				if err := e.publishToken(ctx, v, t.Txid); err != nil {
-					return err
+					if ctx.Err() != nil {
+						return err
+					}
+					if first == nil {
+						first = err
+					} else {
+						e.note("%v", err)
+					}
+					// A later token of this vault is published only after
+					// this one.
+					break
 				}
 			}
 		}
 	}
-	return nil
+	return first
 }

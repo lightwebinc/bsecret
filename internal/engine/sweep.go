@@ -20,6 +20,7 @@ import (
 	"github.com/lightwebinc/bsecret/internal/secrec"
 
 	"github.com/lightwebinc/bsecret/internal/state"
+	"github.com/lightwebinc/bsecret/internal/vread"
 )
 
 // Retraction (spec section 12.5): a sweep spends funding-tree outputs,
@@ -54,11 +55,22 @@ func (e *Engine) Retract(ctx context.Context, crypt, txid string, vouts []uint32
 	if len(left) == 0 {
 		return e.SweptBy(txid, vouts[0]), nil
 	}
-	vouts = left
 	_, kind, ok := e.St.TreeOf(txid)
 	if !ok {
 		return nil, fmt.Errorf("transaction %s is not a funding tree this home keeps", txid)
 	}
+	// An output the chain already shows spent cannot be swept again, and a
+	// sweep that named it would be refused whole, for good: the node is
+	// asked about each, and what another transaction spends is left out
+	// and that spend taken as the sweep it is.
+	left, err := e.adoptSpends(ctx, crypt, txid, left)
+	if err != nil {
+		return nil, err
+	}
+	if len(left) == 0 {
+		return e.SweptBy(txid, vouts[0]), nil
+	}
+	vouts = left
 	tree, err := e.kept.Tx(txid)
 	if err != nil {
 		return nil, err
@@ -84,7 +96,8 @@ func (e *Engine) Retract(ctx context.Context, crypt, txid string, vouts []uint32
 		payer.GiveBack()
 		return nil, err
 	}
-	sw := state.Sweep{Tree: txid, Vouts: slices.Clone(vouts), Crypt: crypt, Txid: tx.TxID().String(), RawHex: tx.Hex(), Fee: coin}
+	sw := state.Sweep{Tree: txid, Vouts: slices.Clone(vouts), Crypt: crypt, Crypts: e.cryptsOf(crypt, txid, vouts),
+		Txid: tx.TxID().String(), RawHex: tx.Hex(), Fee: coin}
 	e.St.Sweeps = append(e.St.Sweeps, sw)
 	if t := e.St.Set(kind).Tree; t != nil && t.Txid == txid {
 		// The rest of the tree stays usable only past every output swept.
@@ -100,6 +113,105 @@ func (e *Engine) Retract(ctx context.Context, crypt, txid string, vouts []uint32
 		return &e.St.Sweeps[len(e.St.Sweeps)-1], err
 	}
 	return &e.St.Sweeps[len(e.St.Sweeps)-1], nil
+}
+
+// cryptsOf are the crypts a sweep of vouts of the funding tree txid is
+// published in: crypt, and every other crypt that holds a version one of
+// those outputs funded. A funding tree is the identity's, not a crypt's,
+// and a host learns of a spend only from a sweep admitted in the crypt's
+// own topic.
+func (e *Engine) cryptsOf(crypt, txid string, vouts []uint32) []string {
+	out := []string{crypt}
+	for vi := range e.St.Vaults {
+		v := &e.St.Vaults[vi]
+		if slices.Contains(out, v.Crypt) {
+			continue
+		}
+		for i := range v.Versions {
+			if x := &v.Versions[i]; x.Tree == txid && slices.Contains(vouts, x.Vout) {
+				out = append(out, v.Crypt)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// adoptSpends asks the node what spends each of vouts of the funding tree
+// txid, and returns those still to sweep. An output another transaction
+// spends is left out. Once that transaction is mined it is recorded as the
+// sweep of the outputs of the tree it spends, and published as one in
+// every crypt they funded a version in, when a host would admit it: the
+// sweep of another instance of the tooling, or one of this home's that an
+// earlier run gave up on and that mined all the same. An output whose
+// spender is not mined yet is left for the next run. A node that cannot
+// answer leaves the output in: the sweep is then what finds out.
+func (e *Engine) adoptSpends(ctx context.Context, crypt, txid string, vouts []uint32) ([]uint32, error) {
+	if e.Legs.Asset == nil {
+		return vouts, nil
+	}
+	var left []uint32
+	spenders := map[string]bool{}
+	var order []string
+	for _, v := range vouts {
+		by, err := e.Legs.Asset.Spender(ctx, txid, v)
+		if err != nil || by == "" {
+			left = append(left, v)
+			continue
+		}
+		if !spenders[by] {
+			spenders[by] = true
+			order = append(order, by)
+		}
+	}
+	for _, by := range order {
+		if !chainhashOK(by) {
+			e.note("funding tree %s: the node names a spender that is not a transaction id; its outputs are left for the next run", Short(txid))
+			continue
+		}
+		raw, err := e.Legs.Asset.TxRaw(ctx, by)
+		if err != nil {
+			e.note("funding tree %s: an output is spent by %s, which the node could not show (%v); it is left for the next run", Short(txid), Short(by), err)
+			continue
+		}
+		tx, err := guard.ParseTransaction(raw, guard.DefaultBound)
+		if err != nil || tx.TxID().String() != by {
+			e.note("funding tree %s: an output is spent by %s, and the node answered other bytes for it; it is left for the next run", Short(txid), Short(by))
+			continue
+		}
+		mp, height, err := e.Legs.Asset.Proof(ctx, by)
+		if err != nil {
+			e.note("funding tree %s: an output is spent by %s, which has not mined yet; it is left for the next run", Short(txid), Short(by))
+			continue
+		}
+		var spent []uint32
+		for _, in := range tx.Inputs {
+			if in.SourceTXID != nil && in.SourceTXID.String() == txid {
+				spent = append(spent, in.SourceTxOutIndex)
+			}
+		}
+		if len(spent) == 0 {
+			continue
+		}
+		sw := state.Sweep{Tree: txid, Vouts: spent, Crypt: crypt, Crypts: e.cryptsOf(crypt, txid, spent), Txid: by, RawHex: tx.Hex(),
+			BumpHex: mp.Hex(), Height: height, Submitted: true, Adopted: true}
+		// One this home built and gave up on is taken back as it is.
+		e.St.Sweeps = slices.DeleteFunc(e.St.Sweeps, func(x state.Sweep) bool { return x.Txid == by })
+		e.St.Sweeps = append(e.St.Sweeps, sw)
+		if err := e.St.Save(); err != nil {
+			return nil, err
+		}
+		e.note("funding tree %s: %d output(s) are already spent by %s, mined at height %d: it is taken as their sweep", Short(txid), len(spent), Short(by), height)
+		if err := e.FinishSweep(ctx); err != nil {
+			return nil, err
+		}
+	}
+	return left, nil
+}
+
+func chainhashOK(txid string) bool {
+	_, err := vread.Hash(txid)
+	return err == nil
 }
 
 // RetireTrees stops the home spending every secret tree it holds: after
@@ -229,11 +341,24 @@ func (e *Engine) FinishSweep(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := secrec.Admit(ctx, beef, nil, secrec.Host{Crypt: sw.Crypt, Headers: e.Legs.Headers, MaxSweepInputs: len(tx.Inputs)}); err != nil {
-		return fmt.Errorf("sweep %s breaks the host's rules (%s) and is not published: %w", Short(sw.Txid), secrec.Reason(err), err)
+	crypts := sw.Crypts
+	if len(crypts) == 0 {
+		crypts = []string{sw.Crypt}
 	}
-	p := state.Pending{Kind: state.KindSweep, Crypt: sw.Crypt, Txid: sw.Txid, Beef: hex.EncodeToString(beef),
-		Outpoint: fmt.Sprintf("%s.%d", sw.Tree, sw.Vouts[0]), NotBefore: e.Now().Add(e.Opts.Delay).Unix()}
+	admitted := true
+	for _, crypt := range crypts {
+		if _, err := secrec.Admit(ctx, beef, nil, secrec.Host{Crypt: crypt, Headers: e.Legs.Headers, MaxSweepInputs: len(tx.Inputs)}); err != nil {
+			if !sw.Adopted {
+				return fmt.Errorf("sweep %s breaks the host's rules (%s) and is not published: %w", Short(sw.Txid), secrec.Reason(err), err)
+			}
+			// A spend this home did not build may not be a sweep a host
+			// admits. It is mined all the same, so the outputs are spent;
+			// a reader finds that from a chain source.
+			e.note("the transaction %s that spends the outputs is not a sweep a host admits (%s): it is recorded and not published", Short(sw.Txid), secrec.Reason(err))
+			admitted = false
+			break
+		}
+	}
 	sw.Done = true
 	for vi := range e.St.Vaults {
 		v := &e.St.Vaults[vi]
@@ -246,7 +371,30 @@ func (e *Engine) FinishSweep(ctx context.Context) error {
 			}
 		}
 	}
-	return e.queue(ctx, p)
+	if !admitted {
+		return e.St.Save()
+	}
+	// The sweep is in the outbox for every crypt before it is published in
+	// any: a run that stops part way publishes the rest.
+	var ps []state.Pending
+	for _, crypt := range crypts {
+		p := state.Pending{Kind: state.KindSweep, Crypt: crypt, Txid: sw.Txid, Beef: hex.EncodeToString(beef),
+			Outpoint: fmt.Sprintf("%s.%d", sw.Tree, sw.Vouts[0]), NotBefore: e.Now().Add(e.Opts.Delay).Unix()}
+		if !e.St.Queued(p.Txid, p.Crypt) {
+			e.St.Outbox = append(e.St.Outbox, p)
+		}
+		ps = append(ps, p)
+	}
+	if err := e.St.Save(); err != nil {
+		return err
+	}
+	var first error
+	for _, p := range ps {
+		if err := e.queue(ctx, p); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
 }
 
 // SweptBy is the sweep that spends output vout of the funding tree txid,

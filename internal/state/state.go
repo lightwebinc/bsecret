@@ -281,7 +281,15 @@ type Sweep struct {
 	Tree  string   `json:"tree"`
 	Vouts []uint32 `json:"vouts"`
 	Crypt string   `json:"crypt"`
-	Txid  string   `json:"txid"`
+	// Crypts are every crypt the sweep is published in: Crypt, and every
+	// other crypt that holds a version funded by an output it spends. A
+	// funding tree is the identity's, not a crypt's.
+	Crypts []string `json:"crypts,omitempty"`
+	Txid   string   `json:"txid"`
+	// Adopted is set for a spend this home did not build, or built and
+	// gave up on: the node named it as the spender of an output, and the
+	// home took it as the sweep it is.
+	Adopted bool `json:"adopted,omitempty"`
 	// RawHex is the signed sweep; BumpHex and Height are set once it mined.
 	RawHex    string `json:"rawHex"`
 	BumpHex   string `json:"bumpHex,omitempty"`
@@ -383,13 +391,15 @@ func (s *State) AddCrypt(crypt string) {
 }
 
 // Done removes a published object from the outbox.
-func (s *State) Done(txid string) {
-	s.Outbox = slices.DeleteFunc(s.Outbox, func(p Pending) bool { return p.Txid == txid })
+func (s *State) Done(txid, crypt string) {
+	s.Outbox = slices.DeleteFunc(s.Outbox, func(p Pending) bool { return p.Txid == txid && p.Crypt == crypt })
 }
 
-// Queued reports whether txid is in the outbox.
-func (s *State) Queued(txid string) bool {
-	return slices.ContainsFunc(s.Outbox, func(p Pending) bool { return p.Txid == txid })
+// Queued reports whether txid is in the outbox for crypt. A sweep is
+// published in every crypt it retracts a version of, so an object is one
+// transaction in one crypt.
+func (s *State) Queued(txid, crypt string) bool {
+	return slices.ContainsFunc(s.Outbox, func(p Pending) bool { return p.Txid == txid && p.Crypt == crypt })
 }
 
 // InFlight is the sweep built and not yet finished, if there is one.

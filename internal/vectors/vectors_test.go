@@ -303,6 +303,11 @@ func TestVaultFile(t *testing.T) {
 			Label    string   `json:"label"`
 			Records  []string `json:"records"`
 			Statuses []string `json:"statuses"`
+			After    []struct {
+				Root  string `json:"root"`
+				Count int    `json:"count"`
+				Stale uint64 `json:"stale"`
+			} `json:"after"`
 		} `json:"fold"`
 	}
 	readJSON(t, "vault-v1.json", &f)
@@ -348,6 +353,18 @@ func TestVaultFile(t *testing.T) {
 			}
 			if st := ff.Apply(v); st != c.Statuses[i] {
 				t.Errorf("%s token %d: %s, want %s", c.Label, i, st, c.Statuses[i])
+			}
+			// The fold is atomic: a record that breaks it leaves the set
+			// of the record before it, which the file pins.
+			if len(c.After) != len(c.Records) {
+				t.Fatalf("%s: %d after-states for %d records", c.Label, len(c.After), len(c.Records))
+			}
+			root := secrec.SetRoot(ff.Set())
+			if a := c.After[i]; hx(root[:]) != a.Root || len(ff.Set()) != a.Count || ff.Stale() != a.Stale {
+				t.Errorf("%s token %d: the set after it is %x, %d secrets, %d stale; want %s, %d, %d", c.Label, i, root, len(ff.Set()), ff.Stale(), a.Root, a.Count, a.Stale)
+			}
+			if st := c.Statuses[i]; i > 0 && (st == secrec.StatusSetMismatch || st == secrec.StatusStaleMismatch) && c.After[i] != c.After[i-1] {
+				t.Errorf("%s token %d: a %s token changed the set", c.Label, i, st)
 			}
 		}
 	}

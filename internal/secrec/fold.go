@@ -76,7 +76,10 @@ type Event struct {
 // VaultFold folds a vault's chain from seq 0: the current set after each
 // token, the last version every identifier ever had, every commitment any
 // token listed, and the trail. Once a token breaks the fold the chain is
-// unusable from it on, and every later token reports the same status.
+// unusable from it on, and every later token reports the same status. A
+// token that breaks the fold changes nothing: the set, the versions, the
+// commitments and the trail stay those of the last token before it, which
+// is the set a host goes on answering (docs/spec.md section 11.2).
 type VaultFold struct {
 	set         map[[32]byte]Current
 	last        map[[32]byte]uint64
@@ -91,6 +94,27 @@ func NewVaultFold() *VaultFold {
 	return &VaultFold{set: map[[32]byte]Current{}, last: map[[32]byte]uint64{}, commitments: map[[32]byte]bool{}}
 }
 
+// Clone is a fold that goes on from here on its own: a branch, or a
+// transition tried before it is signed.
+func (f *VaultFold) Clone() *VaultFold {
+	c := &VaultFold{set: make(map[[32]byte]Current, len(f.set)), last: make(map[[32]byte]uint64, len(f.last)),
+		commitments: make(map[[32]byte]bool, len(f.commitments)), epoch: f.epoch, broken: f.broken,
+		trail: append([]Event(nil), f.trail...)}
+	for k, v := range f.set {
+		c.set[k] = v
+	}
+	for k, v := range f.last {
+		c.last[k] = v
+	}
+	for k := range f.commitments {
+		c.commitments[k] = true
+	}
+	return c
+}
+
+// Broken is the status that broke the fold, or "" while nothing has.
+func (f *VaultFold) Broken() string { return f.broken }
+
 // Apply folds the next token (the caller supplies them in seq order along
 // spends) and returns its status, the first that applies:
 //
@@ -102,63 +126,90 @@ func NewVaultFold() *VaultFold {
 //   - commitment-reuse: an entry's commitment is one an earlier token of the
 //     vault listed;
 //   - consistent.
+//
+// It is atomic: a token that breaks the fold is applied to a copy that is
+// then discarded, so nothing of it reaches the set.
 func (f *VaultFold) Apply(v *Vault) string {
 	if f.broken != "" {
 		return f.broken
 	}
 	fail := func(s string) string { f.broken = s; return s }
-	reuse := false
-	seen := func(c [32]byte) {
-		if f.commitments[c] {
-			reuse = true
-		}
-		f.commitments[c] = true
+	set := make(map[[32]byte]Current, len(f.set)+len(v.Create))
+	for k, c := range f.set {
+		set[k] = c
 	}
+	last := map[[32]byte]uint64{}
+	lastOf := func(id [32]byte) uint64 {
+		if n, ok := last[id]; ok {
+			return n
+		}
+		return f.last[id]
+	}
+	var trail []Event
+	reuse := false
 	for _, id := range v.Retire {
-		c, ok := f.set[id]
+		c, ok := set[id]
 		if !ok {
 			return fail(StatusSetMismatch)
 		}
-		delete(f.set, id)
-		f.trail = append(f.trail, Event{Seq: v.Seq, Kind: "retire", ID: id, Version: c.Version, Epoch: v.Epoch, FromEpoch: c.Epoch})
+		delete(set, id)
+		trail = append(trail, Event{Seq: v.Seq, Kind: "retire", ID: id, Version: c.Version, Epoch: v.Epoch, FromEpoch: c.Epoch})
 	}
 	for _, e := range v.Update {
-		c, ok := f.set[e.ID]
-		if !ok || e.Version <= f.last[e.ID] {
+		c, ok := set[e.ID]
+		if !ok || e.Version <= lastOf(e.ID) {
 			return fail(StatusSetMismatch)
 		}
 		kind := "update"
 		if c.Epoch < v.Epoch {
 			kind = "rekey"
 		}
-		f.trail = append(f.trail, Event{Seq: v.Seq, Kind: kind, ID: e.ID, Version: e.Version, ContentID: e.ContentID, Epoch: v.Epoch, FromEpoch: c.Epoch})
-		f.set[e.ID] = Current{ID: e.ID, Version: e.Version, ContentID: e.ContentID, Epoch: v.Epoch, Seq: v.Seq}
-		f.last[e.ID] = e.Version
-		seen(e.Commitment)
+		trail = append(trail, Event{Seq: v.Seq, Kind: kind, ID: e.ID, Version: e.Version, ContentID: e.ContentID, Epoch: v.Epoch, FromEpoch: c.Epoch})
+		set[e.ID] = Current{ID: e.ID, Version: e.Version, ContentID: e.ContentID, Epoch: v.Epoch, Seq: v.Seq}
+		last[e.ID] = e.Version
+		reuse = reuse || f.commitments[e.Commitment]
 	}
 	for _, e := range v.Create {
-		if _, ok := f.set[e.ID]; ok || e.Version <= f.last[e.ID] {
+		if _, ok := set[e.ID]; ok || e.Version <= lastOf(e.ID) {
 			return fail(StatusSetMismatch)
 		}
-		f.trail = append(f.trail, Event{Seq: v.Seq, Kind: "create", ID: e.ID, Version: e.Version, ContentID: e.ContentID, Epoch: v.Epoch})
-		f.set[e.ID] = Current{ID: e.ID, Version: e.Version, ContentID: e.ContentID, Epoch: v.Epoch, Seq: v.Seq}
-		f.last[e.ID] = e.Version
-		seen(e.Commitment)
+		trail = append(trail, Event{Seq: v.Seq, Kind: "create", ID: e.ID, Version: e.Version, ContentID: e.ContentID, Epoch: v.Epoch})
+		set[e.ID] = Current{ID: e.ID, Version: e.Version, ContentID: e.ContentID, Epoch: v.Epoch, Seq: v.Seq}
+		last[e.ID] = e.Version
+		reuse = reuse || f.commitments[e.Commitment]
 	}
-	f.epoch = v.Epoch
-	if uint64(len(f.set)) != v.Count || SetRoot(f.Set()) != v.Root {
+	now := make([]Current, 0, len(set))
+	var stale uint64
+	for _, c := range set {
+		now = append(now, c)
+		if c.Epoch < v.Epoch {
+			stale++
+		}
+	}
+	if uint64(len(set)) != v.Count || SetRoot(now) != v.Root {
 		return fail(StatusSetMismatch)
 	}
-	if f.Stale() != v.Stale {
+	if stale != v.Stale {
 		return fail(StatusStaleMismatch)
 	}
+	f.set, f.epoch = set, v.Epoch
+	for id, n := range last {
+		f.last[id] = n
+	}
+	for _, l := range [][]Entry{v.Create, v.Update} {
+		for _, e := range l {
+			f.commitments[e.Commitment] = true
+		}
+	}
+	f.trail = append(f.trail, trail...)
 	if reuse {
 		return StatusCommitmentReuse
 	}
 	return StatusConsistent
 }
 
-// Set is the current set after the last token folded, ascending by id.
+// Set is the current set after the last token that did not break the fold,
+// ascending by id.
 func (f *VaultFold) Set() []Current {
 	out := make([]Current, 0, len(f.set))
 	for _, c := range f.set {
@@ -168,7 +219,7 @@ func (f *VaultFold) Set() []Current {
 }
 
 // Stale is the number of secrets in the set keyed under an epoch before the
-// one the last token folded acknowledges.
+// one the last token that did not break the fold acknowledges.
 func (f *VaultFold) Stale() uint64 {
 	var n uint64
 	for _, c := range f.set {
@@ -179,7 +230,8 @@ func (f *VaultFold) Stale() uint64 {
 	return n
 }
 
-// Trail is every event folded so far, in order.
+// Trail is every event folded so far, in order; a token that broke the
+// fold adds none.
 func (f *VaultFold) Trail() []Event { return f.trail }
 
 // Mined is one vault token as an auditor holds it: its record, the txid of

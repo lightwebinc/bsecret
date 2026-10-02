@@ -200,7 +200,16 @@ test('vault-v1: the chain folds, every transition verdict, every fold case', () 
   }
   for (const c of vaultFile.fold) {
     const f = new VaultFold()
-    for (const [i, r] of c.records.entries()) assert.equal(f.apply(decodeVault(fromHex(r))), c.statuses[i], `${c.label} token ${i}`)
+    assert.equal(c.after.length, c.records.length, c.label)
+    for (const [i, r] of c.records.entries()) {
+      assert.equal(f.apply(decodeVault(fromHex(r))), c.statuses[i], `${c.label} token ${i}`)
+      // The fold is atomic: a record that breaks it leaves the set of the
+      // record before it, and both codecs reach the same set.
+      const a = c.after[i]!
+      assert.equal(hex(setRoot(f.setNow())), a.root, `${c.label} token ${i} root`)
+      assert.equal(f.setNow().length, a.count, `${c.label} token ${i} count`)
+      assert.equal(f.stale(), a.stale, `${c.label} token ${i} stale`)
+    }
   }
 })
 

@@ -17,6 +17,23 @@
         "consistent",
         "set-mismatch",
         "set-mismatch"
+      ],
+      "after": [
+        {
+          "root": "e27a68696dff61eff6aff238ba40b3770963ee9696458d9d39a5d168e78a96b3",
+          "count": 2,
+          "stale": 0
+        },
+        {
+          "root": "e27a68696dff61eff6aff238ba40b3770963ee9696458d9d39a5d168e78a96b3",
+          "count": 2,
+          "stale": 0
+        },
+        {
+          "root": "e27a68696dff61eff6aff238ba40b3770963ee9696458d9d39a5d168e78a96b3",
+          "count": 2,
+          "stale": 0
+        }
       ]
     },
     {
@@ -28,6 +45,18 @@
       "statuses": [
         "consistent",
         "set-mismatch"
+      ],
+      "after": [
+        {
+          "root": "e27a68696dff61eff6aff238ba40b3770963ee9696458d9d39a5d168e78a96b3",
+          "count": 2,
+          "stale": 0
+        },
+        {
+          "root": "e27a68696dff61eff6aff238ba40b3770963ee9696458d9d39a5d168e78a96b3",
+          "count": 2,
+          "stale": 0
+        }
       ]
     },
     {
@@ -39,6 +68,18 @@
       "statuses": [
         "consistent",
         "set-mismatch"
+      ],
+      "after": [
+        {
+          "root": "e27a68696dff61eff6aff238ba40b3770963ee9696458d9d39a5d168e78a96b3",
+          "count": 2,
+          "stale": 0
+        },
+        {
+          "root": "e27a68696dff61eff6aff238ba40b3770963ee9696458d9d39a5d168e78a96b3",
+          "count": 2,
+          "stale": 0
+        }
       ]
     },
     {
@@ -50,6 +91,18 @@
       "statuses": [
         "consistent",
         "set-mismatch"
+      ],
+      "after": [
+        {
+          "root": "e27a68696dff61eff6aff238ba40b3770963ee9696458d9d39a5d168e78a96b3",
+          "count": 2,
+          "stale": 0
+        },
+        {
+          "root": "e27a68696dff61eff6aff238ba40b3770963ee9696458d9d39a5d168e78a96b3",
+          "count": 2,
+          "stale": 0
+        }
       ]
     },
     {
@@ -69,6 +122,38 @@
         "consistent",
         "consistent",
         "set-mismatch"
+      ],
+      "after": [
+        {
+          "root": "e27a68696dff61eff6aff238ba40b3770963ee9696458d9d39a5d168e78a96b3",
+          "count": 2,
+          "stale": 0
+        },
+        {
+          "root": "f24c7c69c78f681035a8ce0973df9dd64a4a88c9c9e9b0223812d8e8761e423d",
+          "count": 2,
+          "stale": 0
+        },
+        {
+          "root": "4cc1e15f9001d1c78e13e77c67b85d022faee9a499050eae255e1cb241b2b478",
+          "count": 3,
+          "stale": 0
+        },
+        {
+          "root": "5a2d999f5257cb5f1f6078b4bf8a0128dcf632a983ebed5bd440b4d27354abb9",
+          "count": 3,
+          "stale": 2
+        },
+        {
+          "root": "03533c33dc4e964936d409d1c51305c5acee9f410cb4e9168d0bd6adcc4984bf",
+          "count": 2,
+          "stale": 0
+        },
+        {
+          "root": "03533c33dc4e964936d409d1c51305c5acee9f410cb4e9168d0bd6adcc4984bf",
+          "count": 2,
+          "stale": 0
+        }
       ]
     },
     {
@@ -86,6 +171,33 @@
         "consistent",
         "consistent",
         "stale-mismatch"
+      ],
+      "after": [
+        {
+          "root": "e27a68696dff61eff6aff238ba40b3770963ee9696458d9d39a5d168e78a96b3",
+          "count": 2,
+          "stale": 0
+        },
+        {
+          "root": "f24c7c69c78f681035a8ce0973df9dd64a4a88c9c9e9b0223812d8e8761e423d",
+          "count": 2,
+          "stale": 0
+        },
+        {
+          "root": "4cc1e15f9001d1c78e13e77c67b85d022faee9a499050eae255e1cb241b2b478",
+          "count": 3,
+          "stale": 0
+        },
+        {
+          "root": "5a2d999f5257cb5f1f6078b4bf8a0128dcf632a983ebed5bd440b4d27354abb9",
+          "count": 3,
+          "stale": 2
+        },
+        {
+          "root": "5a2d999f5257cb5f1f6078b4bf8a0128dcf632a983ebed5bd440b4d27354abb9",
+          "count": 3,
+          "stale": 2
+        }
       ]
     },
     {
@@ -97,6 +209,18 @@
       "statuses": [
         "consistent",
         "commitment-reuse"
+      ],
+      "after": [
+        {
+          "root": "e27a68696dff61eff6aff238ba40b3770963ee9696458d9d39a5d168e78a96b3",
+          "count": 2,
+          "stale": 0
+        },
+        {
+          "root": "31697d762fefa8f73a23f8329984dab914dd84c90cdc7060a287ae6f9c44197d",
+          "count": 2,
+          "stale": 0
+        }
       ]
     },
     {
@@ -116,6 +240,38 @@
         "consistent",
         "consistent",
         "consistent"
+      ],
+      "after": [
+        {
+          "root": "e27a68696dff61eff6aff238ba40b3770963ee9696458d9d39a5d168e78a96b3",
+          "count": 2,
+          "stale": 0
+        },
+        {
+          "root": "f24c7c69c78f681035a8ce0973df9dd64a4a88c9c9e9b0223812d8e8761e423d",
+          "count": 2,
+          "stale": 0
+        },
+        {
+          "root": "4cc1e15f9001d1c78e13e77c67b85d022faee9a499050eae255e1cb241b2b478",
+          "count": 3,
+          "stale": 0
+        },
+        {
+          "root": "5a2d999f5257cb5f1f6078b4bf8a0128dcf632a983ebed5bd440b4d27354abb9",
+          "count": 3,
+          "stale": 2
+        },
+        {
+          "root": "03533c33dc4e964936d409d1c51305c5acee9f410cb4e9168d0bd6adcc4984bf",
+          "count": 2,
+          "stale": 0
+        },
+        {
+          "root": "b107a4828da35d663b9d8ae9c819d35ff605ccf5e4c9602f220964d40e0db91c",
+          "count": 3,
+          "stale": 0
+        }
       ]
     }
   ],
@@ -186,7 +342,7 @@
     "restricted"
   ],
   "leafRule": "leaf datum SHA-256(id || version as eight bytes big-endian || content id); RFC 6962 over the leaves in ascending order of id",
-  "note": "standInTxid is a fixed stand-in for the mined token's txid that the next token's prev names, in hash byte order; height is the example block height the audit vector uses. Each refused transition is one change to an admitted one and is refused by a host against the predecessor named in from. The fold cases are chains every host admits token by token and the index reports.",
+  "note": "standInTxid is a fixed stand-in for the mined token's txid that the next token's prev names, in hash byte order; height is the example block height the audit vector uses. Each refused transition is one change to an admitted one and is refused by a host against the predecessor named in from. The fold cases are chains every host admits token by token and the index reports; after is the set the fold holds once each record is applied (its root, its size and how many of it are stale), and a record that breaks the fold leaves it as the record before left it.",
   "records": [
     {
       "label": "create the vault: two secrets, epoch 0",

@@ -271,10 +271,22 @@ func genVault(s *Scenario, files map[string][]byte) error {
 	}
 
 	// Fold: chains every host admits token by token and the index reports.
+	// after is the fold's set once a record is applied: for a record that
+	// breaks the fold, the set of the last token before it, unchanged.
+	type after struct {
+		Root  string `json:"root"`
+		Count int    `json:"count"`
+		Stale uint64 `json:"stale"`
+	}
 	type fv struct {
 		Label    string   `json:"label"`
 		Records  []string `json:"records"`
 		Statuses []string `json:"statuses"`
+		After    []after  `json:"after"`
+	}
+	afterOf := func(f *secrec.VaultFold) after {
+		root := secrec.SetRoot(f.Set())
+		return after{Root: hx(root[:]), Count: len(f.Set()), Stale: f.Stale()}
 	}
 	var folds []fv
 	fold := func(lbl string, upTo int, build func(pred *secrec.Vault, set map[[32]byte]secrec.Current) *secrec.Vault, want string, more ...func(pred *secrec.Vault, set map[[32]byte]secrec.Current) *secrec.Vault) error {
@@ -283,6 +295,7 @@ func genVault(s *Scenario, files map[string][]byte) error {
 		for i := 0; i <= upTo; i++ {
 			x.Statuses = append(x.Statuses, ff.Apply(s.Vaults[i]))
 			x.Records = append(x.Records, hx(s.VaultRecs[i]))
+			x.After = append(x.After, afterOf(ff))
 		}
 		pred, predTx := s.Vaults[upTo], s.VaultTxids[upTo]
 		set := map[[32]byte]secrec.Current{}
@@ -298,9 +311,14 @@ func genVault(s *Scenario, files map[string][]byte) error {
 			if err := secrec.CheckVaultTransition(pred, predTx, next); err != nil {
 				return fmt.Errorf("fold %q: a host would refuse the token: %w", lbl, err)
 			}
+			before := afterOf(ff)
 			st := ff.Apply(next)
 			x.Statuses = append(x.Statuses, st)
 			x.Records = append(x.Records, hx(raw))
+			x.After = append(x.After, afterOf(ff))
+			if (st == secrec.StatusSetMismatch || st == secrec.StatusStaleMismatch) && afterOf(ff) != before {
+				return fmt.Errorf("fold %q: a token that broke the fold changed the set", lbl)
+			}
 			if n == 0 && st != want {
 				return fmt.Errorf("fold %q: %s, want %s", lbl, st, want)
 			}
@@ -471,7 +489,7 @@ func genVault(s *Scenario, files map[string][]byte) error {
 	return put(files, "vault-v1.json", map[string]any{
 		"note": "standInTxid is a fixed stand-in for the mined token's txid that the next token's prev names, in hash byte order; height is the " +
 			"example block height the audit vector uses. Each refused transition is one change to an admitted one and is refused by a host against " +
-			"the predecessor named in from. The fold cases are chains every host admits token by token and the index reports.",
+			"the predecessor named in from. The fold cases are chains every host admits token by token and the index reports; after is the set the fold holds once each record is applied (its root, its size and how many of it are stale), and a record that breaks the fold leaves it as the record before left it.",
 		"vault":       hx(s.VaultID[:]),
 		"labels":      s.Labels,
 		"anchor":      secrec.AnchorVersion,

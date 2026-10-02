@@ -300,7 +300,7 @@ func TestAForeignCarrierMovesNoCursor(t *testing.T) {
 	if !strings.Contains(r.stdout, "db/password  version 1") || !strings.Contains(r.stderr, "another owner or vault") {
 		t.Fatalf("list: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
 	}
-	if asked := h.a.Questions("secrets") + h.a.Questions("secrets-after") - before; asked > 2 {
+	if asked := h.a.Questions("secrets") + h.a.Questions("secrets-after") - before; asked != 2 {
 		t.Fatalf("the host walked the reader through %d pages", asked)
 	}
 }

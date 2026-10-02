@@ -57,7 +57,7 @@ func cmdFill(ctx context.Context, g *global, args []string) error {
 	cv, err := t.rd.Chain(ctx, t.crypt, t.org, t.vault)
 	if err != nil {
 		if errors.Is(err, vread.ErrNoChain) {
-			return incomplete("vault %s: %v", vread.Short(t.vaultHex()), err)
+			return g.noChain(t, cv, err)
 		}
 		return err
 	}

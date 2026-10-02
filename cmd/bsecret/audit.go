@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/lightwebinc/bcommon/lookup"
+	"github.com/lightwebinc/bcommon/purse"
 	"github.com/lightwebinc/bcommon/termsafe"
 
 	"github.com/lightwebinc/borg/reader"
@@ -53,8 +54,12 @@ the latest (it says which token that is, and what the node says of it);
 that a listed version's record is what the token says; which key a wrap is
 under; that a value changed; who read what.
 
-Exit 0 the trail verifies; 1 the audit fails; 3 the hosts disagree or one
-could not be asked.`
+With -json the report is the only thing written to standard output: a
+payment made is then reported on standard error.
+
+Exit 0 the trail verifies; 1 the audit fails; 2 a page costs more than
+-max-sats or what is left of -budget (what was paid for the pages before
+is spent); 3 the hosts disagree or one could not be asked.`
 
 type auditToken struct {
 	Seq    uint64 `json:"seq"`
@@ -137,6 +142,10 @@ func cmdAudit(ctx context.Context, g *global, args []string) error {
 	} else if len(pos) > 0 {
 		return usage("audit takes no arguments")
 	}
+	if *asJSON {
+		// Standard output is the report and nothing else.
+		g.report = g.stderr
+	}
 	t, err := g.readTarget(ctx, true)
 	if err != nil {
 		return err
@@ -150,7 +159,7 @@ func cmdAudit(ctx context.Context, g *global, args []string) error {
 	if *free || base == "" {
 		if cv, err = t.rd.Chain(ctx, t.crypt, t.org, t.vault); err != nil {
 			if errors.Is(err, vread.ErrNoChain) {
-				return incomplete("vault %s: %v: an empty answer proves nothing", vread.Short(t.vaultHex()), err)
+				return g.noChain(t, cv, err)
 			}
 			return err
 		}
@@ -340,8 +349,13 @@ func (g *global) paidTrail(ctx context.Context, t *target, base string, b *budge
 		if err != nil {
 			return nil, fmt.Errorf("%w; the trail is not complete (a larger -budget, or -free to read it token by token at no price)", err)
 		}
+		before := b.spent
 		outs, paid, err := g.askWithin(ctx, h, t.rd.Headers, base, q, per, b.bound())
 		b.paid(paid)
+		if err != nil && before > 0 && errors.Is(err, purse.ErrOverMaxPay) {
+			// A page the budget cannot pay, after pages it did pay for.
+			return outs, fmt.Errorf("%w; the trail is not complete, and the %d sat paid for the page(s) before are spent (a larger -budget, or -free to read it token by token at no price)", err, before)
+		}
 		return outs, err
 	}, func(beef []byte) (*vread.Tok, error) {
 		return t.rd.Token(ctx, beef, t.crypt, t.org, &t.vault)

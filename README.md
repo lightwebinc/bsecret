@@ -42,7 +42,7 @@ does anything else.
 | Look up a command, a setting or an exit code | [docs/usage.md](docs/usage.md) |
 | Implement a compatible owner, reader, auditor or host | [docs/spec.md](docs/spec.md) (the specification) |
 | Know what cannot change once published | [docs/frozen.md](docs/frozen.md) |
-| Know the defaults and caps, and why each is set where it is | [docs/limits.md](docs/limits.md) |
+| Know the defaults and caps, why each is set where it is, what was measured, and what it does not do | [docs/limits.md](docs/limits.md) |
 | Run an overlay host that carries a crypt | [docs/host.md](docs/host.md) |
 
 ## The command

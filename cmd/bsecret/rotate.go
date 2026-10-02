@@ -153,6 +153,9 @@ func cmdRotate(ctx context.Context, g *global, args []string) error {
 		if err != nil {
 			return refused("not ready: %v", err)
 		}
+		if err := w.eng.Readable(ctx, wr, owes, plan); err != nil {
+			return refused("not ready: %v", err)
+		}
 		when := fmt.Sprintf("the group is at epoch %d and the vault at epoch %d", target, wr.Pred.Epoch)
 		if hypothetical {
 			when = "were the group to begin a new epoch now"

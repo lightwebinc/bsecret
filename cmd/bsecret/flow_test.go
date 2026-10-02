@@ -402,14 +402,26 @@ func TestLargeSecretByHash(t *testing.T) {
 	// With no content directory a large secret cannot be written.
 	delete(h.env, "BSECRET_CONTENT")
 	h.want(h.run("org", big, "put", "blob/other"), exitUsage, "no content directory is configured")
-	// A same-value re-keying of a large secret needs its ciphertext too.
+	// A same-value re-keying of a large secret needs its ciphertext too,
+	// and a rotation that cannot read it is not begun: nothing is built
+	// for any secret, and the readiness check says so before the removal.
+	if err := h.borg.Rotate(h.group); err != nil {
+		t.Fatal(err)
+	}
+	h.want(h.run("org", "", "rotate", "-check", "-same-all"), exitRefused, "not ready: blob/archive: its value could not be read for a same-value re-keying")
+	r = h.run("org", "", "rotate", "-same-all")
+	h.want(r, exitUsage, "its value could not be read for a same-value re-keying")
+	if !strings.Contains(r.stderr, "nothing was built") || strings.Contains(r.stdout, "rekeyed ") {
+		t.Fatalf("a rotation that cannot be finished was begun:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if d := h.must("org", "doctor"); strings.Contains(d.stdout, "published and not listed") || strings.Contains(d.stdout, "outbox      ") {
+		t.Fatalf("a rotation that cannot be finished left something behind:\n%s", d.stdout)
+	}
 	h.env["BSECRET_CONTENT"] = filepath.Join(h.dir, "content")
 	if err := os.WriteFile(m[1], raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.borg.Rotate(h.group); err != nil {
-		t.Fatal(err)
-	}
+	h.must("org", "rotate", "-check", "-same-all")
 	h.must("org", "rotate", "-same-all")
 	if r := h.must("alice", "get", "blob/archive"); r.stdout != big || !strings.Contains(r.stderr, "version 2") {
 		t.Fatalf("after the re-keying: %d bytes\n%s", len(r.stdout), r.stderr)
@@ -1281,7 +1293,11 @@ func TestStaleProofsAreReplaced(t *testing.T) {
 	// With no chain source there is nothing to replace them with: nothing
 	// verifies, and nothing is taken.
 	delete(h.env, "BSECRET_ASSET")
-	h.want(h.run("bob", "", "get", "db/password"), exitIncomplete, "no host answers this vault")
+	r := h.run("bob", "", "get", "db/password")
+	h.want(r, exitIncomplete, "none verifies against the header source")
+	if !strings.Contains(r.stderr, "host "+h.aS.URL+": REFUSED token") || !strings.Contains(r.stderr, "replaced only from a node (config key asset)") {
+		t.Fatalf("stale proofs and no chain source:\n%s", r.stderr)
+	}
 	h.env["BSECRET_ASSET"] = h.chainS.URL
 	h.a.Stale, h.b.Stale = false, false
 
@@ -1317,7 +1333,7 @@ func TestStaleProofsAreReplaced(t *testing.T) {
 	if err := os.WriteFile(path, out, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	r := h.put("db/password", "two")
+	r = h.put("db/password", "two")
 	if !strings.Contains(r.stderr, "the node's current proof") {
 		t.Fatalf("a put from a home with stale proofs:\n%s\n%s", r.stdout, r.stderr)
 	}

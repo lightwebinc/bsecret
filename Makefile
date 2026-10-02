@@ -37,11 +37,14 @@ verify: fmt-check vet deps-check licences ts-check vectors-check test
 # Go and TypeScript. The Go tests read the TypeScript-written vectors under
 # testdata/ts, and the TypeScript tests read the Go-generated ones under
 # testdata/vectors: each side decodes, opens, folds and admits the other's
-# bytes.
+# bytes. One test takes a vault to 65 tokens, a second page of the
+# audit class, which the race detector makes too slow: it is skipped under
+# -race and run once without it.
 test: go-test ts-test
 
 go-test:
 	GOWORK=off go test -race -count=2 ./...
+	GOWORK=off go test -count=1 -run 'TestABudgetRunsOutBetweenPages$$' ./cmd/bsecret/
 
 # The e2e build tag is vetted too, so the client end to end compiles.
 vet:

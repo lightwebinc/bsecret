@@ -179,7 +179,7 @@ func (g *global) askWithin(ctx context.Context, h *home, hc chaintracker.ChainTr
 	case once.tx == nil:
 		// No payment was made: there is nothing to keep.
 	case answered && paid != "":
-		fmt.Fprintf(g.stdout, "paid %s sat to %s in %s for %s, recorded by the host for its payee to settle\n", termsafe.Abbrev(paid),
+		fmt.Fprintf(g.paidTo(), "paid %s sat to %s in %s for %s, recorded by the host for its payee to settle\n", termsafe.Abbrev(paid),
 			termsafe.Abbrev(payee), once.tx.TxID(), qq.Class.Name)
 		g.broadcastPayment(ctx, p, once.tx)
 	default:

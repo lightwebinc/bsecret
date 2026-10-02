@@ -21,6 +21,7 @@ import (
 	"github.com/lightwebinc/borg/reader"
 
 	"github.com/lightwebinc/bsecret/internal/engine"
+	"github.com/lightwebinc/bsecret/internal/limits"
 	"github.com/lightwebinc/bsecret/internal/secrec"
 	"github.com/lightwebinc/bsecret/internal/state"
 	"github.com/lightwebinc/bsecret/internal/testhost"
@@ -491,6 +492,17 @@ func TestAnAuditOverItsBudgetPaysNothing(t *testing.T) {
 	}
 	if r := h.must("auditor", "audit", "-budget", "20"); !strings.Contains(r.stdout, "paid 20 sat") || !strings.Contains(r.stdout, "audit   OK") {
 		t.Fatalf("an audit within its budget:\n%s\n%s", r.stdout, r.stderr)
+	}
+	// With -json standard output is the report alone: a program reads it.
+	r = h.must("auditor", "audit", "-json")
+	var rep struct {
+		OK     bool `json:"ok"`
+		Tokens []struct {
+			Seq uint64 `json:"seq"`
+		} `json:"tokens"`
+	}
+	if err := json.Unmarshal([]byte(r.stdout), &rep); err != nil || !rep.OK || len(rep.Tokens) == 0 || !strings.Contains(r.stderr, "paid 20 sat") {
+		t.Fatalf("a paid audit -json: %v\n%s\n%s", err, r.stdout, r.stderr)
 	}
 }
 
@@ -1006,5 +1018,44 @@ func TestAHostSubstitutingACarrierIsNamed(t *testing.T) {
 	r = h.run("alice", "", "get", "db/password")
 	if r.code != exitRefused || r.stdout != "" || !strings.Contains(r.stderr, "listing: the set holds version 2 of the secret, and the host answered version 1") {
 		t.Fatalf("every host answers the version before: exit %d %q\n%s", r.code, r.stdout, r.stderr)
+	}
+}
+
+// A trail of more pages than the budget pays for: the pages before are
+// paid, the command stops at the page it may not pay, says the trail is
+// not complete and that what it paid is spent, and exits 2. A budget that
+// covers every page reads the whole trail, one payment a page. A page of
+// the audit class is 64 tokens, so the vault is taken to 65.
+func TestABudgetRunsOutBetweenPages(t *testing.T) {
+	if testing.Short() || raceDetector {
+		// The stand-in hosts fold the whole chain again after every
+		// admission, which the race detector makes too slow for a chain
+		// of 65 tokens: make go-test runs this test once without it.
+		t.Skip("64 versions of a secret: run without -race and without -short")
+	}
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	for i := 1; i <= limits.TokenPage; i++ {
+		h.put("db/password", fmt.Sprintf("value %d", i))
+	}
+	h.identity("payee", false)
+	h.startPaid("payee", map[string]uint64{"audit": 20, "audit-after": 20})
+	h.identity("auditor", true)
+	paid := func(r result) int { return strings.Count(r.stdout, "paid 20 sat to ") }
+	r := h.run("auditor", "", "audit", "-budget", "20")
+	if r.code != exitUsage || paid(r) != 1 || strings.Contains(r.stdout, "audit   OK") ||
+		!strings.Contains(r.stderr, "this command has paid 20 sat, its budget (-budget): it pays for no further question; the trail is not complete") {
+		t.Fatalf("a budget of one page against a trail of two: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	r = h.run("auditor", "", "audit", "-budget", "30")
+	if r.code != exitUsage || paid(r) != 1 || strings.Contains(r.stdout, "audit   OK") ||
+		!strings.Contains(r.stderr, "more than the 10 this command may pay (what is left of -budget)") ||
+		!strings.Contains(r.stderr, "the trail is not complete, and the 20 sat paid for the page(s) before are spent") {
+		t.Fatalf("a budget of a page and a half: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	r = h.must("auditor", "audit", "-budget", "40")
+	if paid(r) != 2 || !strings.Contains(r.stdout, " for audit-after,") || !strings.Contains(r.stdout, fmt.Sprintf("audit   OK: %d token(s)", limits.TokenPage+1)) {
+		t.Fatalf("a budget of two pages:\n%s\n%s", r.stdout, r.stderr)
 	}
 }

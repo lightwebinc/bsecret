@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/bsv-blockchain/go-sdk/transaction"
 )
@@ -240,34 +241,46 @@ func CheckNextToken(prev *transaction.Transaction, prevToken *VaultToken, next *
 // that holds no well-formed token is not rooted.
 func Rooted(txs []*transaction.Transaction) map[[32]byte]bool {
 	type held struct {
+		id  [32]byte
 		tx  *transaction.Transaction
 		tok *VaultToken
 	}
-	var all []held
+	bySeq := map[uint64][]*held{}
+	var seqs []uint64
 	rooted := map[[32]byte]bool{}
 	for _, tx := range txs {
 		tok, err := ReadToken(tx)
 		if err != nil {
 			continue
 		}
-		all = append(all, held{tx, tok})
+		h := &held{[32]byte(*tx.TxID()), tx, tok}
 		if _, _, err := CheckFirstToken(tx); err == nil {
-			rooted[[32]byte(*tx.TxID())] = true
+			rooted[h.id] = true
 		}
+		seq := tok.Vault.Seq
+		if _, ok := bySeq[seq]; !ok {
+			seqs = append(seqs, seq)
+		}
+		bySeq[seq] = append(bySeq[seq], h)
 	}
-	for grew := true; grew; {
-		grew = false
-		for _, h := range all {
-			id := [32]byte(*h.tx.TxID())
-			if rooted[id] {
+	// A token is rooted by a rooted token at the seq before its own, so one
+	// pass in seq order decides every token: by the time a seq is reached,
+	// the seq before it is settled.
+	slices.Sort(seqs)
+	for _, s := range seqs {
+		if s == 0 {
+			continue
+		}
+		for _, h := range bySeq[s] {
+			if rooted[h.id] {
 				continue
 			}
-			for _, p := range all {
-				if !rooted[[32]byte(*p.tx.TxID())] || p.tok.Vault.Seq+1 != h.tok.Vault.Seq {
+			for _, p := range bySeq[s-1] {
+				if !rooted[p.id] {
 					continue
 				}
 				if _, err := CheckNextToken(p.tx, p.tok, h.tx); err == nil {
-					rooted[id], grew = true, true
+					rooted[h.id] = true
 					break
 				}
 			}

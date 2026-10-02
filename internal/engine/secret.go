@@ -538,6 +538,32 @@ func (e *Engine) valueOf(ctx context.Context, x *state.SecretVersion) (*secrec.P
 	return secrec.ReadAsOwner(ctx, e.Signer, rec, ct)
 }
 
+// Readable holds a plan to what its same-value re-keyings need: the value
+// of each secret re-keyed as it is, read from the version the new one
+// follows, through this home's own wrap and, for a secret kept by its
+// hash, a content source. It returns the first that cannot be read, so
+// that a rotation that cannot be finished is not begun: a carrier
+// published for one secret while another's value cannot be read is a
+// funding output spent on a version no token will list.
+func (e *Engine) Readable(ctx context.Context, w *Writer, owes []Stale, plan map[string]Choice) error {
+	for _, s := range owes {
+		if !plan[s.Key()].Same {
+			continue
+		}
+		after, err := e.predecessor(w, s.ID, true)
+		if err != nil {
+			return err
+		}
+		if after == nil {
+			return fmt.Errorf("%s: this home holds no record of the version the set holds: run `bsecret sync`", s.Key())
+		}
+		if _, err := e.valueOf(ctx, after); err != nil {
+			return fmt.Errorf("%s: its value could not be read for a same-value re-keying: %w", s.Key(), err)
+		}
+	}
+	return nil
+}
+
 // Rotate acknowledges the group's latest epoch and re-keys or retires
 // everything the vault held under an earlier one (spec section 8.2), in as
 // many tokens as it takes at 64 changes a token, one a block: the
@@ -564,6 +590,9 @@ func (e *Engine) Rotate(ctx context.Context, w *Writer, plan map[string]Choice, 
 	}
 	if len(ignored) > 0 {
 		e.note("nothing is owed for %v (already under epoch %d, or no longer in the vault): left as they are", ignored, target.Epoch)
+	}
+	if err := e.Readable(ctx, w, owes, plan); err != nil {
+		return nil, fmt.Errorf("%w; nothing was built", err)
 	}
 	missing, err := vread.WrapsMissing(ctx, e.Legs.Groups, w.Group, target.Epoch)
 	if err != nil {

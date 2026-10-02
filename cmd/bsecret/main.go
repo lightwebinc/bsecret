@@ -166,6 +166,18 @@ type global struct {
 	// terminal reports whether standard output is a terminal: a secret's
 	// value is never written to one unless asked.
 	terminal bool
+	// report is where a payment made is reported: standard output, or
+	// standard error for a command whose standard output is a document a
+	// program reads (audit -json).
+	report io.Writer
+}
+
+// paidTo is where a payment made is reported.
+func (g *global) paidTo() io.Writer {
+	if g.report != nil {
+		return g.report
+	}
+	return g.stdout
 }
 
 // say writes a note to standard error. A note may quote what a host, a

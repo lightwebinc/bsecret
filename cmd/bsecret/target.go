@@ -136,6 +136,26 @@ func hasName(names map[string]string, want string) bool {
 	return false
 }
 
+// noChain is the exit of a read that established no chain for the vault.
+// An empty answer proves nothing. Tokens that were answered and did not
+// verify are another matter: the hosts answered, and nothing they answered
+// holds against this reader's headers, which is as likely this reader's
+// header source as the hosts. Each is named, with the reason.
+func (g *global) noChain(t *target, v *vread.ChainView, err error) error {
+	if v != nil {
+		for h, e := range v.HostErr {
+			g.say("host %s: NOT ASKED: %s", h, firstLine(e.Error()))
+		}
+		for _, r := range v.Refused {
+			g.say("host %s: REFUSED token %s (%s): %v", r.Host, termsafe.Abbrev(r.Txid), r.Reason, r.Err)
+		}
+		if n := len(v.Refused); n > 0 {
+			return incomplete("vault %s: the hosts answered %d token(s) and none verifies against the header source %s: nothing is established. A header source that does not answer fails every answer the same way (bsecret doctor), and a proof a reorganisation displaced is replaced only from a node (config key asset)", vread.Short(t.vaultHex()), n, g.cfg.HeaderURL)
+		}
+	}
+	return incomplete("vault %s: %v: an empty answer proves nothing", vread.Short(t.vaultHex()), err)
+}
+
 // reportChain prints how the hosts' answers compare with the canonical
 // chain, and returns a problem when they disagree or one refused.
 func (g *global) reportChain(v *vread.ChainView) error {
@@ -273,7 +293,7 @@ func (g *global) open(ctx context.Context, t *target, st *state.State) (*opened,
 	cv, err := t.rd.Chain(ctx, t.crypt, t.org, t.vault, known...)
 	if err != nil {
 		if errors.Is(err, vread.ErrNoChain) {
-			return nil, incomplete("vault %s: %v: an empty answer proves nothing", vread.Short(t.vaultHex()), err)
+			return nil, g.noChain(t, cv, err)
 		}
 		return nil, err
 	}

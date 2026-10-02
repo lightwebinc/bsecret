@@ -118,7 +118,7 @@ both the hall and the crypt.
 | `get <name>` | yes (the key that reads) | a reader's settings; `content` for a large secret | reads a secret's value, every check in the signed order; the value raw on standard output, only when it is not a terminal or with `-show`. `-version N` reads history; `-strict` refuses an exposed or possibly stale value |
 | `list` | yes (the key that reads) | a reader's settings | the vault's secrets by name, each host's answer compared with the set's root; no value is printed |
 | `due` | optional | a reader's settings | what the vault owes: an acknowledgement, re-keyings, and for the owner the rotations it scheduled and the values whose `-not-after` falls within `-within` (720h). Exit 3 when anything is due |
-| `audit` | no; one with coin to pay | a reader's settings; `paid_host`, `asset`, `settle` to pay | verifies the vault's trail from headers and prints the exposure window of every epoch the group began. Paid through the 402 when a paid host is named, at most `-max-sats` a page and `-budget` in all; `-free` walks the free class. `-json` |
+| `audit` | no; one with coin to pay | a reader's settings; `paid_host`, `asset`, `settle` to pay | verifies the vault's trail from headers and prints the exposure window of every epoch the group began. Paid through the 402 when a paid host is named, at most `-max-sats` a page and `-budget` in all; `-free` walks the free class. `-json` prints the report alone on standard output, and a payment made on standard error |
 | `history <name>` | yes, funded | a reader's settings, `paid_host`, `asset`, `settle` | the priced question: pays the host's 402 and prints every version of a secret the host holds, 16 a page; `-after VERSION` asks for the next page |
 | `terms [URL]` | no | `paid_host` or URL | prints a host's terms document |
 | `fill` | optional | a reader's settings, `asset` | replays to each host what another host answered and it lacks: the vault's chain, its set's carriers, and sweeps; signs nothing |
@@ -223,7 +223,7 @@ paid_host    = https://terms.host-a.example.com
 | Code | Meaning |
 | --- | --- |
 | 0 | done, or everything asked verified |
-| 1 | refused: a reader's check failed and names its culprit (`listing`, `retracted`, `hash`, `undecryptable`, `commitment`, `tag`, `payload`, `successor`, `rollback`); a vault that is ahead of its group, broken or terminated; an audit that fails; a writer's evidence that failed closed; a content key used before; a transition another one beat to the chain (`lost`); a readiness check (`rotate -check`) that found a secret with no choice; `get -strict` on an exposed value; or a sweep or payment the network refuses |
+| 1 | refused: a reader's check failed and names its culprit (`listing`, `retracted`, `hash`, `undecryptable`, `commitment`, `tag`, `payload`, `successor`, `rollback`); a vault that is ahead of its group, broken or terminated; an audit that fails; a writer's evidence that failed closed; a content key used before; a transition another one beat to the chain (`lost`); a readiness check (`rotate -check`) that found a secret with no choice, or one to be re-keyed as it is whose value cannot be read; `get -strict` on an exposed value; or a sweep or payment the network refuses |
 | 2 | usage, configuration, local or transport error, a home another command is using, a quorum not met, or a price over `-max-sats` or `-budget`; what was persisted is published by the next command |
 | 3 | incomplete: the hosts disagree, a host answered something that does not verify, verified tokens of the vault exist above the chain read, a host could not be asked, no host answered what was asked (an empty answer proves nothing), a ciphertext no content source holds, the token read is spent by a later one no host answers, something is due (`due`), borg's wraps of a new epoch are not published yet, no host of the hall answers a member the wrap of an epoch it was a member of, or with `-strict` nothing says the token read is the latest. It proves nothing either way |
 
@@ -394,7 +394,10 @@ $ bsecret rotate -set db/password=new.txt -same-all            # acknowledge, re
 `rotate` first holds the choices to the rule that **every stale secret has
 exactly one of a new value, an explicit same-value re-keying, or a
 retirement**; with any missing it builds nothing (exit 2; with `-check`,
-exit 1). There is no default, because re-keying is not enough for a
+exit 1). A same-value re-keying needs the value, so each is read first,
+from this home's own record and, for a secret kept by its hash, from
+`content`: one that cannot be read stops the rotation before anything is
+built, and `-check` says so before borg removes anyone. There is no default, because re-keying is not enough for a
 credential: give it a new value, and disable the old one where it was
 accepted. It then waits for borg's wraps of the new epoch to be published
 for the group's members (exit 3 until they are; `-unwrapped` goes on), and
@@ -598,7 +601,9 @@ once: a host that asks again is refused. A payment is recorded in the home
 before it is sent, and from then on it is made: its coin is not reused,
 whatever the host answers. A price over `-max-sats` (default 1000) is not
 paid, and `audit` pays at most `-budget` (default 16000) over all its
-pages. A page that repeats tokens of an earlier one is refused. The change of an unmined payment is spendable by this
+pages: a page it may not pay ends the command (exit 2), with the trail not
+complete and what was paid for the pages before spent. A page that repeats
+tokens of an earlier one is refused. The change of an unmined payment is spendable by this
 home's next payment at once, up to 16 in a row. Everything a priced class
 answers is also reachable free, one item at a time: `audit -free`, and `get
 -version N`.

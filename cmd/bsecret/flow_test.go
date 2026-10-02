@@ -1036,3 +1036,51 @@ func TestTheFloorSurvivesAFailingSource(t *testing.T) {
 		t.Fatalf("a rolled-back value after a failing source: %q\n%s", r.stdout, r.stderr)
 	}
 }
+
+// One question is paid for once, and a payment that left this process is
+// never given back to the pool: a host that keeps answering 402 is handed
+// one payment and no more, and a host that took a payment and did not
+// answer leaves the payer's next payment on other coins, so both settle.
+func TestOnePaymentAQuestionAndNoRefundOnceSent(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.identity("payee", false)
+	h.identity("auditor", true)
+	h.put("db/password", "one")
+	h.startPaid("payee", map[string]uint64{"audit": 20, "audit-after": 20})
+	sends := func() int { return h.chain.Sent }
+	// A host that asks again and again.
+	h.paid.Again = true
+	before := sends()
+	r := h.run("auditor", "", "audit")
+	h.want(r, exitRefused, "asked for a payment again after one was sent")
+	if strings.Count(r.stderr, "was sent to") != 1 {
+		t.Fatalf("a host that keeps answering 402:\n%s\n%s", r.stdout, r.stderr)
+	}
+	// Exactly one payment of this home's reached the settlement leg: the
+	// one it made, kept as made.
+	if n := sends() - before; n != 1 {
+		t.Fatalf("%d transactions were sent for one question", n)
+	}
+	h.paid.Again = false
+	// A host that takes the payment and does not answer.
+	h.paid.FailPaid = true
+	r = h.run("auditor", "", "audit")
+	if r.code != exitUsage || !strings.Contains(r.stderr, "it left this process, so it is kept as made") || !strings.Contains(r.stderr, "status 500") {
+		t.Fatalf("a host that took a payment and answered 500: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	h.paid.FailPaid = false
+	// The next payment spends other coin, and the question is answered.
+	r = h.must("auditor", "audit")
+	if !strings.Contains(r.stdout, "paid 20 sat to ") || !strings.Contains(r.stdout, "audit   OK") {
+		t.Fatalf("the audit after:\n%s\n%s", r.stdout, r.stderr)
+	}
+	// Both payments the host recorded settle: neither was made on a coin
+	// that another spent.
+	ledger := h.file("payments.jsonl", string(h.paid.Ledger()))
+	r = h.must("payee", "payee", "settle", ledger)
+	if !strings.Contains(r.stdout, "2 payment(s) settled, 40 sat") || strings.Contains(r.stdout+r.stderr, "REFUSED") {
+		t.Fatalf("payee settle:\n%s\n%s", r.stdout, r.stderr)
+	}
+}

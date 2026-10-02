@@ -37,6 +37,11 @@ import (
 type Paid struct {
 	Host   *Host
 	Prices map[string]uint64
+	// Again answers 402 to every priced question, a payment or none: a
+	// host that keeps asking. FailPaid records a payment and then answers
+	// 500: a host that took the money and did not answer.
+	Again    bool
+	FailPaid bool
 	// Payments are the payments it accepted: txid, satoshis, the remittance
 	// and the Atomic BEEF, as a host's payment ledger records them.
 	Payments []Payment
@@ -311,7 +316,7 @@ func (p *Paid) route(r *http.Request, body []byte, asker *ec.PublicKey) response
 			return jsonResponse(http.StatusUnauthorized, map[string]string{"code": "ERR_AUTH_REQUIRED"})
 		}
 		raw := r.Header.Get("x-bsv-payment")
-		if raw == "" {
+		if raw == "" || p.Again {
 			var n [32]byte
 			copy(n[:], []byte(strconv.Itoa(len(p.issued)+1)))
 			prefix := base64.StdEncoding.EncodeToString(n[:])
@@ -325,6 +330,9 @@ func (p *Paid) route(r *http.Request, body []byte, asker *ec.PublicKey) response
 		paid, code := p.pay(r.Context(), raw, asker, price, qq.Class.Name)
 		if code != "" {
 			return jsonResponse(http.StatusBadRequest, map[string]string{"code": code})
+		}
+		if p.FailPaid {
+			return jsonResponse(http.StatusInternalServerError, map[string]string{"error": "the index is not restored yet"})
 		}
 		extra.Set("x-bsv-payment-satoshis-paid", strconv.FormatUint(paid, 10))
 	}

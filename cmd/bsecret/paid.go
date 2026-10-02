@@ -16,6 +16,7 @@ import (
 	clients "github.com/bsv-blockchain/go-sdk/auth/clients/authhttp"
 	"github.com/bsv-blockchain/go-sdk/transaction"
 	"github.com/bsv-blockchain/go-sdk/transaction/chaintracker"
+	"github.com/bsv-blockchain/go-sdk/wallet"
 
 	"github.com/lightwebinc/bcommon/bwallet"
 	"github.com/lightwebinc/bcommon/funding"
@@ -136,40 +137,81 @@ func (g *global) ask(ctx context.Context, h *home, hc chaintracker.ChainTracker,
 	if err != nil {
 		return nil, err
 	}
+	once := &oncePurse{Purse: p}
 	body, _ := json.Marshal(lookup.Question{Service: secrec.LookupService, Query: q})
-	af := clients.New(p, clients.WithoutLogging(), clients.WithHttpClient(&http.Client{Timeout: g.cfg.Timeout}))
-	resp, err := af.Fetch(ctx, strings.TrimRight(base, "/")+"/lookup", &clients.SimplifiedFetchRequestOptions{
+	af := clients.New(once, clients.WithoutLogging(), clients.WithHttpClient(&http.Client{Timeout: g.cfg.Timeout}))
+	resp, ferr := af.Fetch(ctx, strings.TrimRight(base, "/")+"/lookup", &clients.SimplifiedFetchRequestOptions{
 		Method: http.MethodPost, Headers: map[string]string{"content-type": "application/json"}, Body: body})
-	if err != nil {
-		p.Refund()
-		return nil, fmt.Errorf("%s at %s: %w", qq.Class.Name, base, payWords(err, maxSats))
+	var ans []byte
+	status, paid, payee := 0, "", ""
+	if ferr == nil {
+		defer resp.Body.Close()
+		status, paid, payee = resp.StatusCode, resp.Header.Get("x-bsv-payment-satoshis-paid"), resp.Header.Get("x-bsv-auth-identity-key")
+		ans, ferr = io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	}
-	defer resp.Body.Close()
-	ans, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
-	if err != nil {
+	answered := ferr == nil && status == http.StatusOK
+	switch {
+	case once.made == 0:
+		// No payment left this process: there is nothing to keep.
 		p.Refund()
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		p.Refund()
-		return nil, fmt.Errorf("%s at %s: status %d: %s", qq.Class.Name, base, resp.StatusCode, termsafe.Abbrev(firstLine(string(ans))))
-	}
-	if paid := resp.Header.Get("x-bsv-payment-satoshis-paid"); paid != "" {
+	case answered && paid != "":
 		if tx := p.Settle(); tx != nil {
 			fmt.Fprintf(g.stdout, "paid %s sat to %s in %s for %s, recorded by the host for its payee to settle\n", termsafe.Abbrev(paid),
-				termsafe.Abbrev(resp.Header.Get("x-bsv-auth-identity-key")), tx.TxID(), qq.Class.Name)
+				termsafe.Abbrev(payee), tx.TxID(), qq.Class.Name)
 			if err := g.keepPayment(ctx, h, p, tx); err != nil {
 				return nil, err
 			}
 		}
-	} else {
-		p.Refund()
+	default:
+		// A payment was handed to the host and the host did not answer for
+		// it. Its coins are NOT given back to the pool: the host holds a
+		// valid transaction that spends them, and a coin spent again would
+		// make this home's next transaction a double spend. The payment is
+		// kept as made.
+		if tx := p.Settle(); tx != nil {
+			g.say("a payment of this home's, %s, was sent to %s and the question was not answered: it left this process, so it is kept as made and its coins are not reused; the host's payee can still settle it", tx.TxID(), base)
+			if err := g.keepPayment(ctx, h, p, tx); err != nil {
+				return nil, err
+			}
+		}
+	}
+	switch {
+	case errors.Is(ferr, errPaidOnce) || (ferr == nil && status == http.StatusPaymentRequired && once.made > 0):
+		return nil, refused("%s at %s: the host asked for a payment again after one was sent; one question is paid for once", qq.Class.Name, base)
+	case ferr != nil:
+		return nil, fmt.Errorf("%s at %s: %w", qq.Class.Name, base, payWords(ferr, maxSats))
+	case status != http.StatusOK:
+		return nil, fmt.Errorf("%s at %s: status %d: %s", qq.Class.Name, base, status, termsafe.Abbrev(firstLine(string(ans))))
 	}
 	var a lookup.Answer
 	if err := json.Unmarshal(ans, &a); err != nil || a.Type != lookup.TypeOutputList {
 		return nil, fmt.Errorf("%s at %s: the answer is not an output-list", qq.Class.Name, base)
 	}
 	return a.Outputs, nil
+}
+
+// errPaidOnce refuses a second payment for one question.
+var errPaidOnce = errors.New("one question is paid for once")
+
+// oncePurse is a purse that pays once. The SDK's AuthFetch answers every
+// 402 with a new payment, several times over: a host that keeps answering
+// 402 would be handed a signed payment each time, and each is a
+// transaction it can broadcast. One question is one payment.
+type oncePurse struct {
+	*purse.Purse
+	made int
+}
+
+// CreateAction makes the one payment, and refuses any after it.
+func (o *oncePurse) CreateAction(ctx context.Context, args wallet.CreateActionArgs, originator string) (*wallet.CreateActionResult, error) {
+	if o.made > 0 {
+		return nil, errPaidOnce
+	}
+	res, err := o.Purse.CreateAction(ctx, args, originator)
+	if err == nil {
+		o.made++
+	}
+	return res, err
 }
 
 // checkOrigin refuses a terms base that is not an origin (spec section

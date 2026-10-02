@@ -225,6 +225,10 @@ func Reason(err error) string {
 		{ErrQuery, "query"}, {ErrListing, "listing"}, {ErrSuccessor, "successor"}, {ErrHash, "hash"}, {ErrUnwrap, "undecryptable"},
 		{ErrScalar, "undecryptable"}, {ErrCommitment, "commitment"}, {ErrTag, "tag"},
 		{ErrPayload, "payload"},
+		{ErrShape, "shape"}, {ErrBEEF, "beef"}, {ErrMineable, "mineable"}, {ErrUnlock, "unlock"},
+		{ErrLock, "lock"}, {ErrFieldSig, "signature"}, {ErrFunding, "funding"}, {ErrUnmined, "unmined"},
+		{ErrTokenInput, "token-input"}, {ErrVaultID, "vault-id"}, {ErrNotBsecret, "not-bsecret"},
+		{ErrReuse, "commitment-reuse"},
 	} {
 		if errors.Is(err, e.err) {
 			return e.s

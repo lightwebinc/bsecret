@@ -40,16 +40,19 @@ does anything else.
 | Implement a compatible owner, reader, auditor or host | [docs/spec.md](docs/spec.md) (the specification) |
 | Know what cannot change once published | [docs/frozen.md](docs/frozen.md) |
 | Know the defaults and caps, and why each is set where it is | [docs/limits.md](docs/limits.md) |
+| Run an overlay host that carries a crypt | [docs/host.md](docs/host.md) |
 
 ## Build and test
 
 ```console
-$ (cd host && npm ci)   # once: the TypeScript codec's dependencies
+$ (cd host && npm ci)   # once: the TypeScript package's dependencies
 $ make verify           # gofmt, vet, dependency set, typecheck, vectors, tests
+$ make module           # the host module, host/bundle/bsecret-module.js
 $ make vectors          # regenerate the golden vectors, both languages
+$ make e2e REFERENCE_HOST=/path/to/host   # the module on a local reference overlay host
 ```
 
-Go 1.27.1 or later, and Node 24 for the TypeScript codec under `host/`
+Go 1.27.1 or later, and Node 24 for the TypeScript package under `host/`
 (`make verify NODE=/path/to/node24` when it is not on `PATH`). The direct Go
 dependencies are go-sdk v1.5.2, bcommon v0.6.0 and borg v0.1.0, and nothing
 else.
@@ -64,9 +67,10 @@ credentials for the repository. `make borg-module` refreshes the copy after
 `go.mod` moves to another tag.
 
 The record layer exists twice, held to one set of vectors: `internal/secrec`
-in Go, and `host/` in TypeScript for an overlay host's topic manager and
-lookup service. Each reads what the other writes (`testdata/vectors`,
-`testdata/ts`).
+in Go, and `host/` in TypeScript. Each reads what the other writes
+(`testdata/vectors`, `testdata/ts`). `host/` is also the host module: the
+topic manager `tm_bsecret_<name>_<suffix>` and the lookup service
+`ls_bsecret`, bundled into one file an overlay host loads by path.
 
 ## License
 

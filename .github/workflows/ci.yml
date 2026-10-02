@@ -48,7 +48,11 @@ jobs:
 
   # The TypeScript package under host/ runs every Go-generated vector and
   # writes the vectors the Go job reads, so a change that moves the bytes on
-  # one side and not the other fails in one job or the other.
+  # one side and not the other fails in one job or the other. Its tests also
+  # build the host module's bundle and run it: every transaction vector
+  # through the topic manager and through the overlay engine, every lookup
+  # class, the index rules, restore, and the terms route with a paying
+  # client.
   ts:
     runs-on: ubuntu-latest
     defaults:

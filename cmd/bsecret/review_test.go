@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
@@ -241,5 +244,63 @@ func TestAStrayVersionIsNotWalkedTo(t *testing.T) {
 	}
 	if asked := h.a.Questions("version") - before; asked > 4 {
 		t.Fatalf("the reader asked the version class %d times", asked)
+	}
+}
+
+// A page's cursor comes only from what verified as the vault's own: a host
+// that adds another vault's carriers to its answers does not walk the
+// reader through pages of its choosing.
+func TestAForeignCarrierMovesNoCursor(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	one := h.vault()
+	r := h.must("org", "vault", "create", h.group, "-name", "other")
+	m := vaultLine.FindStringSubmatch(r.stdout)
+	if m == nil {
+		t.Fatalf("a second vault:\n%s", r.stdout)
+	}
+	other := m[1]
+	h.mustIn("org", "one", "-vault", one, "put", "db/password")
+	otherID, _ := vread.Hex32(other)
+	// The other vault's carriers, by identifier.
+	type foreign struct {
+		id  string
+		out testhost.Output
+	}
+	var drip []foreign
+	for _, name := range []string{"a", "b", "c", "d", "e", "f"} {
+		h.mustIn("org", "x", "-vault", other, "put", name)
+		id, _ := secrec.SecretID(otherID, name)
+		q, err := secrec.ParseQuery([]byte(fmt.Sprintf(`{"crypt":%q,"org":%q,"vault":%q,"secret":%q}`, h.crypt, h.env["BSECRET_ORG"], other, hex.EncodeToString(id[:]))))
+		if err != nil {
+			t.Fatal(err)
+		}
+		outs, err := h.a.Answer(q)
+		if err != nil || len(outs) != 1 {
+			t.Fatalf("the other vault's carrier of %s: %d %v", name, len(outs), err)
+		}
+		drip = append(drip, foreign{hex.EncodeToString(id[:]), outs[0]})
+	}
+	sort.Slice(drip, func(i, j int) bool { return drip[i].id < drip[j].id })
+	// Host a adds, to every page of the first vault's set, the next of the
+	// other vault's carriers past the cursor it was given.
+	h.a.Rewrite = func(q *secrec.Question, outs []testhost.Output) []testhost.Output {
+		if q.Members["secretsOf"] != one {
+			return outs
+		}
+		for _, f := range drip {
+			if f.id > q.Members["after"] {
+				return append(outs, f.out)
+			}
+		}
+		return outs
+	}
+	before := h.a.Questions("secrets") + h.a.Questions("secrets-after")
+	r = h.run("alice", "", "-vault", one, "list")
+	if !strings.Contains(r.stdout, "db/password  version 1") || !strings.Contains(r.stderr, "another owner or vault") {
+		t.Fatalf("list: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	if asked := h.a.Questions("secrets") + h.a.Questions("secrets-after") - before; asked > 2 {
+		t.Fatalf("the host walked the reader through %d pages", asked)
 	}
 }

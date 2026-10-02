@@ -1,6 +1,7 @@
 package vread
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -12,10 +13,12 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/lightwebinc/bcommon/hostset"
 	"github.com/lightwebinc/bcommon/lookup"
 
 	"github.com/lightwebinc/borg/reader"
 
+	"github.com/lightwebinc/bsecret/internal/limits"
 	"github.com/lightwebinc/bsecret/internal/secrec"
 )
 
@@ -307,5 +310,26 @@ func TestAWrongContentSourceIsPassedOver(t *testing.T) {
 	s = &Store{Sources: []string{bad, cut}, Max: 1 << 20}
 	if got, err := s.Get(ctx, hash, uint64(len(ct))); err != nil || sha256.Sum256(got) == hash {
 		t.Fatalf("only wrong sources: %q %v", got, err)
+	}
+}
+
+// An answer is read up to a bound of the reader's own, whatever a host
+// sends.
+func TestAnAnswerIsBounded(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"type":"output-list","outputs":[],"pad":"`))
+		chunk := bytes.Repeat([]byte("a"), 1<<20)
+		for i := 0; i < limits.MaxAnswer>>20+1; i++ {
+			_, _ = w.Write(chunk)
+		}
+		_, _ = w.Write([]byte(`"}`))
+	}))
+	defer srv.Close()
+	c := &Client{Hosts: []string{srv.URL}}
+	org := "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
+	_, err := c.Ask(context.Background(), srv.URL, Query{"crypt": "example_crypt_hmqzvtkwrx", "vaultsOf": org})
+	if err == nil || !contains(err.Error(), hostset.ErrBodyTooLarge.Error()+" ("+strconv.Itoa(limits.MaxAnswer)+" bytes)") {
+		t.Fatalf("an answer over the bound: %v", err)
 	}
 }

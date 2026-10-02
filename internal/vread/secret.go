@@ -1,6 +1,7 @@
 package vread
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -142,9 +143,11 @@ type SetAnswer struct {
 // not reproduce the root withheld or added a record (spec section 14).
 func (c *Client) Secrets(ctx context.Context, v *ChainView) []SetAnswer {
 	q := Query{"crypt": v.Crypt, "org": hex.EncodeToString(v.Org), "secretsOf": VaultHex(v.Vault)}
+	// A page's cursor comes only from a carrier that verified as one of
+	// this vault: what a host adds beside them moves nothing.
 	cursor := func(o lookup.Output) string {
 		car, err := c.Carrier(ctx, o.Beef, v.Crypt)
-		if err != nil {
+		if err != nil || !bytes.Equal(car.Carrier.Secret.Org, v.Org) || car.Carrier.Secret.Vault != v.Vault {
 			return ""
 		}
 		return hex.EncodeToString(car.Carrier.Secret.ID[:])

@@ -119,7 +119,7 @@ const (
 	// MaxAnswer is the most bytes a reader takes for one lookup answer: a
 	// full page of the largest objects the plane carries fits several
 	// times over.
-	MaxAnswer = 8 << 20
+	MaxAnswer = 16 << 20
 	// MaxBEEF is the most a reader takes for one answered object.
 	MaxBEEF = 1 << 20
 	// MaxUnminedPayments is how many of a payer's own payments may be

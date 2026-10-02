@@ -91,7 +91,7 @@ func (c *Client) Ask(ctx context.Context, host string, q Query) ([]lookup.Output
 	if _, err := secrec.ParseQuery(raw); err != nil {
 		return nil, err
 	}
-	hs := &hostset.Client{Timeout: c.Timeout, HTTP: c.HTTP}
+	hs := &hostset.Client{Timeout: c.Timeout, HTTP: c.HTTP, MaxBody: limits.MaxAnswer}
 	res, err := lookup.Query(ctx, hs, host, lookup.Question{Service: secrec.LookupService, Query: q})
 	if err != nil {
 		if strings.Contains(err.Error(), "answered status 4") {
@@ -109,7 +109,7 @@ func (c *Client) Ask(ctx context.Context, host string, q Query) ([]lookup.Output
 // Ping asks a host a question no class answers, which a live ls_bsecret
 // refuses with an error: the host is up and runs the service.
 func (c *Client) Ping(ctx context.Context, host string) error {
-	hs := &hostset.Client{Timeout: c.Timeout, HTTP: c.HTTP}
+	hs := &hostset.Client{Timeout: c.Timeout, HTTP: c.HTTP, MaxBody: limits.MaxAnswer}
 	_, err := lookup.Query(ctx, hs, host, lookup.Question{Service: secrec.LookupService, Query: Query{}})
 	if err != nil && strings.Contains(err.Error(), "answered status 4") {
 		return nil

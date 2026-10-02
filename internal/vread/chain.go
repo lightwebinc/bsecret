@@ -3,6 +3,7 @@ package vread
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -516,12 +517,27 @@ func (c *Client) Vaults(ctx context.Context, crypt string, org []byte) (map[[32]
 	q := Query{"crypt": crypt, "vaultsOf": hex.EncodeToString(org)}
 	out := map[[32]byte]*Tok{}
 	errs := map[string]error{}
-	cursor := func(o lookup.Output) string {
-		_, t, err := secrec.StoredToken(o.Beef)
-		if err != nil {
-			return ""
+	// A page's cursor comes only from an output that verified as a token
+	// of this owner in this crypt: what a host adds beside them moves
+	// nothing, so it cannot walk the reader through pages of its own.
+	verified := map[[32]byte]*Tok{}
+	token := func(o lookup.Output) *Tok {
+		key := sha256.Sum256(o.Beef)
+		if t, ok := verified[key]; ok {
+			return t
 		}
-		return VaultHex(t.Vault.Vault)
+		t, err := c.Token(ctx, o.Beef, crypt, org, nil)
+		if err != nil {
+			t = nil
+		}
+		verified[key] = t
+		return t
+	}
+	cursor := func(o lookup.Output) string {
+		if t := token(o); t != nil {
+			return VaultHex(t.Token.Vault.Vault)
+		}
+		return ""
 	}
 	for _, h := range c.Hosts {
 		ho := c.Pages(ctx, h, q, cursor, func(a, b string) bool { return a < b })
@@ -530,8 +546,8 @@ func (c *Client) Vaults(ctx context.Context, crypt string, org []byte) (map[[32]
 			continue
 		}
 		for _, o := range ho.Outputs {
-			t, err := c.Token(ctx, o.Beef, crypt, org, nil)
-			if err != nil {
+			t := token(o)
+			if t == nil {
 				continue
 			}
 			id := t.Token.Vault.Vault

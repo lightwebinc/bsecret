@@ -8,7 +8,6 @@ import (
 
 	"github.com/bsv-blockchain/go-sdk/transaction"
 
-	"github.com/lightwebinc/bcommon/nodeapi"
 	"github.com/lightwebinc/bcommon/termsafe"
 
 	"github.com/lightwebinc/bsecret/internal/engine"
@@ -37,7 +36,7 @@ Exit 0 when every host holds everything any host answered (or now does),
 type filler struct {
 	g           *global
 	t           *target
-	asset       *nodeapi.Asset
+	asset       *spendSource
 	filled      int
 	hostsFilled map[string]bool
 	problem     bool

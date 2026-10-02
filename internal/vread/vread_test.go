@@ -216,7 +216,10 @@ func TestPagesAreBounded(t *testing.T) {
 	org := "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
 	n := 0
 	ho := c.Pages(context.Background(), srv.URL, Query{"crypt": "example_crypt_hmqzvtkwrx", "vaultsOf": org},
-		func(lookup.Output) string { n++; return hex.EncodeToString(sha256.New().Sum([]byte{byte(n), byte(n >> 8)}))[:64] },
+		func(lookup.Output) string {
+			n++
+			return hex.EncodeToString(sha256.New().Sum([]byte{byte(n), byte(n >> 8)}))[:64]
+		},
 		func(a, b string) bool { return a < b })
 	if ho.Err != nil || !ho.Truncated || len(ho.Outputs) > pageOutputs || asked != 1 {
 		t.Fatalf("a page of 5000 outputs: %d kept, truncated %v, %d page(s) asked, %v", len(ho.Outputs), ho.Truncated, asked, ho.Err)

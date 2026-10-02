@@ -1084,3 +1084,73 @@ func TestOnePaymentAQuestionAndNoRefundOnceSent(t *testing.T) {
 		t.Fatalf("payee settle:\n%s\n%s", r.stdout, r.stderr)
 	}
 }
+
+// The home's lock is taken before its wallet is opened: the coin pool is
+// read whole and written back whole, so a pool read before the lock could
+// put back coins another command spent. A command that finds the home in
+// use says so before it has read anything of the wallet.
+func TestTheLockComesBeforeTheWallet(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	home := filepath.Join(h.dir, "org")
+	unlock, err := state.Lock(filepath.Join(home, "lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A wallet file that does not read: a command that opened the wallet
+	// before the lock would trip on it instead of on the lock.
+	pool := filepath.Join(home, "wallet.json")
+	raw, err := os.ReadFile(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pool, []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	txid := strings.Repeat("ab", 32)
+	for _, args := range [][]string{{"anchor"}, {"sync"}, {"fund"}, {"fund", "-txid", txid}, {"crypt", "new", "other"}, {"init"},
+		{"kill", "-confirm", "KILL", "-yes"}, {"retire", "x"}, {"rotate"}, {"payee", "settle", pool}, {"vault", "create", h.group, "-name", "v"}} {
+		r := h.run("org", "", args...)
+		if r.code != exitUsage || !strings.Contains(r.stderr, "another bsecret command is using the home") {
+			t.Errorf("%v with the home locked: exit %d\n%s", args, r.code, r.stderr)
+		}
+	}
+	if err := os.WriteFile(pool, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	unlock()
+	h.put("db/password", "one")
+}
+
+// What a node names as a spender is a transaction id or it is refused: it
+// is never printed as the node wrote it.
+func TestANodeSuppliedSpenderIsNotPrinted(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	r := h.must("alice", "vault", "show")
+	var tip string
+	for _, l := range strings.Split(r.stdout, "\n") {
+		if strings.HasPrefix(l, "token   seq 1 ") {
+			tip = strings.Fields(l)[3]
+		}
+	}
+	h.chain.SpendElsewhere(tip, 0, "\x1b[2J\x1b]0;owned\x07evil")
+	for _, args := range [][]string{{"audit", "-free"}, {"vault", "show"}, {"get", "db/password"}, {"audit", "-free", "-json"}} {
+		r := h.run("alice", "", args...)
+		if strings.ContainsAny(r.stdout+r.stderr, "\x1b\x07") || strings.Contains(r.stdout+r.stderr, "owned") {
+			t.Errorf("%v printed what the node named as a spender: %q", args, r.stdout+r.stderr)
+		}
+	}
+	if r := h.run("alice", "", "audit", "-free"); !strings.Contains(r.stdout, "the node could not say") {
+		t.Errorf("audit with a node that names no txid:\n%s", r.stdout)
+	}
+	// The owner's tooling fails closed on such a node, and prints nothing
+	// of it either.
+	r = h.run("org", "two", "put", "db/password")
+	if r.code == exitOK || strings.ContainsAny(r.stdout+r.stderr, "\x1b\x07") {
+		t.Errorf("a put on a node that names no txid: exit %d %q", r.code, r.stderr)
+	}
+}

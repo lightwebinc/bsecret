@@ -226,7 +226,7 @@ func cmdAudit(ctx context.Context, g *global, args []string) error {
 	} else if by == "" {
 		out.Latest = "the trail's last token is unspent per the node: it is the vault's latest"
 	} else {
-		out.Latest = "the trail's last token is SPENT by " + by + ": the trail is cut short, or the vault is terminated"
+		out.Latest = "the trail's last token is SPENT by " + termsafe.Text(by) + ": the trail is cut short, or the vault is terminated"
 		if problem == nil {
 			problem = incomplete("the trail does not reach the vault's latest token")
 		}

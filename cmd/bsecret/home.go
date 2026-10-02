@@ -75,13 +75,30 @@ type home struct {
 	close func()
 }
 
-// openHome opens and locks the home and loads its state.
-func (g *global) openHome() (*home, error) {
-	e, err := g.openWallet()
-	if err != nil {
-		return nil, err
+// lockedWallet takes the home's lock and only then opens its wallet. The
+// order matters: the wallet's coin pool is read into memory when it is
+// opened and written back whole when it changes, so a pool read before the
+// lock is one another command may change in between, and saving it would
+// put back coins that command spent.
+func (g *global) lockedWallet() (*bwallet.Embedded, func(), error) {
+	if _, err := os.Stat(filepath.Join(g.cfg.Home, "identity.json")); err != nil {
+		return nil, nil, fmt.Errorf("open the home %s: %w (run `bsecret init`)", g.cfg.Home, err)
 	}
 	unlock, err := g.lockHome()
+	if err != nil {
+		return nil, nil, err
+	}
+	e, err := g.openWallet()
+	if err != nil {
+		unlock()
+		return nil, nil, err
+	}
+	return e, unlock, nil
+}
+
+// openHome locks the home, opens its wallet and loads its state.
+func (g *global) openHome() (*home, error) {
+	e, unlock, err := g.lockedWallet()
 	if err != nil {
 		return nil, err
 	}
@@ -142,13 +159,32 @@ func (g *global) node(needRPC bool) (*nodeapi.RPC, *nodeapi.Asset, error) {
 	return rpc, &nodeapi.Asset{Base: g.cfg.Asset}, nil
 }
 
+// spendSource is the node's view of which outputs are spent, held to its
+// form: a spender is a transaction id, 64 lowercase hex digits, or the
+// answer is refused. What a node names is printed, compared and asked for
+// again, and a node is somebody else's server.
+type spendSource struct{ *nodeapi.Asset }
+
+// Spender is the node's answer, refused unless it is a transaction id.
+func (s spendSource) Spender(ctx context.Context, txid string, vout uint32) (string, error) {
+	by, err := s.Asset.Spender(ctx, txid, vout)
+	if err != nil {
+		return "", err
+	}
+	by = strings.ToLower(by)
+	if by != "" && !config.IsHex32(by) {
+		return "", fmt.Errorf("the node names a spender of %s.%d that is not a transaction id", txid, vout)
+	}
+	return by, nil
+}
+
 // spends is the configured spend source, or nil: the node's view of which
 // outputs are spent.
-func (g *global) spends() *nodeapi.Asset {
+func (g *global) spends() *spendSource {
 	if g.cfg.Asset == "" {
 		return nil
 	}
-	return &nodeapi.Asset{Base: g.cfg.Asset}
+	return &spendSource{&nodeapi.Asset{Base: g.cfg.Asset}}
 }
 
 // settler is the configured settlement leg.
@@ -425,6 +461,16 @@ func cmdInit(_ context.Context, g *global, args []string) error {
 		}
 		fmt.Fprintln(g.stdout, "created", g.cfg.Home, "around the identity in", *from)
 	}
+	// The lock is taken before the wallet is made or opened: a home that
+	// exists may be in use.
+	if err := os.MkdirAll(g.cfg.Home, 0o700); err != nil {
+		return err
+	}
+	unlock, err := g.lockHome()
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	e, err := bwallet.Create(g.cfg.Home, engine.Profile)
 	if errors.Is(err, bwallet.ErrIdentityExists) {
 		if e, err = g.openWallet(); err != nil {
@@ -520,10 +566,11 @@ func cmdFund(ctx context.Context, g *global, args []string) error {
 	if g.cfg.Network == "main" {
 		return usage("fund without -txid mines coinbase, which only a chain you run does; on network main, import a payment with fund -txid")
 	}
-	e, err := g.openWallet()
+	e, unlock, err := g.lockedWallet()
 	if err != nil {
 		return err
 	}
+	defer unlock()
 	addr, err := e.FundAddress(e.Mainnet)
 	if err != nil {
 		return err
@@ -535,11 +582,6 @@ func cmdFund(ctx context.Context, g *global, args []string) error {
 	if err != nil {
 		return err
 	}
-	unlock, err := g.lockHome()
-	if err != nil {
-		return err
-	}
-	defer unlock()
 	tip, err := asset.BestHeader(ctx)
 	if err != nil {
 		return fmt.Errorf("node tip: %w", err)
@@ -573,10 +615,11 @@ func (g *global) importPayment(ctx context.Context, txid string) error {
 	if h, err := chainhash.NewHashFromHex(txid); err != nil || h.String() != txid {
 		return usage("-txid %q is not a transaction id (64 lowercase hex characters)", termsafe.Abbrev(txid))
 	}
-	e, err := g.openWallet()
+	e, unlock, err := g.lockedWallet()
 	if err != nil {
 		return err
 	}
+	defer unlock()
 	hc, err := g.headerClient()
 	if err != nil {
 		return err
@@ -624,11 +667,6 @@ func (g *global) importPayment(ctx context.Context, txid string) error {
 	if len(outs) == 0 {
 		return usage("payment %s pays nothing to the fund address %s", txid, addr)
 	}
-	unlock, err := g.lockHome()
-	if err != nil {
-		return err
-	}
-	defer unlock()
 	added, err := e.Pool.Add(outs...)
 	if err != nil {
 		return err
@@ -667,8 +705,8 @@ func cmdCrypt(_ context.Context, g *global, args []string) error {
 		if err != nil {
 			return err
 		}
-		if e, err := g.openWallet(); err == nil {
-			unlock, err := g.lockHome()
+		if _, serr := os.Stat(filepath.Join(g.cfg.Home, "identity.json")); serr == nil {
+			e, unlock, err := g.lockedWallet()
 			if err != nil {
 				return err
 			}

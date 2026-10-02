@@ -13,6 +13,7 @@ import (
 	"github.com/lightwebinc/bcommon/guard"
 	"github.com/lightwebinc/bcommon/lookup"
 
+	"github.com/lightwebinc/bsecret/internal/limits"
 	"github.com/lightwebinc/bsecret/internal/secrec"
 )
 
@@ -270,6 +271,45 @@ func (v *ChainView) Linked(listed *Car, links []*Car) ([]*Car, bool, error) {
 		out = append(out, by[r])
 	}
 	return out, len(recs) > len(run), nil
+}
+
+// Run reads, for an interval vault, the versions of a secret no token
+// lists yet: the pending class at every host, then, version by version from
+// the listed one, each version the pending answers did not hold, asked for
+// only while the one before it was answered. So the work is bounded by the
+// records the hosts hold in a row and by limits.RunVersions, never by a
+// version a carrier claims. It returns the run that links to listed (lowest
+// version first), whether a later version exists that is not in it, the
+// carriers refused and the hosts that could not be asked.
+func (c *Client) Run(ctx context.Context, v *ChainView, listed *Car) (run []*Car, later bool, refused []Refusal, errs map[string]error, err error) {
+	id, base := listed.Carrier.Secret.ID, listed.Carrier.Secret.Version
+	links, refused, errs := c.Pending(ctx, v, id)
+	have := map[uint64]bool{}
+	for _, l := range links {
+		have[l.Carrier.Secret.Version] = true
+	}
+	for n := base + 1; n-base <= limits.RunVersions; n++ {
+		if have[n] {
+			continue
+		}
+		more, r, e := c.Version(ctx, v, id, n)
+		refused = append(refused, r...)
+		for h, herr := range e {
+			errs[h] = herr
+		}
+		if len(more) == 0 {
+			break
+		}
+		links = append(links, more...)
+	}
+	run, later, err = v.Linked(listed, links)
+	if err != nil {
+		return nil, false, refused, errs, err
+	}
+	if len(run) > limits.RunVersions {
+		run, later = run[:limits.RunVersions], true
+	}
+	return run, later, refused, errs, nil
 }
 
 // Swept reports the mined transaction that spends op, when one is found by

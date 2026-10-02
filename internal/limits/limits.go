@@ -111,6 +111,15 @@ const (
 	// DefaultMaxPrice is the most a priced question is paid without
 	// -max-sats.
 	DefaultMaxPrice = 1000
+	// RunVersions is the most unlisted versions above a listed one a
+	// reader of an interval vault follows: a run is asked for version by
+	// version, and what a host or an owner claims above it is never
+	// walked to.
+	RunVersions = 64
+	// MaxAnswer is the most bytes a reader takes for one lookup answer: a
+	// full page of the largest objects the plane carries fits several
+	// times over.
+	MaxAnswer = 8 << 20
 	// MaxBEEF is the most a reader takes for one answered object.
 	MaxBEEF = 1 << 20
 	// MaxUnminedPayments is how many of a payer's own payments may be

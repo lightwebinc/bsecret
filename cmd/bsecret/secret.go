@@ -537,30 +537,20 @@ func (g *global) pick(ctx context.Context, o *opened, id [32]byte, name string, 
 	if o.chain.Head().Token.Vault.Anchor != secrec.AnchorInterval {
 		return listed, true, false, nil
 	}
-	// An interval vault: the versions above the listed one, each fetched,
-	// and the highest that links successor by successor.
-	pending, refusedCars, _ := t.rd.Pending(ctx, o.chain, id)
+	// An interval vault: the versions above the listed one, and the
+	// highest that links successor by successor.
+	run, more, refusedCars, errs, lerr := t.rd.Run(ctx, o.chain, listed)
 	g.reportRefused(refusedCars)
-	have := map[uint64]bool{}
-	var top uint64
-	links := append([]*vread.Car(nil), pending...)
-	for _, c := range pending {
-		have[c.Carrier.Secret.Version] = true
-		if v := c.Carrier.Secret.Version; v > top {
-			top = v
-		}
-	}
-	for n := cur.Version + 1; n < top; n++ {
-		if have[n] {
-			continue
-		}
-		more, r, _ := t.rd.Version(ctx, o.chain, id, n)
-		g.reportRefused(r)
-		links = append(links, more...)
-	}
-	run, more, lerr := o.chain.Linked(listed, links)
 	if lerr != nil {
 		return nil, false, false, failure(lerr)
+	}
+	for h, e := range errs {
+		// A host that could not be asked may hold a later version: what is
+		// read stands, and the command is incomplete.
+		g.say("host %s: NOT ASKED for the versions above the listed one: %s", h, firstLine(e.Error()))
+		if o.problem == nil {
+			o.problem = incomplete("a host could not be asked for the versions above the listed one; a later version may exist")
+		}
 	}
 	if len(run) == 0 {
 		return listed, true, more, nil

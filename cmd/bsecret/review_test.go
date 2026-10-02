@@ -5,8 +5,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bsv-blockchain/go-sdk/transaction"
+
+	"github.com/lightwebinc/bcommon/carrier"
+
+	"github.com/lightwebinc/bsecret/internal/engine"
 	"github.com/lightwebinc/bsecret/internal/secrec"
+	"github.com/lightwebinc/bsecret/internal/state"
 	"github.com/lightwebinc/bsecret/internal/testhost"
+	"github.com/lightwebinc/bsecret/internal/unicast"
 	"github.com/lightwebinc/bsecret/internal/vread"
 )
 
@@ -136,5 +143,103 @@ func TestAHostAnsweringJunkDoesNotFailTheRead(t *testing.T) {
 	r := h.run("alice", "", "get", "db/password")
 	if r.code != exitIncomplete || r.stdout != "one" || !strings.Contains(r.stderr, "REFUSED token") {
 		t.Fatalf("one host answers junk: exit %d %q\n%s", r.code, r.stdout, r.stderr)
+	}
+}
+
+// A second home of the organisation learns, by sync, the versions an
+// interval vault's other home published and did not list yet: its next
+// version follows them, and is not a second record at a version they hold.
+func TestSyncLearnsUnlistedVersions(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault("-anchor", "interval")
+	h.put("svc/token", "t1")
+	h.put("svc/token", "t2", "-defer")
+	h.identity("org2", true, "-borg", h.borg.Home)
+	if r := h.must("org2", "sync"); !strings.Contains(r.stdout, "unlisted 1 version(s)") {
+		t.Fatalf("sync:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if r := h.mustIn("org2", "t3", "put", "svc/token", "-defer"); !strings.Contains(r.stdout, "svc/token version 3") {
+		t.Fatalf("put from the second home:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if r := h.must("alice", "get", "svc/token"); r.stdout != "t3" || !strings.Contains(r.stderr, "version 3") {
+		t.Fatalf("alice: %q\n%s", r.stdout, r.stderr)
+	}
+	// The second home lists the latest, and sweeps what came and went.
+	if r := h.must("org2", "anchor"); !strings.Contains(r.stdout, "anchored 1 secret(s)") {
+		t.Fatalf("anchor from the second home:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if r := h.must("alice", "get", "svc/token"); r.stdout != "t3" || !strings.Contains(r.stderr, "anchored, current") {
+		t.Fatalf("alice after the anchor: %q\n%s", r.stdout, r.stderr)
+	}
+}
+
+// strayVersion publishes, as the vault's owner, a carrier of svc/token at a
+// version far above anything the vault holds: a record its owner signed
+// that links to nothing.
+func (h *harness) strayVersion(version uint64) {
+	h.t.Helper()
+	ctx := context.Background()
+	g, _, errb := h.global("org")
+	w, err := g.openWriter(ctx)
+	if err != nil {
+		h.t.Fatalf("%v\n%s", err, errb)
+	}
+	defer w.close(ctx, g)
+	v := &w.h.st.Vaults[0]
+	last := &v.Versions[len(v.Versions)-1]
+	old, err := transaction.NewTransactionFromHex(last.Raw)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	rec, err := secrec.CarrierRecord(*old.Outputs[0].LockingScript)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	rec.Version = version
+	payload, err := rec.Encode()
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	ts := w.h.st.Set(state.TreeSecret).Tree
+	tree, err := w.eng.Tx(ts.Txid)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	if tree.MerklePath, err = engine.Minimal(tree.MerklePath, tree.TxID()); err != nil {
+		h.t.Fatal(err)
+	}
+	signer := w.h.e.Signer()
+	car, err := carrier.Mint(ctx, signer, signer.Originator, engine.Params(state.TreeSecret), payload, tree, ts.Count-1)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	beef, err := car.AtomicBEEF(false)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	set := &unicast.Set{Hosts: []string{h.aS.URL, h.bS.URL}, Need: 2}
+	if err := set.Send(ctx, "stray", secrec.Topic(v.Crypt), beef, 2, nil).Err(); err != nil {
+		h.t.Fatalf("the hosts did not take the stray carrier: %v", err)
+	}
+}
+
+// A version a carrier claims never sets how far a reader walks: the
+// versions above the listed one are asked for one by one, only while they
+// are answered in a row.
+func TestAStrayVersionIsNotWalkedTo(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault("-anchor", "interval")
+	h.put("svc/token", "t1")
+	h.put("svc/token", "t2", "-defer")
+	h.strayVersion(1 << 40)
+	before := h.a.Questions("version")
+	r := h.must("alice", "get", "svc/token")
+	if r.stdout != "t2" || !strings.Contains(r.stderr, "a later version exists") {
+		t.Fatalf("with a stray version above: %q\n%s", r.stdout, r.stderr)
+	}
+	if asked := h.a.Questions("version") - before; asked > 4 {
+		t.Fatalf("the reader asked the version class %d times", asked)
 	}
 }

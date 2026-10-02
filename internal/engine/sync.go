@@ -21,9 +21,12 @@ import (
 
 // SyncReport is what a catch-up found.
 type SyncReport struct {
-	Vaults, NewVaults  int
-	Tokens             int
-	Versions, Named    int
+	Vaults, NewVaults int
+	Tokens            int
+	Versions, Named   int
+	// Unlisted are the versions of an interval vault another instance
+	// published and no token lists yet.
+	Unlisted           int
 	Trees              int
 	Unreadable, Broken []string
 	// Ahead are the vaults whose chain this home holds further than any
@@ -136,6 +139,7 @@ func (e *Engine) Sync(ctx context.Context, crypt string) (*SyncReport, error) {
 		}
 		// Every current secret's record, and its name through the self
 		// wrap.
+		listed := map[[32]byte]*vread.Car{}
 		for _, sa := range rd.Secrets(ctx, cv) {
 			if sa.Err != nil {
 				e.note("host %s: the vault's set could not be read: %v", sa.Host, sa.Err)
@@ -145,11 +149,48 @@ func (e *Engine) Sync(ctx context.Context, crypt string) (*SyncReport, error) {
 				if _, err := cv.Listed(car); err != nil {
 					continue
 				}
+				if listed[car.Carrier.Secret.ID] == nil {
+					listed[car.Carrier.Secret.ID] = car
+				}
 				x := v.VersionOf(hex.EncodeToString(car.Carrier.Secret.ID[:]), hex.EncodeToString(car.Carrier.ContentID[:]))
 				if x == nil || x.Raw != "" {
 					continue
 				}
 				e.adoptCarrier(ctx, x, car, rep)
+			}
+		}
+		// In an interval vault, the versions published and not yet listed:
+		// a home that did not know them would publish another record at a
+		// version another instance deferred, and readers refuse two
+		// records at one version (spec section 4.4).
+		if head := cv.Head(); head != nil && head.Token.Vault.Anchor == secrec.AnchorInterval {
+			for _, cur := range cv.Set() {
+				car := listed[cur.ID]
+				if car == nil {
+					continue
+				}
+				run, _, _, errs, err := rd.Run(ctx, cv, car)
+				if err != nil {
+					return rep, fmt.Errorf("vault %s: the unlisted versions of secret %s: %w", vread.Short(idHex), vread.Short(hex.EncodeToString(cur.ID[:])), err)
+				}
+				for h, herr := range errs {
+					e.note("host %s: the unlisted versions of secret %s could not be read: %v", h, vread.Short(hex.EncodeToString(cur.ID[:])), herr)
+				}
+				for _, link := range run {
+					rec := link.Carrier.Secret
+					id, cid := hex.EncodeToString(rec.ID[:]), hex.EncodeToString(link.Carrier.ContentID[:])
+					x := v.VersionOf(id, cid)
+					if x == nil {
+						v.Versions = append(v.Versions, state.SecretVersion{ID: id, Version: rec.Version, ContentID: cid,
+							Commitment: hex.EncodeToString(rec.Commitment[:]), Epoch: rec.Epoch, Created: rec.Created})
+						x = &v.Versions[len(v.Versions)-1]
+						e.St.Commit(x.Commitment)
+						rep.Unlisted++
+					}
+					if x.Raw == "" {
+						e.adoptCarrier(ctx, x, link, rep)
+					}
+				}
 			}
 		}
 		for i := range v.Versions {

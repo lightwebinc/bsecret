@@ -45,6 +45,9 @@ func cmdSync(ctx context.Context, g *global, args []string) error {
 	if rep != nil {
 		fmt.Fprintf(g.stdout, "synced  %d vault(s) (%d new), %d token(s), %d version(s) read, %d name(s) opened, %d funding tree(s) recorded\n",
 			rep.Vaults, rep.NewVaults, rep.Tokens, rep.Versions, rep.Named, rep.Trees)
+		if rep.Unlisted > 0 {
+			fmt.Fprintf(g.stdout, "unlisted %d version(s) published and not yet listed: the next version of each follows it\n", rep.Unlisted)
+		}
 		for _, b := range rep.Broken {
 			fmt.Fprintf(g.stdout, "broken  %s: nothing is built on it\n", b)
 		}

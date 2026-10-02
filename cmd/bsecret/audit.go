@@ -17,7 +17,7 @@ import (
 	"github.com/lightwebinc/bsecret/internal/vread"
 )
 
-const auditHelp = `usage: bsecret audit [-free] [-at URL] [-max-sats N] [-json]
+const auditHelp = `usage: bsecret audit [-free] [-at URL] [-max-sats N] [-budget N] [-json]
 
 Verify a vault's trail from block headers alone and report what it shows
 (spec section 9). An auditor holds no key and reads no secret, and needs no
@@ -43,8 +43,8 @@ re-keying or retirement is listed with its height.
 
 The tokens come from the priced audit class when a paid host is named (-at,
 or the configured paid_host): the question is asked over BRC-104, the 402
-is paid from this home's pool (BRC-105) up to -max-sats a page, and that
-needs a home with coin. Otherwise, or with -free, they are read token by
+is paid from this home's pool (BRC-105) up to -max-sats a page and -budget
+in all, and that needs a home with coin. Otherwise, or with -free, they are read token by
 token through the free vault-seq class from every host, which needs no
 home and pays nothing.
 
@@ -130,6 +130,7 @@ func cmdAudit(ctx context.Context, g *global, args []string) error {
 	free := fs.Bool("free", false, "read the trail token by token through the free class, paying nothing")
 	at := fs.String("at", "", "the host's terms route base URL (default paid_host)")
 	maxSats := fs.Uint64("max-sats", limits.DefaultMaxPrice, "the most one page of the priced class is paid")
+	total := fs.Uint64("budget", limits.DefaultBudget, "the most this audit pays in all, over every page")
 	asJSON := fs.Bool("json", false, "print the report as JSON")
 	if pos, err := parse(fs, args); err != nil {
 		return err
@@ -155,7 +156,7 @@ func cmdAudit(ctx context.Context, g *global, args []string) error {
 		}
 		problem = g.reportChain(cv)
 	} else {
-		if cv, err = g.paidTrail(ctx, t, base, *maxSats); err != nil {
+		if cv, err = g.paidTrail(ctx, t, base, &budget{per: *maxSats, total: *total}); err != nil {
 			return err
 		}
 	}
@@ -317,7 +318,7 @@ func (g *global) printAudit(r *auditReport) {
 // paidTrail reads the vault's whole chain through the priced audit class,
 // page after page, each page one paid question, and establishes the chain
 // from the tokens answered.
-func (g *global) paidTrail(ctx context.Context, t *target, base string, maxSats uint64) (*vread.ChainView, error) {
+func (g *global) paidTrail(ctx context.Context, t *target, base string, b *budget) (*vread.ChainView, error) {
 	if err := checkOrigin(base); err != nil {
 		return nil, err
 	}
@@ -328,7 +329,15 @@ func (g *global) paidTrail(ctx context.Context, t *target, base string, maxSats 
 	defer h.close()
 	q := vread.Query{"crypt": t.crypt, "audit": t.orgHex, "vault": t.vaultHex()}
 	toks, err := vread.Trail(q, func(q vread.Query) ([]lookup.Output, error) {
-		return g.ask(ctx, h, t.rd.Headers, base, q, maxSats)
+		// A host sets its pages and its prices; what they add up to is
+		// this command's to bound.
+		per, err := b.next()
+		if err != nil {
+			return nil, fmt.Errorf("%w; the trail is not complete (a larger -budget, or -free to read it token by token at no price)", err)
+		}
+		outs, paid, err := g.ask(ctx, h, t.rd.Headers, base, q, per)
+		b.paid(paid)
+		return outs, err
 	}, func(beef []byte) (*vread.Tok, error) {
 		return t.rd.Token(ctx, beef, t.crypt, t.org, &t.vault)
 	})

@@ -97,8 +97,23 @@ type State struct {
 	Settled      []string       `json:"settled,omitempty"`
 	Unsettleable []Unsettleable `json:"unsettleable,omitempty"`
 
-	path string
+	// Taking is the coin pool as it stood when a command that spends from
+	// it last saved this state: the record made before a coin is taken. A
+	// coin leaves the pool's own file the moment it is taken, before the
+	// transaction that spends it is recorded here, so a run that stops in
+	// between leaves a coin in neither. The next command finds it in this
+	// list and in no transaction the home records, and puts it back when
+	// the node shows it unspent. It is empty whenever no command is
+	// running.
+	Taking []bwallet.Output `json:"taking,omitempty"`
+
+	path       string
+	beforeSave func()
 }
+
+// OnSave sets what runs before every Save: a publisher records the pool
+// with it. Nil clears it.
+func (s *State) OnSave(f func()) { s.beforeSave = f }
 
 // TreeSet is one kind's funding trees: the one carriers spend now, every
 // tree minted, and the trees minted ahead and never adopted when a run
@@ -376,6 +391,9 @@ func Load(home, identity string) (*State, error) {
 
 // Save writes the state atomically at mode 0600.
 func (s *State) Save() error {
+	if s.beforeSave != nil {
+		s.beforeSave()
+	}
 	raw, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err

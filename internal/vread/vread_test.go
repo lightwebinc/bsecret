@@ -146,22 +146,40 @@ func TestTrailPages(t *testing.T) {
 			t.Errorf("%d tokens: read %d in %d question(s), want %d: %v", c.total, len(toks), asked, c.asks, err)
 		}
 	}
-	// A host that answers the same page again ends the walk.
+	// A host that fills a page with tokens of an earlier one, so that a
+	// trail takes more pages, each one paid for, is refused at the first
+	// such page: a page asked after a seq holds only tokens above it.
 	asked := 0
-	same := func(Query) ([]lookup.Output, error) {
+	var re *Refusal
+	padded := func(q Query) ([]lookup.Output, error) {
 		asked++
 		var outs []lookup.Output
-		for s := 0; s < 64; s++ {
+		for s := 0; s < 63; s++ {
+			outs = append(outs, lookup.Output{Beef: []byte(strconv.Itoa(s))})
+		}
+		return append(outs, lookup.Output{Beef: []byte(strconv.Itoa(62 + asked))}), nil
+	}
+	if _, err := Trail(Query{}, padded, verify); !errors.As(err, &re) || re.Reason != "page" || asked != 2 {
+		t.Fatalf("a host that pads its pages: %d questions, %v", asked, err)
+	}
+	// A page of more outputs than a page holds is cut to one.
+	asked = 0
+	huge := func(Query) ([]lookup.Output, error) {
+		asked++
+		if asked > 1 {
+			return nil, nil
+		}
+		var outs []lookup.Output
+		for s := 0; s < 5000; s++ {
 			outs = append(outs, lookup.Output{Beef: []byte(strconv.Itoa(s))})
 		}
 		return outs, nil
 	}
-	if toks, err := Trail(Query{}, same, verify); err != nil || len(toks) != 64 || asked != 2 {
-		t.Fatalf("a host that ignores the cursor: %d tokens, %d questions, %v", len(toks), asked, err)
+	if toks, err := Trail(Query{}, huge, verify); err != nil || len(toks) != 64 {
+		t.Fatalf("a page of 5000 tokens: %d taken, %v", len(toks), err)
 	}
 	// A token that does not verify ends the walk, naming it.
 	bad := func(Query) ([]lookup.Output, error) { return []lookup.Output{{Beef: []byte("bad")}}, nil }
-	var re *Refusal
 	if _, err := Trail(Query{}, bad, verify); !errors.As(err, &re) || re.Reason != "unmined" {
 		t.Fatalf("a token that does not verify: %v", err)
 	}

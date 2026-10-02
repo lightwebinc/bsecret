@@ -42,6 +42,9 @@ type Paid struct {
 	// 500: a host that took the money and did not answer.
 	Again    bool
 	FailPaid bool
+	// OnPayment, when set, runs when a request carrying a payment arrives,
+	// before anything is done with it.
+	OnPayment func()
 	// Payments are the payments it accepted: txid, satoshis, the remittance
 	// and the Atomic BEEF, as a host's payment ledger records them.
 	Payments []Payment
@@ -316,6 +319,9 @@ func (p *Paid) route(r *http.Request, body []byte, asker *ec.PublicKey) response
 			return jsonResponse(http.StatusUnauthorized, map[string]string{"code": "ERR_AUTH_REQUIRED"})
 		}
 		raw := r.Header.Get("x-bsv-payment")
+		if raw != "" && p.OnPayment != nil {
+			p.OnPayment()
+		}
 		if raw == "" || p.Again {
 			var n [32]byte
 			copy(n[:], []byte(strconv.Itoa(len(p.issued)+1)))

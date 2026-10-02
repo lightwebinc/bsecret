@@ -448,3 +448,122 @@ func TestALostTransitionDoesNotStopOtherWork(t *testing.T) {
 		t.Fatalf("the token the home owed was not published by the run that found a transition lost:\n%s\n%s", r.stdout, r.stderr)
 	}
 }
+
+// What a command that asks several priced questions pays is bounded in
+// all, whatever a host's pages and prices add up to.
+func TestABudgetBoundsEveryPage(t *testing.T) {
+	b := &budget{per: 20, total: 50}
+	for i, want := range []uint64{20, 20, 10} {
+		got, err := b.next()
+		if err != nil || got != want {
+			t.Fatalf("question %d may be paid %d, want %d: %v", i, got, want, err)
+		}
+		b.paid(got)
+	}
+	if _, err := b.next(); err == nil || !strings.Contains(err.Error(), "has paid 50 sat") {
+		t.Fatalf("past the budget: %v", err)
+	}
+}
+
+// The audit's budget bounds its first page too, and nothing is paid over
+// it.
+func TestAnAuditOverItsBudgetPaysNothing(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	h.identity("payee", false)
+	h.startPaid("payee", map[string]uint64{"audit": 20})
+	h.identity("auditor", true)
+	r := h.run("auditor", "", "audit", "-budget", "10")
+	if r.code != exitUsage || !strings.Contains(r.stderr, "more than the 10 this command may pay") || strings.Contains(r.stdout, "paid ") {
+		t.Fatalf("an audit whose page costs more than its budget: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	if r := h.must("auditor", "audit", "-budget", "20"); !strings.Contains(r.stdout, "paid 20 sat") || !strings.Contains(r.stdout, "audit   OK") {
+		t.Fatalf("an audit within its budget:\n%s\n%s", r.stdout, r.stderr)
+	}
+}
+
+// A coin a run took from the pool and never recorded a spend of (the run
+// stopped in between) is found by the next command and put back, when the
+// node shows it unspent.
+func TestACoinARunTookAndNeverSpentGoesBack(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	// The home as a run that stopped left it: the state records the pool
+	// with a coin, and the pool's own file no longer holds it.
+	statePath := filepath.Join(h.dir, "org", state.File)
+	poolPath := filepath.Join(h.dir, "org", "wallet.json")
+	var pool struct {
+		Outputs []json.RawMessage `json:"outputs"`
+	}
+	raw, err := os.ReadFile(poolPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &pool); err != nil || len(pool.Outputs) < 2 {
+		t.Fatalf("the pool: %d coins, %v", len(pool.Outputs), err)
+	}
+	var st map[string]any
+	raw, _ = os.ReadFile(statePath)
+	if err := json.Unmarshal(raw, &st); err != nil {
+		t.Fatal(err)
+	}
+	st["taking"] = pool.Outputs
+	out, _ := json.Marshal(st)
+	if err := os.WriteFile(statePath, out, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before := len(pool.Outputs)
+	pool.Outputs = pool.Outputs[1:]
+	out, _ = json.Marshal(pool)
+	if err := os.WriteFile(poolPath, out, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := h.put("db/password", "two")
+	if !strings.Contains(r.stderr, "is back in the pool: a run stopped between taking it and recording what spent it") {
+		t.Fatalf("the next command:\n%s\n%s", r.stdout, r.stderr)
+	}
+	raw, _ = os.ReadFile(poolPath)
+	if err := json.Unmarshal(raw, &pool); err != nil || len(pool.Outputs) < before {
+		t.Fatalf("the pool after: %d coins, %d before the run that stopped, %v", len(pool.Outputs), before, err)
+	}
+	// A command that ended leaves nothing recorded as being taken.
+	raw, _ = os.ReadFile(statePath)
+	if strings.Contains(string(raw), `"taking"`) {
+		t.Fatal("the journal outlived the command")
+	}
+}
+
+// A payment is recorded in the home before it is sent: when it reaches the
+// host, the payer's state already holds it.
+func TestAPaymentIsRecordedBeforeItIsSent(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	h.identity("payee", false)
+	h.startPaid("payee", map[string]uint64{"audit": 20})
+	h.identity("auditor", true)
+	recorded := -1
+	h.paid.OnPayment = func() {
+		raw, err := os.ReadFile(filepath.Join(h.dir, "auditor", state.File))
+		if err != nil {
+			recorded = 0
+			return
+		}
+		var st struct {
+			Payments []json.RawMessage `json:"payments"`
+		}
+		_ = json.Unmarshal(raw, &st)
+		recorded = len(st.Payments)
+	}
+	if r := h.must("auditor", "audit"); !strings.Contains(r.stdout, "paid 20 sat") {
+		t.Fatalf("audit:\n%s\n%s", r.stdout, r.stderr)
+	}
+	if recorded != 1 {
+		t.Fatalf("when the payment reached the host the payer's home recorded %d payment(s)", recorded)
+	}
+}

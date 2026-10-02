@@ -305,6 +305,12 @@ func (e *Engine) Start(ctx context.Context) error {
 	}
 	e.payer.Tip = h.Height
 	CollectChange(ctx, e.Pool, e.Legs.Asset)
+	// What a run that stopped took from the pool and never recorded goes
+	// back; from here every save records the pool before a coin is taken.
+	Journal(e.St, e.Pool, Reconcile(ctx, e.St, e.Pool, e.Legs.Asset, e.note))
+	if err := e.St.Save(); err != nil {
+		return err
+	}
 	var first error
 	var lost *LostError
 	keep := func(err error) {
@@ -409,6 +415,8 @@ func (e *Engine) Close(ctx context.Context) error {
 			ts.Ahead = producer.Index(ts.Ahead, p)
 		}
 	}
+	// The run ended: nothing is being taken.
+	Unjournal(e.St)
 	return e.St.Save()
 }
 

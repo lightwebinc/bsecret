@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	"github.com/bsv-blockchain/go-sdk/transaction/chaintracker"
@@ -582,12 +583,21 @@ func Trail(q Query, ask func(Query) ([]lookup.Output, error), verify func(beef [
 		if err != nil {
 			return nil, err
 		}
+		// A page holds what the contract's page holds; more is cut.
+		outs = capOutputs(outs, limits.TokenPage)
 		var top uint64
 		grew := false
 		for _, o := range outs {
 			tok, err := verify(o.Beef)
 			if err != nil {
 				return nil, &Refusal{Txid: SubjectID(o.Beef), Reason: secrec.Reason(err), Err: err}
+			}
+			// A page after the first holds only tokens past its cursor: a
+			// host that repeats earlier tokens to fill a page, so that a
+			// trail takes more pages, each one paid for, is refused.
+			if after, ok := page["after"]; ok && !seqAfter(tok.Seq(), after) {
+				err := fmt.Errorf("vread: a page asked after seq %s holds a token at seq %d", after, tok.Seq())
+				return nil, &Refusal{Txid: tok.Txid, Reason: "page", Err: err}
 			}
 			if tok.Seq() > top {
 				top = tok.Seq()
@@ -603,4 +613,10 @@ func Trail(q Query, ask func(Query) ([]lookup.Output, error), verify func(beef [
 		page["after"] = Seq(top)
 	}
 	return toks, nil
+}
+
+// seqAfter reports whether seq is above the cursor a question carried.
+func seqAfter(seq uint64, cursor string) bool {
+	c, err := strconv.ParseUint(cursor, 10, 64)
+	return err == nil && seq > c
 }

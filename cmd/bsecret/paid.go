@@ -84,27 +84,31 @@ func (g *global) purse(ctx context.Context, h *home, hc chaintracker.ChainTracke
 		Settler: settler, Asset: asset, Headers: hc, Wait: 10 * time.Minute, Poll: poll}, nil
 }
 
-// keepPayment records a payment the host accepted, so the next payment can
-// spend its change before it mines, and hands it to the settlement leg: it
-// is this home's own transaction, and once it mines its change is an
-// ordinary coin whenever the payee settles. A leg that does not take it
-// changes nothing: the payee broadcasts the same bytes.
-func (g *global) keepPayment(ctx context.Context, h *home, p *purse.Purse, tx *transaction.Transaction) error {
+// recordPayment records a payment this home made, so the next payment can
+// spend its change before it mines. It is recorded before it is sent: from
+// the moment it leaves this process the host holds a valid transaction
+// that spends the coin, and a home that did not record it would not know
+// its own coin was spent, or where its change is.
+func recordPayment(h *home, tx *transaction.Transaction) error {
 	beef, err := funding.BEEF(tx)
 	if err != nil {
 		return err
 	}
 	h.st.Payments = append(h.st.Payments, state.Payment{Txid: tx.TxID().String(), Beef: hex.EncodeToString(beef)})
-	if err := h.st.Save(); err != nil {
-		return err
-	}
+	return h.st.Save()
+}
+
+// broadcastPayment hands a payment this home made to the settlement leg: it
+// is this home's own transaction, and once it mines its change is an
+// ordinary coin whenever the payee settles. A leg that does not take it
+// changes nothing: the payee broadcasts the same bytes.
+func (g *global) broadcastPayment(ctx context.Context, p *purse.Purse, tx *transaction.Transaction) {
 	if p.Settler == nil {
-		return nil
+		return
 	}
 	if err := p.Settler.Submit(ctx, tx); err != nil && !strings.Contains(strings.ToLower(err.Error()), "already") {
 		g.say("payment %s: not broadcast from here (%s); the payee broadcasts it when it settles", vread.Short(tx.TxID().String()), firstLine(err.Error()))
 	}
-	return nil
 }
 
 // paidBase is the host a priced question goes to: -at, else paid_host.
@@ -123,21 +127,33 @@ func (g *global) paidBase(at string) (string, error) {
 // section 10.3): over BRC-104, answered 402 with the price, and asked again
 // with a BRC-29 payment to the host from this home's pool (BRC-105) as
 // output 0, which the host records and its payee settles. A price over
-// maxSats is not paid; a host that prices nothing answers at no price.
-func (g *global) ask(ctx context.Context, h *home, hc chaintracker.ChainTracker, base string, q vread.Query, maxSats uint64) ([]lookup.Output, error) {
+// maxSats is not paid; a host that prices nothing answers at no price. It
+// returns what was paid, answered or not: a payment that left this process
+// is made.
+func (g *global) ask(ctx context.Context, h *home, hc chaintracker.ChainTracker, base string, q vread.Query, maxSats uint64) ([]lookup.Output, uint64, error) {
 	raw, _ := json.Marshal(q)
 	qq, err := secrec.ParseQuery(raw)
 	if err != nil {
-		return nil, usage("the question breaks the class rules: %v", err)
+		return nil, 0, usage("the question breaks the class rules: %v", err)
 	}
 	if qq.Class.Free {
-		return nil, usage("%s is a free class: it is never asked at a price", qq.Class.Name)
+		return nil, 0, usage("%s is a free class: it is never asked at a price", qq.Class.Name)
 	}
 	p, err := g.purse(ctx, h, hc, maxSats)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	once := &oncePurse{Purse: p}
+	// The pool is recorded before a coin is taken from it, and a coin a
+	// run that stopped took and never recorded goes back (engine.Journal).
+	engine.Journal(h.st, h.e.Pool, engine.Reconcile(ctx, h.st, h.e.Pool, p.Asset, g.say))
+	if err := h.st.Save(); err != nil {
+		return nil, 0, err
+	}
+	defer func() {
+		engine.Unjournal(h.st)
+		_ = h.st.Save()
+	}()
+	once := &oncePurse{Purse: p, record: func(tx *transaction.Transaction) error { return recordPayment(h, tx) }}
 	body, _ := json.Marshal(lookup.Question{Service: secrec.LookupService, Query: q})
 	af := clients.New(once, clients.WithoutLogging(), clients.WithHttpClient(&http.Client{Timeout: g.cfg.Timeout}))
 	resp, ferr := af.Fetch(ctx, strings.TrimRight(base, "/")+"/lookup", &clients.SimplifiedFetchRequestOptions{
@@ -147,72 +163,101 @@ func (g *global) ask(ctx context.Context, h *home, hc chaintracker.ChainTracker,
 	if ferr == nil {
 		defer resp.Body.Close()
 		status, paid, payee = resp.StatusCode, resp.Header.Get("x-bsv-payment-satoshis-paid"), resp.Header.Get("x-bsv-auth-identity-key")
-		ans, ferr = io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+		ans, ferr = io.ReadAll(io.LimitReader(resp.Body, limits.MaxAnswer+1))
+		if ferr == nil && len(ans) > limits.MaxAnswer {
+			ferr = fmt.Errorf("the answer is over %d bytes and is not read", limits.MaxAnswer)
+		}
 	}
 	answered := ferr == nil && status == http.StatusOK
 	switch {
-	case once.made == 0:
-		// No payment left this process: there is nothing to keep.
-		p.Refund()
+	case once.tx == nil:
+		// No payment was made: there is nothing to keep.
 	case answered && paid != "":
-		if tx := p.Settle(); tx != nil {
-			fmt.Fprintf(g.stdout, "paid %s sat to %s in %s for %s, recorded by the host for its payee to settle\n", termsafe.Abbrev(paid),
-				termsafe.Abbrev(payee), tx.TxID(), qq.Class.Name)
-			if err := g.keepPayment(ctx, h, p, tx); err != nil {
-				return nil, err
-			}
-		}
+		fmt.Fprintf(g.stdout, "paid %s sat to %s in %s for %s, recorded by the host for its payee to settle\n", termsafe.Abbrev(paid),
+			termsafe.Abbrev(payee), once.tx.TxID(), qq.Class.Name)
+		g.broadcastPayment(ctx, p, once.tx)
 	default:
 		// A payment was handed to the host and the host did not answer for
 		// it. Its coins are NOT given back to the pool: the host holds a
 		// valid transaction that spends them, and a coin spent again would
 		// make this home's next transaction a double spend. The payment is
 		// kept as made.
-		if tx := p.Settle(); tx != nil {
-			g.say("a payment of this home's, %s, was sent to %s and the question was not answered: it left this process, so it is kept as made and its coins are not reused; the host's payee can still settle it", tx.TxID(), base)
-			if err := g.keepPayment(ctx, h, p, tx); err != nil {
-				return nil, err
-			}
-		}
+		g.say("a payment of this home's, %s, was sent to %s and the question was not answered: it left this process, so it is kept as made and its coins are not reused; the host's payee can still settle it", once.tx.TxID(), base)
+		g.broadcastPayment(ctx, p, once.tx)
 	}
 	switch {
-	case errors.Is(ferr, errPaidOnce) || (ferr == nil && status == http.StatusPaymentRequired && once.made > 0):
-		return nil, refused("%s at %s: the host asked for a payment again after one was sent; one question is paid for once", qq.Class.Name, base)
+	case errors.Is(ferr, errPaidOnce) || (ferr == nil && status == http.StatusPaymentRequired && once.tx != nil):
+		return nil, once.sats, refused("%s at %s: the host asked for a payment again after one was sent; one question is paid for once", qq.Class.Name, base)
 	case ferr != nil:
-		return nil, fmt.Errorf("%s at %s: %w", qq.Class.Name, base, payWords(ferr, maxSats))
+		return nil, once.sats, fmt.Errorf("%s at %s: %w", qq.Class.Name, base, payWords(ferr, maxSats))
 	case status != http.StatusOK:
-		return nil, fmt.Errorf("%s at %s: status %d: %s", qq.Class.Name, base, status, termsafe.Abbrev(firstLine(string(ans))))
+		return nil, once.sats, fmt.Errorf("%s at %s: status %d: %s", qq.Class.Name, base, status, termsafe.Abbrev(firstLine(string(ans))))
 	}
 	var a lookup.Answer
 	if err := json.Unmarshal(ans, &a); err != nil || a.Type != lookup.TypeOutputList {
-		return nil, fmt.Errorf("%s at %s: the answer is not an output-list", qq.Class.Name, base)
+		return nil, once.sats, fmt.Errorf("%s at %s: the answer is not an output-list", qq.Class.Name, base)
 	}
-	return a.Outputs, nil
+	return a.Outputs, once.sats, nil
 }
 
 // errPaidOnce refuses a second payment for one question.
 var errPaidOnce = errors.New("one question is paid for once")
 
-// oncePurse is a purse that pays once. The SDK's AuthFetch answers every
-// 402 with a new payment, several times over: a host that keeps answering
-// 402 would be handed a signed payment each time, and each is a
-// transaction it can broadcast. One question is one payment.
+// oncePurse is a purse that pays once, and records what it pays before it
+// is sent. The SDK's AuthFetch answers every 402 with a new payment,
+// several times over: a host that keeps answering 402 would be handed a
+// signed payment each time, and each is a transaction it can broadcast.
+// One question is one payment. And the SDK sends a payment as soon as the
+// wallet returns it, so the wallet is where it must be recorded: once the
+// action returns, the payment is made, its coin spent and its change in the
+// pool, whatever the host then answers.
 type oncePurse struct {
 	*purse.Purse
-	made int
+	record func(tx *transaction.Transaction) error
+	// tx is the payment made, and sats what it pays the host.
+	tx   *transaction.Transaction
+	sats uint64
 }
 
-// CreateAction makes the one payment, and refuses any after it.
+// CreateAction makes the one payment and records it, and refuses any after
+// it.
 func (o *oncePurse) CreateAction(ctx context.Context, args wallet.CreateActionArgs, originator string) (*wallet.CreateActionResult, error) {
-	if o.made > 0 {
+	if o.tx != nil {
 		return nil, errPaidOnce
 	}
 	res, err := o.Purse.CreateAction(ctx, args, originator)
-	if err == nil {
-		o.made++
+	if err != nil {
+		return nil, err
 	}
-	return res, err
+	tx := o.Purse.Settle()
+	if tx == nil {
+		return nil, errors.New("the wallet made no payment")
+	}
+	if err := o.record(tx); err != nil {
+		return nil, fmt.Errorf("the payment %s could not be recorded in the home, and is not sent: %w", tx.TxID(), err)
+	}
+	o.tx, o.sats = tx, args.Outputs[0].Satoshis
+	return res, nil
 }
+
+// budget is what a command that asks several priced questions may pay: at
+// most per for one question, and at most total for all of them. A host
+// sets its own prices and its own pages; the command sets what they may
+// add up to.
+type budget struct {
+	per, total, spent uint64
+}
+
+// next is the most the next question may be paid, or an error once the
+// total is spent.
+func (b *budget) next() (uint64, error) {
+	if b.spent >= b.total {
+		return 0, fmt.Errorf("this command has paid %d sat, its budget (-budget): it pays for no further question", b.spent)
+	}
+	return min(b.per, b.total-b.spent), nil
+}
+
+func (b *budget) paid(sats uint64) { b.spent += sats }
 
 // checkOrigin refuses a terms base that is not an origin (spec section
 // 10.3): the terms document, the BRC-104 handshake and the priced /lookup
@@ -340,7 +385,7 @@ func cmdHistory(ctx context.Context, g *global, args []string) error {
 	if *after != "" {
 		q["after"] = *after
 	}
-	outs, err := g.ask(ctx, h, t.rd.Headers, base, q, *maxSats)
+	outs, _, err := g.ask(ctx, h, t.rd.Headers, base, q, *maxSats)
 	if err != nil {
 		return err
 	}

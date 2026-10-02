@@ -120,6 +120,9 @@ const (
 	// full page of the largest objects the plane carries fits several
 	// times over.
 	MaxAnswer = 16 << 20
+	// DefaultBudget is the most a command that asks several priced
+	// questions pays in all without -budget.
+	DefaultBudget = 16 * DefaultMaxPrice
 	// MaxBEEF is the most a reader takes for one answered object.
 	MaxBEEF = 1 << 20
 	// MaxUnminedPayments is how many of a payer's own payments may be

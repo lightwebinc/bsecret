@@ -118,7 +118,7 @@ Magic `"sev"` `0x01`. The second field of a vault token.
 | 3 | `vault` | bytes(32) | the vault identifier (section 3.3), fixed for the vault's life |
 | 4 | `seq` | uint, 0 to 2^53 - 1 | 0 for the vault's first token, then one more per token |
 | 5 | `prev` | bytes(32) | the txid, hash byte order, of the mined transaction holding the token at `seq - 1`; all zero exactly when `seq = 0` |
-| 6 | `name` | text, 1 to 64 bytes | the vault's display name |
+| 6 | `name` | text, 1 to 64 bytes, one line of plain text: no control character (U+0000 to U+001F, U+007F to U+009F) and no line or paragraph separator (U+2028, U+2029) | the vault's display name |
 | 7 | `hall` | text; borg's hall identifier grammar | the borg hall the vault's group lives in. Fixed at the first token |
 | 8 | `group` | bytes(16) | the borg group whose epochs key this vault. Fixed at the first token |
 | 9 | `epoch` | uint, 0 to 2^32 - 1 | the epoch the vault acknowledges: every version this token lists is keyed under it |
@@ -222,7 +222,17 @@ section 4.2 bind the rooted chain; a token off it proves nothing about the
 vault and changes nothing in it.
 
 A display name identifies nothing: two vaults may share one, and a reader
-holds a vault by its owner and identifier.
+holds a vault by its owner and identifier. It is one line of plain text: a
+record whose `name` holds a line break or any other control character (the
+code points U+0000 to U+001F and U+007F to U+009F, and the line and
+paragraph separators U+2028 and U+2029) is refused (`name`), by a host as by
+a reader, so that a name never writes a line of its own in a report, or
+drives the terminal it is printed on. The set is fixed code points, so every
+implementation refuses the same names. An owner's tooling SHOULD refuse more:
+whatever a terminal filter would strip (zero-width and bidirectional
+controls, characters that do not print). A renderer still filters a name
+before it prints it: the record rule bounds what a name may hold, not what a
+terminal will do with it.
 
 ## 4. Vault transitions
 
@@ -269,6 +279,13 @@ BEEF carries):
 4. `count`: `retire` holds at most the predecessor's `count`, and `count` is
    the predecessor's `count` plus the length of `create` less the length of
    `retire`.
+
+At a host, rule 1 is reached only for `hall`, `group`, `labels` and `anchor`.
+A parent whose token is of another crypt, owner or vault, or is not at
+`seq - 1`, or whose txid is not `prev`, is not the predecessor at all, and
+the token is refused earlier, as `token-input` (section 11.1 rule 8), never
+as `transition`. Rule 1 lists those fields for a reader and an auditor, who
+hold two tokens and no admission verdict.
 
 Rule 3 is the property the application exists for, checked by every replica:
 **once a vault acknowledges a new epoch, its chain (the tokens that descend
@@ -324,6 +341,14 @@ A vault's `anchor` is fixed at its first token:
   (`successor`). A reader that
   holds a later version it cannot link (a link is missing, dropped or
   retracted) takes the highest it can link and says that a later one exists.
+  A retracted record is not a link: a run of links ends below the first
+  retracted version, and a listed version that is itself retracted is
+  refused (`retracted`), with nothing taken through it. A reader follows at
+  most 64 unlisted versions above the listed one, asking for each only once
+  the one before it was answered, so that a version a carrier claims never
+  sets how far it walks; where more exist it takes the 64th and says that a
+  later one exists. An owner that defers SHOULD list a secret before 64 of
+  its versions are unlisted.
   An owner MUST NOT sweep a version that an unlisted successor links through
   before a token lists a later one. The owner lists the latest version of each changed secret
   in a token at an interval of its choosing; versions that came and went
@@ -493,8 +518,9 @@ segment by segment, and can forge tags for either. A fresh key per version
 (section 6.1) is the guard, and the salt is a second one only while the key
 is fresh. The owner's tooling MUST refuse to publish a version whose
 commitment it has ever published or listed, in this vault or any other of
-its own; hosts and the index see a repeat only within one vault (section
-4.3).
+its own, and labels the refusal `commitment-reuse`, the name the index gives
+the same fault; hosts and the index see a repeat only within one vault
+(section 4.3).
 
 ### 6.3 The epoch wrap
 
@@ -597,6 +623,15 @@ and not by its own txid alone (a copy of its transaction with re-encoded
 unlocking scripts has another txid and the same record, and is the same
 transition).
 
+The tooling gives up a transition or a sweep it has persisted only on
+positive evidence that another transaction took its place: a source that
+indexes spends names a different spender of the predecessor's token output
+(for a sweep, of a funding output it spends). With no other spender it is
+never given up, whatever a broadcast service answered and however long it
+stays unmined: the same bytes are offered again, and nothing else is built
+on the output it spends. A node that cannot say, or a spender it cannot
+show, is not evidence.
+
 ### 7.2 A reader's checks, in order
 
 A reader that wants a secret's value performs these checks in this order and
@@ -629,8 +664,15 @@ is never a member, so a reader instead checks that the vault's `org` is the
 organisation of the group the vault names: the group's tokens are locked to
 the same identity key.
 
-Beside these labels a reader reports `rollback` (section 14). The codec also
-labels a refused question `query` and anything it has no label for `other`.
+Beside these labels a reader reports `retracted` (a mined sweep spends the
+record's funding outpoint, section 14: checked with the listing, before the
+ciphertext is read), `successor` (section 4.4) and `rollback` (section 14).
+The codec also labels a refused question `query` and anything it has no
+label for `other`.
+
+A check that fails names its culprit and refuses the read. A host that
+answers something that does not verify is another matter (section 14): it is
+not a check that failed on what is read.
 
 ### 7.3 What a reader reports
 
@@ -650,8 +692,21 @@ Beside the value, a reader reports, for the version it read:
   nothing from a vault that is ahead: its owner wrote a token no honest
   tooling writes.
 
-A reader that cannot tell (it has no source that says a token is unspent)
-says so, and does not report a version as current.
+**Current needs both chains.** A reader reports a version as current only on
+positive evidence of two things, as a writer's (section 7.1): the vault's
+latest token is unspent, and the group's latest token, as the hall's hosts
+answer it, is unspent, each according to a source that indexes spends. The
+second matters as much as the first: a removal that the hall's hosts have
+not answered yet, or withhold, leaves the vault looking settled and the
+value looking current under an epoch that has ended. A reader that cannot
+tell (it has no source that says a token is unspent, or the source cannot
+say) says so, and does not report a version as current.
+
+**Freshness is taken at the read.** The evidence is taken when the value is
+read and covers that moment only. A reader that keeps a value (a process
+that reads at its start, a cache, a file) keeps its age with it: the value
+is as current as the read was, and a consumer that needs a current value
+reads again.
 
 ## 8. Changes and revoke
 
@@ -695,7 +750,11 @@ section 8.3.
   rotates and the vault re-keys.
 - **Retire a secret.** List its identifier in `retire`, and sweep the
   funding outputs of its versions' carriers (section 12.5) so that honest
-  hosts stop answering them.
+  hosts stop answering them. A retirement sweeps only the versions of the
+  secrets it retires, whatever epoch they are keyed under (and, as every
+  change does, versions published and never listed, section 8.4). It leaves
+  every other secret's replaced versions alone: those, where they are keyed
+  under an epoch that has ended, are a rotation's to sweep (section 8.2).
 - **Retire a vault.** Retire every secret and sweep. The tokens stay: they
   are mined.
 
@@ -735,7 +794,18 @@ value, or an explicit choice to retire. It MUST NOT build any other vault
 transition while a vault is behind its group or in debt (a host refuses the
 second; a reader and an auditor see the first). After the rotation it SHOULD
 sweep the carriers of the versions keyed under epochs that have ended, unless
-the owner keeps history on purpose (section 15).
+the owner keeps history on purpose (section 15). A rotation sweeps by epoch,
+once the vault is settled: every version a later token replaced or retired
+that is keyed under an epoch before the one the vault now acknowledges. It
+never sweeps a version the set holds.
+
+The removal is borg's command, and nothing in bsecret can stop it. So the
+check that a revoke can be finished is a step of its own, made before the
+removal: `bsecret rotate -check`, given the choices, builds nothing and
+fails when any secret of a vault keyed to the group has none. It is the
+documented step before borg removes anyone. An organisation that removes
+first has begun a revoke it may not be able to finish, and the trail shows
+how long it took (section 9.2).
 
 **Rotation debt** is a vault that is behind its group, or whose `stale` is
 not 0. Anyone can compute it from the two chains (section 14), and the
@@ -756,8 +826,13 @@ tooling reports and clears it.
   that began the epoch is mined in the publisher's own headers and borg's
   wraps of the epoch's key are published. Otherwise the remaining members
   could not open it, or it would be keyed under an epoch the chain never
-  began.
-- A sweep is published after it is mined, under the same delay as a token.
+  began. The tooling checks it before it re-keys: while a current member of
+  the group has no wrap of the new epoch answered by any host of the hall,
+  the rotation stops as incomplete (exit 3 in the tooling here) and is run
+  again once borg has published them. `-unwrapped` is the explicit override,
+  for an owner that accepts that a member cannot open the new versions yet.
+- A sweep is published after it is mined, under the same delay as a token,
+  in every crypt that holds a version it retracts (section 12.5).
 - The publisher confirms every object at every host it names by lookup, and
   offers it again where it is missing (section 13). An object the plane took
   is not thereby at every host.
@@ -1179,8 +1254,8 @@ token. Its **parent** is the other transaction in its BEEF:
    of the token spends an output of the parent that is a well-formed vault
    token of the same crypt, owner and vault at `seq - 1`, or more than one
    input spends a token output of the parent (an output that classifies as a
-   vault token, well formed or not); for `seq` 0, the token does not have
-   exactly one input that spends an output of the parent, or that output is
+   vault token, well formed or not); for `seq` 0, it is not exactly one of
+   the token's inputs that spends an output of the parent, or that output is
    not a well-formed funding output locked to `derive(org, "chain")`;
 9. `vault-id`: for `seq` 0, `vault` is not the identifier of the outpoint
    that input spends (section 3.3);
@@ -1196,6 +1271,20 @@ verifies under that key. The predecessor's record is not held to its own
 transition rules: those were its own admission's.
 
 A token's inputs that do not spend the parent are not read: they pay its fee.
+A token at `seq > 0` MAY also spend outputs of its parent that are not token
+outputs (the parent's change, for one): they pay its fee like any other
+input and are not read either. Only a second spend of a token output of the
+parent is refused (rule 8). **A first token spends exactly one input of its
+parent:** exactly one of its inputs spends an output of the chain tree, so
+that one outpoint gives the vault its identifier, and two are refused (rule
+8); its other inputs come from elsewhere, pay its fee, and are not read.
+
+**A predecessor of another crypt, owner or vault reads `token-input`, never
+`transition`.** Rule 8 decides whose token is spent before rule 10 compares
+anything: a parent whose token names another crypt, another owner or another
+vault, or is not at `seq - 1`, is not this token's predecessor, whatever
+else the two records share.
+
 A token is admitted whether or not the topic already holds its predecessor;
 the index then reports it `pending` until it does (section 11.2), so a token
 that arrives before its predecessor is not lost.
@@ -1216,7 +1305,12 @@ inputs), and whose proof verifies against the host's headers: output 0 alone
 is admitted, and its inputs' outpoints are matched against the funding
 outpoints of carriers. A sweep is refused in the order `beef` (the BEEF is
 not exactly the sweep and its own minimal path), `unmined`, `too-large` (more
-inputs than the host's bound, which is at least 1024). A mined funding tree
+inputs than the host's bound, which is at least 1024). A sweep offered before
+it is mined reads `beef`, not `unmined`: a BEEF that carries a transaction
+with no proof must carry what it spends, the tree, so it is not the sweep
+and its own path. `unmined` is left for a sweep whose own path does not
+verify against the host's headers. Either way the refusal raises, and the
+sweep is decided again when it is offered mined. A mined funding tree
 published on its own has this shape and is admitted as a sweep, which is
 harmless: its inputs spend no carrier's funding outpoint. A publisher still
 never publishes a tree on its own. A host keeps a spend for its life only
@@ -1277,7 +1371,9 @@ that spend the outpoint.
 A token is **rooted** when the host holds every token from it back to the
 vault's first by spends: its input spends the token output of the token it
 holds at `seq - 1`, and so on to `seq` 0. The first token is rooted by its
-own admission (`token-input` and `vault-id`). Only rooted tokens are a
+own admission (`token-input` and `vault-id`); where the index reads a first
+token without its parent (on restore, section 11.4), it checks it by the
+outpoint hash alone, as a reader does (section 14). Only rooted tokens are a
 vault's chain: only they are answered as latest, only their fold makes a set,
 and only they list a carrier.
 
@@ -1319,6 +1415,14 @@ commitments with them. The engine's record that a dropped carrier's
 transaction was applied remains, one row a carrier, and a carrier costs its
 owner a signature: submission rate limits bound that, nothing else does. The winner is the lowest `C` ever admitted on the
 outpoint, which a running minimum gives whatever was dropped.
+
+**A dropped winner is sticky.** Once a host drops an outpoint's winner
+(section 11.3), its row says so for the host's life, and every carrier on
+that outpoint is `superseded` from then on: the ones it holds, and any
+admitted later, one with a lower `C` included. A host never answers a
+carrier on an outpoint whose winner it dropped. Without this, a second
+carrier made on the outpoint after the first was dropped would be answered
+as if it were the only one the owner made.
 
 A vault whose chain holds a `set-mismatch` or `stale-mismatch` token is
 **broken** from that token on, for good: the status is sticky, hosts go on
@@ -1503,6 +1607,12 @@ it is mined, every carrier that spent one of those outputs is a double spend
 and can never be valid again: hosts retract it. A sweep is published once,
 after it mines, to the plane and directly to every host the publisher names.
 Hosts learn of spends only from sweeps; only a mined spend retracts.
+**A sweep is published in every crypt that holds a version it retracts.** A
+funding tree is the owner's, not a crypt's, and one tree may fund versions
+of vaults in several crypts; a host learns of a spend only from a sweep
+admitted in the topic of the crypt it carries, and admission reads no other
+topic. A sweep published in one crypt alone leaves the versions it spends in
+another answered there.
 Retraction reaches honest hosts only: it is not erasure, and a copy anyone
 kept stays a copy.
 
@@ -1538,6 +1648,12 @@ directly to a host that still lacks it after a few seconds. That is a copy
 across, not a way round the plane's repair, and a direct copy that meets the
 plane's is a duplicate.
 
+**Quorum on the plane.** The facade's acceptance is not publication. A
+carrier counts as published once a quorum of the hosts the publisher names
+answer it by lookup; a token or a sweep counts only once every host named
+answers it. Short of that the publisher stops, keeps the object, and offers
+it again before it builds anything new.
+
 Objects on the plane are kept small. A secret's carrier with its ciphertext
 inline is a few packets for a credential and about 18 at the inline bound; a
 token of a few changes is 3 or 4 ([limits.md](limits.md), measured). A large
@@ -1565,7 +1681,14 @@ to it, assembling each token's BEEF as section 11.6 says.
 **Reading.** A reader asks one or more hosts the same question and verifies
 every answer against its own headers (section 14). A reader that asks several
 and receives different sets reports the difference as such, never merges it
-silently.
+silently. A host that answers something that does not verify (a token whose
+proof or signature fails, a carrier that breaks the carrier rules, an output
+that is not the object asked for) makes the read **incomplete**, not
+refused: what does not verify is not used, the host is named, the vault is
+read from what did verify, and the reader says that the answer it has proves
+nothing either way (exit 3 in the tooling here). Refused is for a check that
+failed on what was read and names the owner or a store (section 7.2). One
+host at fault does not make a vault fail.
 
 ## 14. Verification by a reader
 
@@ -1578,7 +1701,13 @@ by token) and checks, for each token: its proof against the reader's best
 chain; its output, lock and field signature (section 11.1's well-formed
 token); that an input spends the token output of the token before it, whose
 txid its `prev` names; the transition rules of section 4.2; and, at `seq` 0,
-that the input's outpoint hashes to the vault identifier. It folds as it goes.
+that an input's outpoint hashes to the vault identifier. **A reader checks a
+first token by the outpoint hash alone.** It does not read the transaction
+that outpoint is in, which no host keeps: an outpoint is spent by one mined
+transaction, so the hash is enough to make the token the vault's one first
+token (section 3.3). That the output spent was a chain-tree output of the
+owner is a host's rule at admission (section 11.1 rule 8), which a reader
+does not repeat. It folds as it goes.
 Afterwards it starts from the token it remembers. A host's answer to `vault`
 is a claim about which token is latest, never evidence of descent.
 
@@ -1590,7 +1719,9 @@ settled by positive evidence: its 1-satoshi output is unspent according to a
 source that indexes spends (a node, a UTXO index, or a service the reader
 trusts), checked within the last 60 seconds for anything that acts on the
 value. A reader without such a source trusts the highest `seq` any asked host
-answers, asks more than one, and says that its answer may be stale.
+answers, asks more than one, and says that its answer may be stale. The
+evidence is taken at the read, and a value kept after it keeps its age
+(section 7.3).
 
 **No going back.** A reader keeps, per vault, the highest `seq` it has
 verified and that token's txid. It MUST refuse an answer whose latest token
@@ -1604,10 +1735,22 @@ that starts with no memory (a container started
 fresh) has only the unspent evidence and the comparison of hosts; a
 deployment that cannot keep state SHOULD use a spend source.
 
-**A broken chain.** A reader that folds a vault's chain treats a vault whose
-chain holds a `set-mismatch` or `stale-mismatch` token as unusable from that
-token on: it fails closed, and names the owner, who signed a token whose
-counts its own change lists do not give. It refuses a version whose commitment an earlier
+A reader keeps the same memory of the vault's group: the `seq` and txid of
+the latest group token it verified. Hosts of the hall that answer the
+group's chain only below it are answering an older state of the group, one
+in which a member since removed is still a member and the epoch that removal
+began does not exist; every token of it verifies. The reader MUST refuse it
+(`rollback`). It forgets what it remembered of the group only as it does for
+the vault: when a chain source says the remembered token is no longer mined.
+A source that fails proves nothing, and nothing is forgotten on its account.
+A writer holds the group to the same memory before it builds anything.
+
+**A broken chain.** A reader that folds a vault's chain and finds a
+`set-mismatch` or `stale-mismatch` token refuses the vault entirely: it takes
+nothing from it, the set of the last token before the break included, and
+names the owner, who signed a token whose counts its own change lists do not
+give. A host goes on answering the earlier set (section 11.2), because an
+index has to answer something; a reader fails closed. It refuses a version whose commitment an earlier
 token of the vault listed (`commitment-reuse`): its key is one an earlier
 version's readers hold. A reader that checks one secret by its inclusion path
 alone does not see these, nor a second leaf for one identifier; it folds the
@@ -1629,7 +1772,19 @@ In an interval vault a reader also asks `pending`, and takes the highest
 version it can link to the listed one, successor by successor (section 4.4).
 A host that withholds the newest unlisted version hands the reader an older
 one that still links; nothing the reader holds shows it. A reader of an
-interval vault that needs the newest asks more than one host.
+interval vault that needs the newest asks more than one host. It follows at
+most 64 unlisted versions, ends a run below a retracted one, and says when a
+later version exists that it did not take (section 4.4).
+
+**History.** A reader that reads a version the set no longer holds (the
+`version` class, or the `history` class) holds it to the first token of the
+chain that lists that identifier at that version. That token is
+authoritative: it must list the record as it is, with its content id and
+commitment, under the record's epoch, and a later token that names the same
+version proves nothing about a record the first did not list. Commitment
+reuse is refused there too: a version whose commitment an earlier token of
+the vault listed is not read (`listing`). A version read as history is never
+reported current.
 
 **The group's state, and exposure.** The reader reads the group's chain from
 borg, as borg says, and settles that its latest token is the latest in the
@@ -1648,7 +1803,8 @@ and takes nothing new from it.
 
 **A retraction.** A spend is found by the `sweep` class at one or more hosts
 or by a chain source, and counts only when its proof verifies. A reader MUST
-NOT use a record whose funding outpoint a mined sweep spends.
+NOT use a record whose funding outpoint a mined sweep spends (`retracted`),
+as a version or as a link to another (section 4.4).
 
 **A host's answer is not authority.** A host can withhold a token or a
 record; it cannot forge or alter one, and it cannot make a version read as
@@ -1793,7 +1949,8 @@ and borg v0.1.1.
 | Changes per transition (`create`, `update`, `retire`), each | 64 | bounds one token and the index work it causes; a larger change is several transitions |
 | Secrets in a vault | 4096 | every one is re-keyed after every removal; a vault that large takes 64 blocks to settle |
 | Labels of a vault | 16, of 32 bytes each | |
-| Names | a secret's 128 bytes; a vault's display name 64 | |
+| Names | a secret's 128 bytes; a vault's display name 64, one line of plain text | |
+| Unlisted versions a reader follows above a listed one | 64 | bounds a read in an interval vault by the records hosts hold in a row, never by a version a carrier claims |
 | Entries in a record map | 64 | bounds the work of one record |
 | Answers | 8 tokens, carriers or sweeps per question; 64 tokens or 16 secret carriers per page | bounds an answer; not a floor, a later version may raise it |
 | Tokens kept per `seq` | 8 | reorganisations |

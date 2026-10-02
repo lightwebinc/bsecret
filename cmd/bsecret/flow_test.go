@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -846,9 +847,69 @@ func TestTheTerminal(t *testing.T) {
 	}
 }
 
-// A transition another transaction beat to the chain is discarded: nothing
+// copyHome copies a home, as a second device of one owner would hold it.
+func copyHome(t *testing.T, from, to string) {
+	t.Helper()
+	err := filepath.WalkDir(from, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(from, p)
+		dst := filepath.Join(to, rel)
+		if d.IsDir() {
+			return os.MkdirAll(dst, 0o700)
+		}
+		if d.Name() == "lock" {
+			return nil
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(dst, b, 0o600)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A transition another transition beat to the chain is discarded: nothing
 // it listed is listed, and what it published is unlisted.
 func TestALostTransition(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	copyHome(t, filepath.Join(h.dir, "org"), filepath.Join(h.dir, "org2"))
+	// Between the first home's evidence and its send, the second home's
+	// transition takes the vault's tip.
+	var won result
+	h.mu.Lock()
+	h.onSend = func(*transaction.Transaction) { won = h.run("org2", "theirs", "put", "db/password") }
+	h.mu.Unlock()
+	r := h.run("org", "ours", "put", "db/password")
+	if won.code != exitOK {
+		t.Fatalf("the second home's put: exit %d\n%s\n%s", won.code, won.stdout, won.stderr)
+	}
+	h.want(r, exitRefused, "lost: its predecessor is spent by ")
+	r = h.must("org", "doctor")
+	if !strings.Contains(r.stdout, "1 version(s) published and not listed") || strings.Contains(r.stdout, "transition  ") {
+		t.Fatalf("doctor after a lost transition:\n%s", r.stdout)
+	}
+	// The home's evidence now fails closed: its tip is spent.
+	h.want(h.run("org", "three", "put", "db/password"), exitRefused, "run `bsecret sync`")
+	h.must("org", "sync")
+	h.put("db/password", "three")
+	if r := h.must("alice", "get", "db/password"); r.stdout != "three" {
+		t.Fatalf("alice: %q\n%s", r.stdout, r.stderr)
+	}
+}
+
+// A spender of the predecessor that the node cannot show settles nothing:
+// it may be this very transition under another txid (a re-encoded copy,
+// which is the same transition). The transition is kept until the spender
+// is read.
+func TestASpenderTheNodeCannotShowDiscardsNothing(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.vault()
@@ -861,19 +922,16 @@ func TestALostTransition(t *testing.T) {
 		}
 	}
 	other := strings.Repeat("ab", 32)
-	// Between the writer's evidence and its send, another transaction
-	// takes the vault's tip.
 	h.mu.Lock()
 	h.onSend = func(*transaction.Transaction) { h.chain.SpendElsewhere(tip, 0, other) }
 	h.mu.Unlock()
 	r = h.run("org", "two", "put", "db/password")
-	h.want(r, exitRefused, "lost: its predecessor is spent by "+other[:12])
-	r = h.must("org", "doctor")
-	if !strings.Contains(r.stdout, "1 version(s) published and not listed") || strings.Contains(r.stdout, "transition  ") {
-		t.Fatalf("doctor after a lost transition:\n%s", r.stdout)
+	if r.code != exitUsage || strings.Contains(r.stderr, "lost") || !strings.Contains(r.stderr, "which the node could not show") {
+		t.Fatalf("a spender the node cannot show: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
 	}
-	// The home's evidence now fails closed: its tip is spent.
-	h.want(h.run("org", "three", "put", "db/password"), exitRefused, "is spent by "+other[:12])
+	if r := h.must("org", "doctor"); !strings.Contains(r.stdout, "transition  ") {
+		t.Fatalf("the transition was discarded:\n%s", r.stdout)
+	}
 }
 
 // A persisted transition is given up only when the node names ANOTHER

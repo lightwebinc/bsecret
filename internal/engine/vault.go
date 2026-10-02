@@ -582,19 +582,26 @@ func (e *Engine) lostOrCopy(ctx context.Context, v *state.Vault, tr *state.Trans
 		return fmt.Errorf("%s: refused (%s), and the node could not say what spends its predecessor: %w (the next command looks again)", tr.What, why, err)
 	}
 	if by != "" && by != tr.Txid {
-		if raw, err := e.Legs.Asset.TxRaw(ctx, by); err == nil {
-			if other, err := guard.ParseTransaction(raw, guard.DefaultBound); err == nil && other.TxID().String() == by {
-				if t, err := secrec.ReadToken(other); err == nil && hex.EncodeToString(t.Record) == tr.Record {
-					mp, h, perr := e.Legs.Asset.Proof(ctx, by)
-					if perr != nil {
-						return fmt.Errorf("%s: a copy of it, %s, spends its predecessor and has not mined yet (the next command looks again)", tr.What, Short(by))
-					}
-					e.note("%s: a copy with another txid, %s, carrying the same record, was mined in its place: the same transition", tr.What, Short(by))
-					other.MerklePath = mp
-					tr.Vout = t.Vout
-					return e.adopt(ctx, v, tr, other, mp, h, payer)
-				}
+		// Another transaction spends the predecessor. Whether it won, or is
+		// this transition re-encoded, is settled only by reading it: a node
+		// that cannot show it settles nothing, and the transition is kept.
+		raw, err := e.Legs.Asset.TxRaw(ctx, by)
+		if err != nil {
+			return fmt.Errorf("%s: its predecessor is spent by %s, which the node could not show (%v): whether that is this transition under another txid is not known yet; it is kept, and the next command looks again", tr.What, Short(by), err)
+		}
+		other, err := guard.ParseTransaction(raw, guard.DefaultBound)
+		if err != nil || other.TxID().String() != by {
+			return fmt.Errorf("%s: its predecessor is spent by %s, and the node answered other bytes for it; it is kept, and the next command looks again", tr.What, Short(by))
+		}
+		if t, err := secrec.ReadToken(other); err == nil && hex.EncodeToString(t.Record) == tr.Record {
+			mp, h, perr := e.Legs.Asset.Proof(ctx, by)
+			if perr != nil {
+				return fmt.Errorf("%s: a copy of it, %s, spends its predecessor and has not mined yet (the next command looks again)", tr.What, Short(by))
 			}
+			e.note("%s: a copy with another txid, %s, carrying the same record, was mined in its place: the same transition", tr.What, Short(by))
+			other.MerklePath = mp
+			tr.Vout = t.Vout
+			return e.adopt(ctx, v, tr, other, mp, h, payer)
 		}
 	}
 	feeLost := false

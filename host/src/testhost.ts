@@ -6,7 +6,7 @@
 import { Engine } from '@bsv/overlay'
 import { Transaction, type ChainTracker } from '@bsv/sdk'
 import type { Module, TopicManager } from '@lightwebinc/bcommon'
-import { DefaultBudget } from './budget.js'
+import { DefaultBudget, DefaultResponseBudget } from './budget.js'
 import { MemoryJournal } from './journal.js'
 import { secretModule, type Config } from './module.js'
 import { LookupService } from './secrec.js'
@@ -50,6 +50,7 @@ export const config: Config = {
   prices: new Map(),
   sessions: { max: 100, ttlSeconds: 600 },
   handshakes: DefaultBudget,
+  responses: DefaultResponseBudget,
 }
 
 export interface SetupOptions {

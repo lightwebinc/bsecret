@@ -27,7 +27,9 @@
  *   BSECRET_SPEND_TABLE      spends of outpoints no carrier used that the
  *                            host keeps; at least and by default 65536
  *   BSECRET_LISTEN           host:port of the terms route (paid.ts)
- *   BSECRET_PRICES           the classes priced, e.g. history=5,audit=20
+ *   BSECRET_PRICES           the classes priced, e.g.
+ *                            history=5,history-after=5,audit=20,audit-after=20;
+ *                            a class and its -after form together
  *   BSECRET_PAYEE_KEY        the payee's private key, 64 hex characters
  *   BSECRET_SESSIONS         the most BRC-104 sessions the terms route
  *                            keeps; default 10000
@@ -40,6 +42,10 @@
  *   BSECRET_HANDSHAKES_PER_ADDR_PER_SEC, BSECRET_HANDSHAKE_ADDR_BURST
  *                            the same for one remote address; default 1
  *                            and 4
+ *   BSECRET_RESPONSES_PER_SEC, BSECRET_RESPONSE_BURST
+ *                            the signed responses a second one BRC-104
+ *                            session is given, and at once; default 5 and
+ *                            20
  *
  * Every `tm_bsecret_` topic in OVERLAY_TOPICS must be a crypt named here,
  * because a bsecret topic left to the host's default manager would admit
@@ -51,7 +57,7 @@ import type { Server } from 'node:http'
 import { PrivateKey, ProtoWallet, type ChainTracker } from '@bsv/sdk'
 import type { Module, ModuleHost } from '@lightwebinc/bcommon'
 import { DefaultMaxBEEF, DefaultMaxSweepInputs } from './admit.js'
-import { DefaultBudget, type BudgetConfig } from './budget.js'
+import { DefaultBudget, DefaultResponseBudget, type BudgetConfig, type ResponseBudgetConfig } from './budget.js'
 import { HeaderTracker, isNativeSource } from './headers.js'
 import { FileJournal, type Journal } from './journal.js'
 import { FloorDays, FloorUnheldHours, MinSpendTable, SecretLookupService } from './ls_bsecret.js'
@@ -86,6 +92,7 @@ export interface Config {
   payeeKey?: PrivateKey
   sessions: { max: number; ttlSeconds: number }
   handshakes: BudgetConfig
+  responses: ResponseBudgetConfig
 }
 
 /** Parses BSECRET_CRYPTS. Throws on anything it cannot take exactly. */
@@ -158,6 +165,10 @@ export function parseConfig(env: NodeJS.ProcessEnv): Config {
       perAddressPerSec: rate('BSECRET_HANDSHAKES_PER_ADDR_PER_SEC', env['BSECRET_HANDSHAKES_PER_ADDR_PER_SEC'], DefaultBudget.perAddressPerSec),
       addressBurst: integer('BSECRET_HANDSHAKE_ADDR_BURST', env['BSECRET_HANDSHAKE_ADDR_BURST'], DefaultBudget.addressBurst, 1),
     },
+    responses: {
+      perSec: rate('BSECRET_RESPONSES_PER_SEC', env['BSECRET_RESPONSES_PER_SEC'], DefaultResponseBudget.perSec),
+      burst: integer('BSECRET_RESPONSE_BURST', env['BSECRET_RESPONSE_BURST'], DefaultResponseBudget.burst, 1),
+    },
   }
   const listen = env['BSECRET_LISTEN']?.trim()
   if (listen !== undefined && listen !== '') {
@@ -206,6 +217,7 @@ export function secretModule(host: ModuleHost, c: Config, overlayTopics?: readon
   for (const status of TokenStatuses) host.metrics.preset('bsecret_token_status_total', { status })
   for (const why of ['evidence', 'retention', 'table']) host.metrics.preset('bsecret_dropped_total', { why })
   for (const why of ['cap', 'idle']) host.metrics.preset('bsecret_sessions_evicted_total', { why })
+  for (const result of ['requested', 'accepted', 'refused', 'replayed']) host.metrics.preset('bsecret_payments_total', { result })
   host.metrics.preset('bsecret_retractions_total')
   host.metrics.preset('bsecret_equivocations_total')
   const priced = new Set([...c.prices].filter(([, p]) => p > 0).map(([name]) => name))
@@ -242,6 +254,7 @@ export function secretModule(host: ModuleHost, c: Config, overlayTopics?: readon
       headers: tracker,
       sessions: c.sessions,
       budget: c.handshakes,
+      responses: c.responses,
     })
   }
   const start = async (): Promise<Server | undefined> => {
@@ -264,6 +277,7 @@ export function secretModule(host: ModuleHost, c: Config, overlayTopics?: readon
     priced: [...priced].join(',') || 'none',
     sessions: c.listen === undefined ? 'none' : `${c.sessions.max}, idle ${c.sessions.ttlSeconds}s`,
     handshakes: c.listen === undefined ? 'none' : `${c.handshakes.perSec}/s burst ${c.handshakes.burst}, per address ${c.handshakes.perAddressPerSec}/s burst ${c.handshakes.addressBurst}`,
+    responses: c.listen === undefined ? 'none' : `${c.responses.perSec}/s burst ${c.responses.burst} a session`,
     build,
   })
   return { module: { topics, lookups: { [LookupService]: ls } }, ls, front, start }

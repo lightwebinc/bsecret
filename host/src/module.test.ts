@@ -45,11 +45,12 @@ test('the configuration: a state directory and a native header source are requir
   assert.throws(() => parseConfig({ ...base, BSECRET_SPEND_TABLE: '100' }), /at least 65536/)
   assert.throws(() => parseConfig({ ...base, BSECRET_LISTEN: 'nowhere' }), /host:port/)
   assert.throws(() => parseConfig({ ...base, BSECRET_PAYEE_KEY: 'AB'.repeat(32) }), /64 lowercase hex/)
-  assert.throws(() => parseConfig({ ...base, BSECRET_PRICES: 'audit=5' }), /BSECRET_LISTEN/)
+  assert.throws(() => parseConfig({ ...base, BSECRET_PRICES: 'audit=5,audit-after=5' }), /BSECRET_LISTEN/)
+  assert.throws(() => parseConfig({ ...base, BSECRET_PRICES: 'audit=5', BSECRET_LISTEN: '127.0.0.1:1', BSECRET_PAYEE_KEY: '11'.repeat(32) }), /audit and audit-after are priced together/)
   assert.throws(() => parseConfig({ ...base, BSECRET_PRICES: 'audit=0' }), /BSECRET_LISTEN/)
-  assert.throws(() => parseConfig({ ...base, BSECRET_PRICES: 'audit=5', BSECRET_LISTEN: '127.0.0.1:1' }), /BSECRET_PAYEE_KEY/)
+  assert.throws(() => parseConfig({ ...base, BSECRET_PRICES: 'audit=5,audit-after=5', BSECRET_LISTEN: '127.0.0.1:1' }), /BSECRET_PAYEE_KEY/)
   assert.throws(() => parseConfig({ ...base, BSECRET_PRICES: 'vault=1', BSECRET_LISTEN: '127.0.0.1:1' }), /free class/)
-  const priced = parseConfig({ ...base, BSECRET_PRICES: 'history=5,audit=20', BSECRET_LISTEN: '[::1]:8081', BSECRET_PAYEE_KEY: '11'.repeat(32) })
+  const priced = parseConfig({ ...base, BSECRET_PRICES: 'history=5,history-after=5,audit=20,audit-after=20', BSECRET_LISTEN: '[::1]:8081', BSECRET_PAYEE_KEY: '11'.repeat(32) })
   assert.deepEqual([priced.listen, priced.prices.get('history'), priced.prices.get('audit')], [{ host: '::1', port: 8081 }, 5, 20])
   assert.deepEqual(
     (({ retentionDays, unheldHours, maxBEEF, spendTable }) => [retentionDays, unheldHours, maxBEEF, spendTable])(parseConfig({ ...base, BSECRET_RETENTION_DAYS: '90', BSECRET_UNHELD_HOURS: '48', BSECRET_MAX_BEEF: '1048576', BSECRET_SPEND_TABLE: '100000' })),
@@ -63,6 +64,9 @@ test('the configuration: a state directory and a native header source are requir
     parseConfig({ ...base, BSECRET_HANDSHAKES_PER_SEC: '2.5', BSECRET_HANDSHAKE_BURST: '5', BSECRET_HANDSHAKES_PER_ADDR_PER_SEC: '0.5', BSECRET_HANDSHAKE_ADDR_BURST: '2' }).handshakes,
     { perSec: 2.5, burst: 5, perAddressPerSec: 0.5, addressBurst: 2 },
   )
+  assert.deepEqual(c.responses, { perSec: 5, burst: 20 }, 'the budget of signed responses a session has a default')
+  assert.deepEqual(parseConfig({ ...base, BSECRET_RESPONSES_PER_SEC: '0.5', BSECRET_RESPONSE_BURST: '3' }).responses, { perSec: 0.5, burst: 3 })
+  assert.throws(() => parseConfig({ ...base, BSECRET_RESPONSE_BURST: '0' }), /BSECRET_RESPONSE_BURST/)
   for (const [k, v] of [['BSECRET_HANDSHAKES_PER_SEC', '0'], ['BSECRET_HANDSHAKES_PER_ADDR_PER_SEC', 'fast'], ['BSECRET_HANDSHAKE_BURST', '0'], ['BSECRET_HANDSHAKE_ADDR_BURST', '1.5']]) {
     assert.throws(() => parseConfig({ ...base, [k!]: v }), new RegExp(k!))
   }

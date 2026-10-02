@@ -61,6 +61,8 @@ export const FloorUnheldHours = 24
 export const MaxPerSeq = 8
 /** The floor of the bounded table of spends of outpoints no carrier used. */
 export const MinSpendTable = 65536
+/** How many commitments turned away are remembered, in memory, to count each once. */
+export const RecentTurned = 4096
 /** Carriers answered for one version of one secret. */
 const PerVersion = 8
 /** How long a choice between two rooted tokens at one seq is reused, milliseconds. */
@@ -109,6 +111,12 @@ interface VaultIdx {
   branches: Map<string, Branch>
   /** The highest seq a rooted token holds; -1 when none is rooted. */
   top: number
+  /**
+   * Tokens a full seq turned away while they were pending, by the txid they
+   * name as their predecessor: txid -> output. They stay in the engine's
+   * storage, and are read again once that predecessor is rooted.
+   */
+  turned: Map<string, Map<string, number>>
   choice?: { among: string; txid: string; at: number }
 }
 
@@ -129,7 +137,8 @@ interface CarrierEntry {
 /** A sweep tombstone the host holds. */
 interface SweepEntry {
   txid: string
-  crypt: string
+  /** Every crypt the sweep was admitted in: one mined sweep may be published to several topics. */
+  crypts: Set<string>
   spent: string[]
   height: number
   offset: number
@@ -314,11 +323,21 @@ export class SecretLookupService implements LookupService {
   /** Spends of outpoints no carrier used: outpoint -> sweep txid -> spend, oldest first. */
   private readonly table = new Map<string, Map<string, Spend>>()
 
+  /** Held sweeps whose tombstone an admitted transaction spent, by txid, with the crypts it happened in: storage no longer hands them over, so the journal names them. */
+  private readonly spentSweeps = new Map<string, Set<string>>()
+  /** Commitments turned away lately, so that a repeat the engine lets through is not counted again. In memory only, the last RecentTurned. */
+  private readonly recentTurned = new Set<string>()
+  /** Tokens to read again from storage: their predecessor is rooted now. */
+  private readonly reread: Array<{ crypt: string; txid: string; vout: number }> = []
+
   /** Outputs dropped from the index and still to be deleted from storage. */
   private readonly pending = new Map<string, { txid: string; vout: number; topic: string }>()
   private storage: Storage | undefined
   /** While restoring, a seq's bound is applied once at the end, when every token's descent is known. */
   private restoring = false
+  /** The restore in flight: an admission waits for it. */
+  private inflight: Promise<number> | undefined
+  private warnedNoDelete = false
 
   constructor(o: Options) {
     this.crypts = o.crypts
@@ -406,7 +425,21 @@ export class SecretLookupService implements LookupService {
         if (!this.tokenSeen.has(l.txid)) this.tokenSeen.set(l.txid, { vout: l.vout, crypt: l.crypt, at: l.at })
         break
       }
+      case 'w': {
+        addTo(this.spentSweeps, l.txid, l.crypt)
+        break
+      }
     }
+  }
+
+  private queueDelete(txid: string, vout: number, crypt: string): void {
+    const t = topic(crypt)
+    this.pending.set(`${t}|${txid}.${vout}`, { txid, vout, topic: t })
+  }
+
+  private turnedAway(c: string): void {
+    this.recentTurned.add(c)
+    if (this.recentTurned.size > RecentTurned) this.recentTurned.delete(this.recentTurned.values().next().value as string)
   }
 
   private write(l: Line): void {
@@ -421,7 +454,8 @@ export class SecretLookupService implements LookupService {
     const e = this.carriers.get(c)
     if (e === undefined) return
     this.forgetCarrier(e)
-    this.pending.set(`${e.txid}.0`, { txid: e.txid, vout: 0, topic: topic(crypt ?? e.crypt) })
+    this.turnedAway(c)
+    this.queueDelete(e.txid, 0, crypt ?? e.crypt)
     this.host.metrics.inc('bsecret_dropped_total', { why: 'evidence' })
   }
 
@@ -497,6 +531,9 @@ export class SecretLookupService implements LookupService {
       v.top = Math.max(v.top, x.seq)
       v.choice = undefined
       if (count) this.counted(v, x)
+      // Tokens a full seq turned away before this one was rooted are read again.
+      for (const [txid, vout] of v.turned.get(x.txid) ?? []) this.reread.push({ crypt: v.crypt, txid, vout })
+      v.turned.delete(x.txid)
       for (const c of v.children.get(x.txid) ?? []) {
         const child = v.byTxid.get(c)
         if (child !== undefined) work.push(child)
@@ -532,6 +569,11 @@ export class SecretLookupService implements LookupService {
     for (const t of order.slice(MaxPerSeq)) {
       this.host.log('ls_bsecret kept no more tokens at this seq', { crypt: v.crypt, vault: v.vault, txid: t.txid, seq })
       again = again || t.rooted
+      if (!t.rooted && t.prev !== '') {
+        let m = v.turned.get(t.prev)
+        if (m === undefined) v.turned.set(t.prev, (m = new Map()))
+        m.set(t.txid, t.vout)
+      }
       this.forgetToken(v, t, false)
     }
     if (again) this.reroot(v)
@@ -604,7 +646,13 @@ export class SecretLookupService implements LookupService {
 
   // ---- admission
 
-  outputAdmittedByTopic(payload: OutputAdmittedByTopic): void {
+  /**
+   * Indexes an admitted output. The index is changed before the first
+   * await; what follows reads back tokens whose predecessor is rooted now
+   * and deletes what was dropped from storage. An admission that meets a
+   * restore in flight waits for it, so that it is decided as any other.
+   */
+  async outputAdmittedByTopic(payload: OutputAdmittedByTopic): Promise<void> {
     if (payload.mode !== 'whole-tx') return
     const crypt = this.cryptOf(payload.topic)
     if (crypt === undefined) return
@@ -615,8 +663,28 @@ export class SecretLookupService implements LookupService {
       this.host.log('ls_bsecret ignored an admission whose BEEF did not parse', { topic: payload.topic })
       return
     }
+    while (this.inflight !== undefined) await this.inflight.catch(() => {})
     this.index(crypt, tx, payload.outputIndex, 0)
     this.enforceTable()
+    await this.drain()
+    await this.flush()
+  }
+
+  /** Reads back, as the engine stores them, the tokens a full seq turned away whose predecessor has since been rooted. */
+  private async drain(): Promise<void> {
+    const storage = this.storage
+    if (storage === undefined) return
+    while (this.reread.length > 0) {
+      const r = this.reread.shift()!
+      if (this.tokenVault.has(r.txid)) continue
+      const o = await storage.findOutput(r.txid, r.vout, topic(r.crypt), undefined, true)
+      if (o?.beef === undefined) continue
+      try {
+        this.index(r.crypt, storedToken(Uint8Array.from(o.beef)).tx, r.vout, o.score ?? 0)
+      } catch (e) {
+        this.host.log('ls_bsecret could not read a token again', { txid: r.txid, err: String(e) })
+      }
+    }
   }
 
   outputEvicted(txid: string, outputIndex: number): void {
@@ -624,7 +692,8 @@ export class SecretLookupService implements LookupService {
   }
 
   outputNoLongerRetainedInHistory(txid: string, outputIndex: number, t: string): void {
-    if (this.cryptOf(t) !== undefined) this.forget(txid, outputIndex)
+    const crypt = this.cryptOf(t)
+    if (crypt !== undefined) this.forget(txid, outputIndex, crypt)
   }
 
   private cryptOf(t: string): string | undefined {
@@ -642,6 +711,13 @@ export class SecretLookupService implements LookupService {
   private index(crypt: string, tx: Transaction, vout: number, score: number): boolean {
     const out = tx.outputs[vout]
     if (out === undefined) return false
+    // A held sweep whose tombstone this transaction spends leaves the unspent
+    // rows storage hands a restore: the journal names it from now on.
+    for (const i of tx.inputs) {
+      const src = srcTxid(i)
+      if (src === undefined || i.sourceOutputIndex !== 0) continue
+      if (this.sweeps.get(src)?.crypts.has(crypt) === true && this.spentSweeps.get(src)?.has(crypt) !== true) this.write({ k: 'w', txid: src, crypt })
+    }
     const script = bin(out.lockingScript)
     const kind = classify(script)
     if (kind === 'secret') return this.indexCarrier(crypt, tx, script)
@@ -675,24 +751,27 @@ export class SecretLookupService implements LookupService {
     }
     const r = this.row(op)
     if (!r.row.keeps(cb)) {
-      // While restoring, a carrier the row does not keep is one it stopped
-      // keeping, unless the row never turned one away: then its line was lost.
+      if (!this.restoring && !this.recentTurned.has(c) && r.row.winner !== undefined) this.host.metrics.inc('bsecret_equivocations_total')
+      // The row keeps the lowest nine ever admitted, so one it stopped
+      // keeping is above its highest. A carrier below that is new to the
+      // row, whatever else storage and the journal say: its line was lost.
       const full = r.row.others.length >= MaxOthers
       const takes = !full || compareBytes(cb, r.row.others[MaxOthers - 1]!) < 0
-      const counted = this.restoring && r.row.more > 0
-      if (!this.restoring && r.row.winner !== undefined) this.host.metrics.inc('bsecret_equivocations_total')
-      if (!takes || counted) {
-        if (!counted) {
+      if (!takes) {
+        // Counted once: not again for a repeat the engine lets through, and
+        // not while restoring a row that already counts what it turned away.
+        if (!this.recentTurned.has(c) && !(this.restoring && r.row.more > 0)) {
           this.write({ k: 'm', op })
           this.host.metrics.inc('bsecret_dropped_total', { why: 'evidence' })
         }
-        this.pending.set(`${txid}.0`, { txid, vout: 0, topic: topic(crypt) })
+        this.turnedAway(c)
+        this.queueDelete(txid, 0, crypt)
         return false
       }
       this.write({ k: 'c', op, c, crypt, at: this.now() })
     }
     if (r.gone.has(c)) {
-      this.pending.set(`${txid}.0`, { txid, vout: 0, topic: topic(crypt) })
+      this.queueDelete(txid, 0, crypt)
       return false
     }
     const vkey = this.vaultKey(crypt, toHex(rec.org), toHex(rec.vault))
@@ -729,7 +808,7 @@ export class SecretLookupService implements LookupService {
     const key = this.vaultKey(crypt, org, vault)
     let v = this.vaults.get(key)
     if (v === undefined) {
-      v = { key, crypt, org, vault, bySeq: new Map(), byTxid: new Map(), children: new Map(), branches: new Map(), top: -1 }
+      v = { key, crypt, org, vault, bySeq: new Map(), byTxid: new Map(), children: new Map(), branches: new Map(), top: -1, turned: new Map() }
       this.vaults.set(key, v)
       addTo(this.vaultsByOrg, `${crypt}|${org}`, vault)
     }
@@ -769,28 +848,34 @@ export class SecretLookupService implements LookupService {
 
   private indexSweep(crypt: string, tx: Transaction, score: number): boolean {
     const txid = tx.id('hex')
-    if (this.sweeps.has(txid)) return true
-    const { height, offset } = place(tx)
-    const spent: string[] = []
-    for (const input of tx.inputs) {
-      const src = srcTxid(input)
-      if (src === undefined) continue
-      const op = outpoint(src, input.sourceOutputIndex)
-      spent.push(op)
-      const r = this.rows.get(op)
-      if (r !== undefined) {
-        if (!r.sweeps.has(txid)) {
-          this.write({ k: 's', op, s: txid, crypt, h: height, at: this.now() })
-          this.host.metrics.inc('bsecret_retractions_total')
+    let e = this.sweeps.get(txid)
+    if (e === undefined) {
+      const { height, offset } = place(tx)
+      const spent: string[] = []
+      for (const input of tx.inputs) {
+        const src = srcTxid(input)
+        if (src === undefined) continue
+        const op = outpoint(src, input.sourceOutputIndex)
+        spent.push(op)
+        const r = this.rows.get(op)
+        if (r !== undefined) {
+          if (!r.sweeps.has(txid)) {
+            this.write({ k: 's', op, s: txid, crypt, h: height, at: this.now() })
+            this.host.metrics.inc('bsecret_retractions_total')
+          }
+        } else {
+          let m = this.table.get(op)
+          if (m === undefined) this.table.set(op, (m = new Map()))
+          if (!m.has(txid)) m.set(txid, { crypt, h: height, at: this.now() })
         }
-      } else {
-        let m = this.table.get(op)
-        if (m === undefined) this.table.set(op, (m = new Map()))
-        if (!m.has(txid)) m.set(txid, { crypt, h: height, at: this.now() })
       }
+      this.sweeps.set(txid, (e = { txid, crypts: new Set(), spent, height, offset, score }))
     }
-    this.sweeps.set(txid, { txid, crypt, spent, height, offset, score })
-    for (const op of spent) addTo(this.sweepsByOp, `${crypt}|${op}`, txid)
+    // The same mined sweep admitted in another crypt answers there too.
+    if (!e.crypts.has(crypt)) {
+      e.crypts.add(crypt)
+      for (const op of e.spent) addTo(this.sweepsByOp, `${crypt}|${op}`, txid)
+    }
     return true
   }
 
@@ -810,28 +895,31 @@ export class SecretLookupService implements LookupService {
       for (const s of spends.keys()) {
         const e = this.sweeps.get(s)
         if (e === undefined || this.sweepLive(e)) continue
+        for (const c of e.crypts) this.queueDelete(s, 0, c)
         this.forget(s, 0)
-        this.pending.set(`${s}.0`, { txid: s, vout: 0, topic: topic(e.crypt) })
         this.host.metrics.inc('bsecret_dropped_total', { why: 'table' })
       }
     }
   }
 
-  /** Removes a held output from the index; its rows stay. */
-  private forget(txid: string, vout: number): void {
+  /** Removes a held output from the index, in one crypt or in all; its rows stay. */
+  private forget(txid: string, vout: number, crypt?: string): void {
     if (vout === 0) {
       const e = this.carriers.get(toHex(hashOrder(txid)))
-      if (e !== undefined) this.forgetCarrier(e)
+      if (e !== undefined && (crypt === undefined || e.crypt === crypt)) this.forgetCarrier(e)
       const s = this.sweeps.get(txid)
       if (s !== undefined) {
-        this.sweeps.delete(txid)
-        for (const op of s.spent) removeFrom(this.sweepsByOp, `${s.crypt}|${op}`, txid)
+        for (const c of crypt === undefined ? [...s.crypts] : [crypt]) {
+          if (!s.crypts.delete(c)) continue
+          for (const op of s.spent) removeFrom(this.sweepsByOp, `${c}|${op}`, txid)
+        }
+        if (s.crypts.size === 0) this.sweeps.delete(txid)
       }
     }
     const key = this.tokenVault.get(txid)
     const v = key === undefined ? undefined : this.vaults.get(key)
     const t = v?.byTxid.get(txid)
-    if (v !== undefined && t !== undefined && t.vout === vout) this.forgetToken(v, t)
+    if (v !== undefined && t !== undefined && t.vout === vout && (crypt === undefined || v.crypt === crypt)) this.forgetToken(v, t)
   }
 
   // ---- drops and retention (spec section 11.3)
@@ -842,7 +930,7 @@ export class SecretLookupService implements LookupService {
     const winner = r.row.winner !== undefined && toHex(r.row.winner) === e.c
     this.write({ k: 'd', op: e.op, c: e.c, w: winner })
     this.forgetCarrier(e)
-    this.pending.set(`${e.txid}.0`, { txid: e.txid, vout: 0, topic: topic(e.crypt) })
+    this.queueDelete(e.txid, 0, e.crypt)
     this.host.metrics.inc('bsecret_dropped_total', { why })
     this.host.log('ls_bsecret dropped a carrier', { txid: e.txid, outpoint: e.op, why, winner })
   }
@@ -895,10 +983,20 @@ export class SecretLookupService implements LookupService {
     return n
   }
 
-  /** Deletes dropped outputs from storage, when the host's storage can. */
+  /**
+   * Deletes dropped outputs from storage. It runs after every admission and
+   * after retention, so a dropped output is gone at once. A store that
+   * cannot delete keeps what was dropped; the queue is not kept for it.
+   */
   async flush(): Promise<void> {
-    const del = this.storage?.deleteOutput?.bind(this.storage)
-    if (del === undefined) return
+    if (this.storage === undefined || this.pending.size === 0) return
+    const del = this.storage.deleteOutput?.bind(this.storage)
+    if (del === undefined) {
+      if (!this.warnedNoDelete) this.host.log('ls_bsecret cannot delete dropped outputs: the storage has no deleteOutput', {})
+      this.warnedNoDelete = true
+      this.pending.clear()
+      return
+    }
     for (const [k, p] of [...this.pending]) {
       try {
         await del(p.txid, p.vout, p.topic)
@@ -1113,9 +1211,20 @@ export class SecretLookupService implements LookupService {
    * would answer retracted carriers.
    */
   async restore(outputs: Output[], storage: RestoreStorage): Promise<number> {
-    for (const m of [this.rows, this.seen, this.tokenSeen, this.vaults, this.vaultsByOrg, this.tokenVault, this.carriers, this.versions, this.sweeps, this.sweepsByOp, this.table, this.pending]) {
+    while (this.inflight !== undefined) await this.inflight.catch(() => {})
+    this.inflight = this.restoreAll(outputs, storage)
+    try {
+      return await this.inflight
+    } finally {
+      this.inflight = undefined
+    }
+  }
+
+  private async restoreAll(outputs: Output[], storage: RestoreStorage): Promise<number> {
+    for (const m of [this.rows, this.seen, this.tokenSeen, this.vaults, this.vaultsByOrg, this.tokenVault, this.carriers, this.versions, this.sweeps, this.sweepsByOp, this.table, this.pending, this.spentSweeps, this.recentTurned]) {
       m.clear()
     }
+    this.reread.length = 0
     const journal = this.journal.load()
     for (const l of journal) this.apply(l)
     const full = storage as Storage
@@ -1132,6 +1241,7 @@ export class SecretLookupService implements LookupService {
     for (const [c, s] of this.seen) if (this.crypts.has(s.crypt)) named.push({ topic: topic(s.crypt), txid: displayTxid(fromHex(c)), vout: 0 })
     for (const [txid, t] of this.tokenSeen) if (this.crypts.has(t.crypt)) named.push({ topic: topic(t.crypt), txid, vout: t.vout })
     for (const r of this.rows.values()) for (const [s, sp] of r.sweeps) if (this.crypts.has(sp.crypt)) named.push({ topic: topic(sp.crypt), txid: s, vout: 0 })
+    for (const [s, crypts] of this.spentSweeps) for (const c of crypts) if (this.crypts.has(c)) named.push({ topic: topic(c), txid: s, vout: 0 })
     for (const n of named) {
       const k = `${n.topic}|${n.txid}.${n.vout}`
       if (seen.has(k)) continue
@@ -1203,6 +1313,7 @@ export class SecretLookupService implements LookupService {
       for (const seq of [...v.bySeq.keys()]) this.bound(v, seq)
     }
     this.enforceTable()
+    await this.drain()
     await this.flush()
     return indexed
   }

@@ -13,6 +13,7 @@
  *   {"k":"d","op":"...","c":"<C>","w":true}
  *   {"k":"s","op":"...","s":"<sweep txid>","crypt":"...","h":<height>,"at":<s>}
  *   {"k":"t","txid":"<txid>","vout":<n>,"crypt":"...","at":<s>}
+ *   {"k":"w","txid":"<sweep txid>","crypt":"..."}
  *
  * `c` lines are the carriers a funding outpoint's row took in, each with
  * the outpoint it spent; an `m` line counts a carrier the row did not keep
@@ -20,7 +21,9 @@
  * drops, `w` when the dropped carrier was its outpoint's winner; `s` lines
  * are admitted sweeps' spends of outpoints a carrier spent (spends of any
  * other outpoint live only in the bounded table, never here); `t` lines are
- * vault tokens. Replayed in order, the lines rebuild every outpoint's row:
+ * vault tokens; a `w` line names a held sweep whose tombstone an admitted
+ * transaction spent, which storage no longer hands a restore among its
+ * unspent rows. Replayed in order, the lines rebuild every outpoint's row:
  * its winner as a running minimum, the lowest eight of the rest, the count
  * of the others, whether its winner was dropped, and its sweeps.
  * Commitments are in hash byte order and txids in display order, both
@@ -66,7 +69,13 @@ export interface TokenLine {
   at: number
 }
 
-export type Line = CarrierLine | MoreLine | DropLine | SweepLine | TokenLine
+export interface SpentSweepLine {
+  k: 'w'
+  txid: string
+  crypt: string
+}
+
+export type Line = CarrierLine | MoreLine | DropLine | SweepLine | TokenLine | SpentSweepLine
 
 /** Where the rows live. `append` is durable when it returns. */
 export interface Journal {
@@ -101,6 +110,8 @@ function isLine(v: unknown): v is Line {
       return s('op') && s('s') && s('crypt') && n('h') && n('at')
     case 't':
       return s('txid') && n('vout') && s('crypt') && n('at')
+    case 'w':
+      return s('txid') && s('crypt')
   }
   return false
 }

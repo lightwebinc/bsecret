@@ -491,11 +491,11 @@ test('the journal file: rows survive a restart, a last line cut short is cut off
 test('a class the host prices is refused through the engine, and a question for another service is an error', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'bsecret-priced-'))
   try {
-    const priced = { ...config, stateDir: dir, prices: new Map([['audit', 5], ['history', 0]]), listen: { host: '127.0.0.1', port: 1 }, payeeKey: PrivateKey.fromHex('11'.repeat(32)) }
+    const priced = { ...config, stateDir: dir, prices: new Map([['audit', 5], ['audit-after', 5], ['history', 0]]), listen: { host: '127.0.0.1', port: 1 }, payeeKey: PrivateKey.fromHex('11'.repeat(32)) }
     const m = secretModule(new FakeHost(), priced, [topic], new MemoryJournal(), new Chain(87000).tracker)
     const org = byName(v, 'secret-carrier-api-token-v1').admits!.owner!
     await assert.rejects(m.ls.lookup({ service: LookupService, query: { crypt, audit: org, vault: v.vault } }), /audit is priced on this host/)
-    assert.deepEqual(await m.ls.lookup({ service: LookupService, query: { crypt, audit: org, vault: v.vault, after: '0' } }), [], 'a class is priced by name: audit-after is not')
+    await assert.rejects(m.ls.lookup({ service: LookupService, query: { crypt, audit: org, vault: v.vault, after: '0' } }), /audit-after is priced on this host/)
     assert.deepEqual(await m.ls.lookup({ service: LookupService, query: { crypt, history: org, vault: v.vault, secret: '00'.repeat(32) } }), [], 'a price of 0 charges nothing')
     await assert.rejects(m.ls.lookup({ service: 'ls_other', query: {} }), /this service is ls_bsecret/)
     assert.equal((await m.ls.getMetaData()).name, 'ls_bsecret')

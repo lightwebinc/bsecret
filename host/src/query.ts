@@ -109,7 +109,9 @@ export function parseQuery(raw: string | unknown): Question {
     }
   }
   if (q === null || typeof q !== 'object' || Array.isArray(q)) throw new Refusal('query', 'not a JSON object')
-  const vals: Record<string, string> = {}
+  // No prototype: a member named __proto__ is a member like any other, and
+  // is refused as one, never dropped.
+  const vals = Object.create(null) as Record<string, string>
   for (const [k, v] of Object.entries(q)) {
     if (typeof v !== 'string') throw new Refusal('query', `member ${JSON.stringify(k)} is not a string`)
     vals[k] = v

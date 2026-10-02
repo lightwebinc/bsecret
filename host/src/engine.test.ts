@@ -100,7 +100,7 @@ test('every transaction vector through the engine: admitted as the vectors say, 
       assert.equal(await applied(storage, t.txid), false, t.name)
     }
   }
-  assert.equal(v.cases.length, 138)
+  assert.equal(v.cases.length, 139)
   assert.ok(engineRefused.length > 0)
 
   // The index, against what the Go codec computed from the same objects (index-v1.json).

@@ -55,7 +55,7 @@ test('every transaction vector is admitted or refused, raising, as the vectors s
       refusedBy.set(t.reason!, (refusedBy.get(t.reason!) ?? 0) + 1)
     }
   }
-  assert.deepEqual([v.cases.length, admitted, refused], [138, 21, 117])
+  assert.deepEqual([v.cases.length, admitted, refused], [139, 21, 118])
   // A txid admitted before in another BEEF is counted once, and once as a
   // repeat. A sweep at its own bound is decided by a second manager, which
   // counts it apart.

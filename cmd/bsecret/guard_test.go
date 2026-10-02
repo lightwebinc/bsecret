@@ -751,3 +751,73 @@ func TestAGroupRolledBackIsRefused(t *testing.T) {
 	// Nothing was forgotten: the node says the removal is mined.
 	h.want(h.run("alice", "", "get", "db/password"), exitRefused, "rollback")
 }
+
+// A home whose one coin paid for its chain tree holds only the tree's own
+// change, and a first token spends exactly one output of its chain tree:
+// every host refuses a second input from it (token-input). The fee is then
+// paid from a payment to the home's own fund key, mined first, so the
+// first token is one every host admits and the vault exists.
+func TestAFirstTokenNeverSpendsItsTreesChange(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	borg, err := testhost.NewBorg(filepath.Join(h.dir, "borg-org"), h.chainS.URL, h.a, h.b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.borg = borg
+	org := h.identity("org", false, "-borg", borg.Home)
+	h.must("org", "fund", "-blocks", "1")
+	// The blocks that mature the owner's one coin pay another home, so
+	// the owner holds one coin and no more.
+	h.identity("miner", false)
+	h.must("miner", "fund", "-blocks", "100")
+	r := h.must("org", "crypt", "new", "example")
+	h.crypt = cryptLine.FindStringSubmatch(r.stdout)[1]
+	h.a.Carry(h.crypt)
+	h.b.Carry(h.crypt)
+	h.env["BSECRET_CRYPT"], h.env["BSECRET_HALL"], h.env["BSECRET_ORG"] = h.crypt, borg.Hall, org
+	h.identity("alice", false)
+	if h.group, err = borg.CreateGroup("engineering", h.keys["alice"]); err != nil {
+		t.Fatal(err)
+	}
+	r = h.must("org", "vault", "create", h.group, "-name", "ops")
+	vm := vaultLine.FindStringSubmatch(r.stdout)
+	if vm == nil || !strings.Contains(r.stderr, "first paid to this home's own fund key") {
+		t.Fatalf("vault create from one coin:\n%s\n%s", r.stdout, r.stderr)
+	}
+	st, err := state.Load(filepath.Join(h.dir, "org"), org)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := st.VaultByID(vm[1])
+	if v == nil || len(v.Tokens) != 1 {
+		t.Fatal("the home holds no first token")
+	}
+	tok := v.Tokens[0]
+	tx, err := transaction.NewTransactionFromHex(tok.RawHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, in := range tx.Inputs {
+		if in.SourceTXID != nil && in.SourceTXID.String() == tok.Parent {
+			n++
+		}
+	}
+	if n != 1 || len(tx.Inputs) != 2 {
+		t.Fatalf("the first token spends %d of its chain tree's outputs among %d inputs, want 1 of 2", n, len(tx.Inputs))
+	}
+	if !h.a.Holds(tok.Txid) || !h.b.Holds(tok.Txid) {
+		t.Fatal("a host does not hold the first token")
+	}
+	h.put("db/password", "one")
+	if r := h.must("alice", "get", "db/password"); r.stdout != "one" || !strings.Contains(r.stderr, "anchored, current") {
+		t.Fatalf("alice: %q\n%s", r.stdout, r.stderr)
+	}
+	// A second vault of the same home pays its fee from a coin it holds by
+	// now, and moves nothing.
+	r = h.must("org", "vault", "create", h.group, "-name", "more")
+	if strings.Contains(r.stderr, "own fund key") {
+		t.Fatalf("a second vault moved a coin again:\n%s", r.stderr)
+	}
+}

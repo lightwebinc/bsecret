@@ -303,6 +303,17 @@ unicast to every host), and confirmed at each host by a lookup. Every token
 and sweep must reach every host named; a carrier in unicast needs the
 quorum.
 
+**A first token's fee.** A vault's first token spends exactly one output of
+its chain tree, and every host refuses a second input from it (spec section
+11.1, `token-input`). So its fee is never paid from the chain tree's own
+change. A home whose one coin paid for the tree holds nothing else: `vault
+create` then first pays that change to the home's own fund key, in a
+transaction of its own that it waits to see mined, and pays the fee from
+that. It costs one more block, once, on a home's first vault. If the run
+stops in between, the command names the payment: import it with `fund
+-txid`. Every token is also held to that rule on its inputs before it is
+sent, so a token no host would admit is never mined.
+
 **Large secrets.** A ciphertext of up to 16384 bytes rides in the record.
 A larger one is written to the first directory in `content`, in a file
 named by its hash, and the record names it by that hash: `put` prints the

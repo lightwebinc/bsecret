@@ -13,6 +13,7 @@ import (
 	"github.com/bsv-blockchain/go-sdk/transaction"
 	"github.com/bsv-blockchain/go-sdk/transaction/chaintracker"
 
+	"github.com/lightwebinc/bcommon/bwallet"
 	"github.com/lightwebinc/bcommon/funding"
 	"github.com/lightwebinc/bcommon/guard"
 	"github.com/lightwebinc/bcommon/mint"
@@ -464,10 +465,9 @@ func (e *Engine) buildToken(ctx context.Context, v *state.Vault, seq uint64, rec
 	if err != nil {
 		return nil, nil, err
 	}
-	payer := e.NewPayer()
-	fee, coin, err := e.sweepFee(ctx, payer)
+	payer, fee, coin, err := e.tokenFee(ctx, v, seq, parent)
 	if err != nil {
-		return nil, nil, FeeError(err)
+		return nil, nil, err
 	}
 	change, err := e.Signer.FundScript()
 	if err != nil {
@@ -477,6 +477,13 @@ func (e *Engine) buildToken(ctx context.Context, v *state.Vault, seq uint64, rec
 	tx, err := mint.Transition(lock, 1, &mint.Input{Tx: parent, Vout: parentVout, Unlocker: parentDeriv.Unlocker(ctx, e.Signer, e.Signer.Originator)},
 		fee, change, e.Opts.Fees)
 	if err != nil {
+		payer.GiveBack()
+		return nil, nil, err
+	}
+	// What every host checks of a token's inputs (spec section 11.1 rule 8)
+	// is checked here, before anything is sent: a token mined that no host
+	// admits can never be published, and its vault's chain would end there.
+	if err := spendsItsParent(tx, parent, parentVout, seq); err != nil {
 		payer.GiveBack()
 		return nil, nil, err
 	}
@@ -490,6 +497,104 @@ func (e *Engine) buildToken(ctx context.Context, v *state.Vault, seq uint64, rec
 	tr := &state.Transition{Vault: v.ID, Seq: seq, Txid: tx.TxID().String(), RawHex: tx.Hex(), Record: hex.EncodeToString(record),
 		Vout: 0, Parent: parent.TxID().String(), ParentVout: parentVout, Fee: coin}
 	return tr, tx, nil
+}
+
+// spendsItsParent holds a token just built to the host's rule on its
+// inputs: a first token spends exactly one output of its parent, the chain
+// tree; a later one spends its predecessor's token output and no other
+// token output of that transaction (its other outputs it may spend).
+func spendsItsParent(tx, parent *transaction.Transaction, parentVout uint32, seq uint64) error {
+	if seq == 0 {
+		n, ptxid := 0, *parent.TxID()
+		for _, in := range tx.Inputs {
+			if in.SourceTXID != nil && *in.SourceTXID == ptxid {
+				n++
+			}
+		}
+		if n != 1 {
+			return fmt.Errorf("%w: the first token built spends %d outputs of its chain tree, and every host admits exactly one; it is not sent", secrec.ErrTokenInput, n)
+		}
+		return nil
+	}
+	if vout, ok := secrec.PredecessorSpend(tx, parent); !ok || vout != parentVout {
+		return fmt.Errorf("%w: the token built does not spend its predecessor's token output exactly once; it is not sent", secrec.ErrTokenInput)
+	}
+	return nil
+}
+
+// tokenFee takes the coin that pays a token's fee, and returns it with the
+// payer that holds it reserved.
+//
+// A first token spends exactly one output of its parent, the chain tree
+// (spec section 11.1 rule 8): a second input that spends the tree is
+// refused token-input by every host. So a first token's fee is never the
+// tree's own change, which is the one coin a home holds when its one coin
+// paid for the tree. Another coin is taken when the pool has one. When it
+// has none, the tree's change is first paid to this home's own fund key in
+// a transaction of its own, and once that is mined its outputs pay the fee.
+func (e *Engine) tokenFee(ctx context.Context, v *state.Vault, seq uint64, parent *transaction.Transaction) (*producer.Payer, mint.Input, *bwallet.Output, error) {
+	fromParent := func(in mint.Input) bool {
+		return seq == 0 && in.Tx != nil && *in.Tx.TxID() == *parent.TxID()
+	}
+	for moved := 0; ; moved++ {
+		payer := e.NewPayer()
+		fee, coin, err := e.sweepFee(ctx, payer)
+		if err != nil {
+			return nil, mint.Input{}, nil, FeeError(err)
+		}
+		if !fromParent(fee) {
+			return payer, fee, coin, nil
+		}
+		// The tree's change stays reserved while another coin is looked
+		// for, so the pool cannot hand it out again.
+		before := e.Pool.Outputs()
+		other := e.NewPayer()
+		if alt, err := other.Take(ctx); err == nil {
+			if !fromParent(alt) {
+				payer.GiveBack()
+				op := fmt.Sprintf("%s.%d", alt.Tx.TxID(), alt.Vout)
+				for i := range before {
+					if before[i].Outpoint() == op {
+						return other, alt, &before[i], nil
+					}
+				}
+				return other, alt, nil, nil
+			}
+			other.GiveBack()
+		}
+		if moved > 0 {
+			payer.GiveBack()
+			return nil, mint.Input{}, nil, errors.New("the only coins this home holds are its chain tree's own outputs, after one was moved; fund the home with another coin (bsecret fund)")
+		}
+		fund, err := e.Signer.FundScript()
+		if err != nil {
+			payer.GiveBack()
+			return nil, mint.Input{}, nil, err
+		}
+		step, err := mint.Payment(ctx, fund, fee.Tx.Outputs[fee.Vout].Satoshis/2, fee, fund, e.Opts.Fees)
+		if err != nil {
+			payer.GiveBack()
+			return nil, mint.Input{}, nil, fmt.Errorf("the only coin this home holds is its chain tree's own change, which a first token cannot spend, and it cannot be moved: %w; fund the home with another coin (bsecret fund)", err)
+		}
+		id := step.TxID().String()
+		e.note("vault %s: the only coin this home holds is its chain tree's own change, and a first token spends exactly one output of its chain tree (every host refuses a second): the coin is first paid to this home's own fund key in %s. If this run stops before that is mined, import it with `bsecret fund -txid %s`", Short(v.ID), id, id)
+		if err := e.Legs.Settler.Submit(ctx, step); err != nil && !alreadyKnown(err) {
+			payer.GiveBack()
+			return nil, mint.Input{}, nil, fmt.Errorf("the payment %s to this home's own fund key: settle via %s: %w", Short(id), e.Legs.Settler.Name(), err)
+		}
+		mp, h, err := payer.Await(ctx, "the payment to this home's own fund key", step)
+		if err != nil {
+			// It reached the settlement leg: the coin is not given back.
+			// The next command's journal puts it back only when the node
+			// shows it unspent.
+			return nil, mint.Input{}, nil, fmt.Errorf("the payment %s to this home's own fund key: %w; once it is mined, import it with `bsecret fund -txid %s` and run the command again", Short(id), err, id)
+		}
+		step.MerklePath = mp
+		payer.Change(step, h, mp)
+		if err := e.St.Save(); err != nil {
+			return nil, mint.Input{}, nil, err
+		}
+	}
 }
 
 // pendingTx is the transition built in this run, so its inputs keep their

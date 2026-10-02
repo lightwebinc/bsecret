@@ -1277,7 +1277,10 @@ input and are not read either. Only a second spend of a token output of the
 parent is refused (rule 8). **A first token spends exactly one input of its
 parent:** exactly one of its inputs spends an output of the chain tree, so
 that one outpoint gives the vault its identifier, and two are refused (rule
-8); its other inputs come from elsewhere, pay its fee, and are not read.
+8); its other inputs come from elsewhere, pay its fee, and are not read. The
+tree's own change is an output of the parent like any other, so a first
+token never pays its fee from it: an owner whose only coin is that change
+moves it through a transaction of its own first.
 
 **A predecessor of another crypt, owner or vault reads `token-input`, never
 `transition`.** Rule 8 decides whose token is spent before rule 10 compares

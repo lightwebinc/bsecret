@@ -331,6 +331,27 @@ func (e *txEnv) cases() ([]txCase, error) {
 	both.AddOutput(out(500, scr(secrec.FundingScript(sk))))
 	both.AddOutput(out(400, lockA))
 	add(txCase{name: "sweep-with-a-secret-output", note: "a mined transaction whose output 0 is funding-shaped and whose output 1 claims a secret: it claims something, so it is judged as a carrier, and it has two outputs", rule: rowSweep, tx: e.c.mine(signAll(both)), reason: "shape"})
+	// A first token spends exactly one output of its parent, and the
+	// tree's own change is an output of its parent like any other. Built
+	// last, so that the block it is mined in follows every other case's.
+	g5 := *e.v.Vaults[0]
+	g5.Vault = secrec.VaultID([32]byte(*e.tree.TxID()), 5)
+	raw5, err := g5.Encode()
+	if err != nil {
+		return nil, err
+	}
+	onChange, err := mint.Transition(o.lock(secrec.VaultDerivation, true, secrec.TagVault, raw5), 1,
+		&mint.Input{Tx: e.tree, Vout: 5, Unlocker: o.unlocker(secrec.ChainDerivation)},
+		mint.Input{Tx: e.tree, Vout: uint32(len(e.tree.Outputs) - 1), Unlocker: o.feeUnlocker()}, o.feeLock, mint.DefaultFees) //nolint:gosec // a few outputs
+	if err != nil {
+		return nil, err
+	}
+	if secrec.IsFundingShape(*e.tree.Outputs[len(e.tree.Outputs)-1].LockingScript) {
+		return nil, fmt.Errorf("the chain tree's last output is not its change")
+	}
+	e.c.mine(onChange)
+	add(txCase{name: "token-genesis-spends-tree-change", note: "a seq 0 spending chain-tree output 5, with the identifier that outpoint gives, and paying its fee from the chain tree's own change output: two inputs spend its parent, and a first token spends exactly one, whatever the second output is", rule: rowToken,
+		tx: onChange, beef: tokenBEEF(onChange, e.tree), reason: "token-input"})
 	return cs, nil
 }
 

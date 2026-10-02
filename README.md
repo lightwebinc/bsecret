@@ -51,7 +51,17 @@ $ make vectors          # regenerate the golden vectors, both languages
 
 Go 1.27.1 or later, and Node 24 for the TypeScript codec under `host/`
 (`make verify NODE=/path/to/node24` when it is not on `PATH`). The direct Go
-dependencies are go-sdk v1.5.2 and bcommon v0.6.0, and nothing else.
+dependencies are go-sdk v1.5.2, bcommon v0.6.0 and borg v0.1.0, and nothing
+else.
+
+borg is a private module. Its tagged archive is kept under
+`third_party/goproxy` and the Makefile serves it to the `go` command as a
+file proxy, so `make` needs no credentials for borg's repository; `go.sum`
+holds the tag's hashes and the `go` command checks the copy against them.
+Outside `make`, either set the same `GOPROXY`, `GONOPROXY` and `GONOSUMDB`
+the Makefile sets, or set `GOPRIVATE=github.com/lightwebinc/*` and give git
+credentials for the repository. `make borg-module` refreshes the copy after
+`go.mod` moves to another tag.
 
 The record layer exists twice, held to one set of vectors: `internal/secrec`
 in Go, and `host/` in TypeScript for an overlay host's topic manager and

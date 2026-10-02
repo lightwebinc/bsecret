@@ -5,15 +5,19 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/bsv-blockchain/go-sdk/chainhash"
+	ec "github.com/bsv-blockchain/go-sdk/primitives/ec"
 	"github.com/bsv-blockchain/go-sdk/transaction"
+	"github.com/bsv-blockchain/go-sdk/wallet"
 
-	"github.com/lightwebinc/bsecret/internal/borgread"
+	"github.com/lightwebinc/borg/borgrec"
+
 	"github.com/lightwebinc/bsecret/internal/secrec"
 )
 
@@ -400,6 +404,26 @@ func TestAdmitHostRules(t *testing.T) {
 	}
 }
 
+// openEpochKey is a member's read of one epoch's key by borg's own rules:
+// the wrap record against the token that began the epoch, then the member's
+// own entry opened by its wallet and held to the token's commitment.
+func openEpochKey(w wallet.Interface, me, groupRecord []byte, wr *borgrec.WrapRecord) ([32]byte, error) {
+	g, err := borgrec.CheckEpochToken(groupRecord, wr)
+	if err != nil {
+		return [32]byte{}, err
+	}
+	org, err := ec.PublicKeyFromBytes(wr.Org)
+	if err != nil {
+		return [32]byte{}, err
+	}
+	for i, r := range wr.Recipients() {
+		if bytes.Equal(r, me) {
+			return borgrec.Unwrap(context.Background(), w, wr.Entries[i], org, wr.EpochID, uint32(wr.Epoch), g.Commitment) //nolint:gosec // an epoch is at most 2^32 - 1
+		}
+	}
+	return [32]byte{}, fmt.Errorf("%w: no entry for this member", borgrec.ErrUnwrap)
+}
+
 // TestGroupEpochsAreBorgs holds the scenario's group to borg's own golden
 // vectors: the epochs the record vectors are keyed under are the ones the
 // fold of borg's example group gives, and each key is the one a member's
@@ -416,10 +440,10 @@ func TestGroupEpochsAreBorgs(t *testing.T) {
 		}
 		return raw
 	}
-	var links []borgread.Link
+	var links []borgrec.Link
 	for i, name := range []string{"group-create.hex", "group-add.hex", "group-remove.hex", "group-rotate.hex"} {
 		rec := fx(name)
-		g, err := borgread.DecodeGroup(rec)
+		g, err := borgrec.DecodeGroup(rec)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -429,9 +453,9 @@ func TestGroupEpochsAreBorgs(t *testing.T) {
 		if g.Hall != Hall || !bytes.Equal(g.Org, Org.Pub()) || g.Group != GroupID {
 			t.Errorf("%s is not the scenario's group", name)
 		}
-		links = append(links, borgread.Link{Record: rec, Height: []uint32{1000, 1004, 1010, 1030}[i]})
+		links = append(links, borgrec.Link{Record: rec, Height: []uint32{1000, 1004, 1010, 1030}[i]})
 	}
-	v, err := borgread.Fold(links)
+	v, err := borgrec.FoldGroup(links)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -472,11 +496,11 @@ func TestGroupEpochsAreBorgs(t *testing.T) {
 	}
 	// A member opens epoch 1's key from borg's wrap and reads a version
 	// keyed under it; the removed member's wallet opens nothing.
-	w, err := borgread.DecodeWrap(fx("wrap-remove.hex"))
+	w, err := borgrec.DecodeWrap(fx("wrap-remove.hex"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	k, err := borgread.Open(context.Background(), Alice.Wallet(), Alice.Pub(), links[2].Record, w)
+	k, err := openEpochKey(Alice.Wallet(), Alice.Pub(), links[2].Record, w)
 	if err != nil || k != GroupEpochs[1].Key {
 		t.Fatalf("alice does not open epoch 1's key: %v", err)
 	}
@@ -485,7 +509,7 @@ func TestGroupEpochsAreBorgs(t *testing.T) {
 	if err != nil || p.Name != "db/password" {
 		t.Errorf("alice does not read a version keyed under epoch 1: %v", err)
 	}
-	if _, err := borgread.Open(context.Background(), Bob.Wallet(), Bob.Pub(), links[2].Record, w); borgread.Reason(err) != "undecryptable" {
+	if _, err := openEpochKey(Bob.Wallet(), Bob.Pub(), links[2].Record, w); borgrec.Reason(err) != "undecryptable" {
 		t.Errorf("bob, removed, opens epoch 1's wrap: %v", err)
 	}
 }

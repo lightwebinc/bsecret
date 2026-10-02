@@ -1771,13 +1771,14 @@ checks of section 7.2 and the locator of section 5.4
 (`internal/secrec/keyed.go`).
 
 bsecret's tooling also reads borg's chains (a group's epochs, the wraps, the
-roll for rotation debt). Those rules are borg's contract, not this one.
-`internal/borgread` reads them here: a group token and its record, the fold
-of a group's chain into its epochs, and the wrap that releases an epoch's key
-to a member. It defines nothing of its own, imports nothing else of this
-repository, and is held to borg's golden vectors byte for byte, which is
-also how this contract's vectors are bound to borg's group
-(`internal/borgread/testdata`). bsecret pins bcommon v0.6.0.
+roll for rotation debt). Those rules are borg's contract, not this one, and
+the code that reads them is borg's own: its public Go packages `borgrec`
+(a group token and its record, the fold of a group's chain into its epochs,
+and the wrap that releases an epoch's key to a member) and `reader`, at the
+tag `go.mod` pins. Nothing of them is copied or restated here. This
+contract's vectors are bound to borg's group by borg's golden vectors, kept
+unchanged under `internal/borgread/testdata`. bsecret pins bcommon v0.6.0
+and borg v0.1.0.
 
 ## 17. Size and rate bounds
 

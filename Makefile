@@ -8,10 +8,24 @@
 #
 #	make verify NODE=/path/to/node24
 
-.PHONY: verify test go-test ts-test ts-check ts-build node-check vet fmt-check deps-check vectors vectors-check
+.PHONY: verify test go-test ts-test ts-check ts-build node-check vet fmt-check deps-check vectors vectors-check borg-module
 
 NODE ?= node
 TSC := $(NODE) node_modules/typescript/bin/tsc
+
+# borg is a private module: the public proxy and checksum database cannot
+# see it, and a build with no credentials for its repository cannot fetch
+# it. So the tagged module archive is kept under third_party/goproxy and
+# served to the go command as a file proxy, ahead of the public one. It is
+# not a replace and not a vendor directory: go.mod requires the tag, go.sum
+# holds the tag's hashes, and the go command refuses an archive that does
+# not match them. Every target below, and CI, resolve borg this way, so
+# what is tested is the same bytes everywhere. make borg-module refreshes
+# the copy from the repository after go.mod moves to another tag.
+BORG := github.com/lightwebinc/borg
+export GOPROXY := file://$(CURDIR)/third_party/goproxy,https://proxy.golang.org,direct
+export GONOPROXY := none
+export GONOSUMDB := $(BORG)
 
 verify: fmt-check vet deps-check ts-check vectors-check test
 
@@ -32,12 +46,12 @@ fmt-check:
 
 # The direct dependencies, asserted rather than intended:
 #  - go.mod and go.sum are tidy, and no module is replaced;
-#  - the direct set is exactly go-sdk and bcommon;
+#  - the direct set is exactly go-sdk, bcommon and borg;
 #  - go-sdk resolves to exactly v1.5.2, the version bcommon pins and the
 #    vectors were made with. Minimal version selection takes the higher of
 #    two pins, so a library asking for a later go-sdk would change what
 #    bsecret ships without a line changing here.
-DEPS_DIRECT := github.com/bsv-blockchain/go-sdk github.com/lightwebinc/bcommon
+DEPS_DIRECT := github.com/bsv-blockchain/go-sdk github.com/lightwebinc/bcommon $(BORG)
 DEPS_SDK    := github.com/bsv-blockchain/go-sdk v1.5.2
 
 deps-check:
@@ -80,3 +94,17 @@ vectors: ts-build
 vectors-check: ts-build
 	GOWORK=off go run ./cmd/vectors -check
 	cd host && $(NODE) dist/tsvectors.js -check
+
+# Copy the borg tag go.mod requires into third_party/goproxy, from borg's
+# repository. Needs git credentials for it. The go command checks the
+# archive against go.sum, so a tag that moved is refused here.
+borg-module:
+	@set -eu; v=$$(GOWORK=off go list -m -f '{{.Version}}' $(BORG)); \
+	tmp=$$(mktemp -d); trap 'chmod -R u+w "$$tmp"; rm -rf "$$tmp"' EXIT; \
+	GOWORK=off GOFLAGS=-mod=mod GOMODCACHE=$$tmp GOPROXY=direct GONOSUMDB=$(BORG) go mod download $(BORG)@$$v; \
+	src=$$tmp/cache/download/$(BORG)/@v; dst=third_party/goproxy/$(BORG)/@v; \
+	mkdir -p $$dst; cp $$src/$$v.mod $$src/$$v.zip $$dst/; \
+	GOWORK=off GOFLAGS=-mod=mod GOMODCACHE=$$tmp GOPROXY=direct GONOSUMDB=$(BORG) go list -m -f '{"Version":"{{.Version}}","Time":"{{.Time.UTC.Format "2006-01-02T15:04:05Z"}}"}' $(BORG)@$$v > $$dst/$$v.info; \
+	ls $$dst | sed -n 's/\.zip$$//p' > $$dst/list; \
+	echo "borg-module: $$v in $$dst"
+

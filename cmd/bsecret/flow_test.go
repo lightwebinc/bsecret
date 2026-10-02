@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bsv-blockchain/go-sdk/transaction"
+
 	"github.com/lightwebinc/bsecret/internal/engine"
 	"github.com/lightwebinc/bsecret/internal/secrec"
 	"github.com/lightwebinc/bsecret/internal/testhost"
@@ -855,7 +857,7 @@ func TestALostTransition(t *testing.T) {
 	// Between the writer's evidence and its send, another transaction
 	// takes the vault's tip.
 	h.mu.Lock()
-	h.onSend = func() { h.chain.SpendElsewhere(tip, 0, other) }
+	h.onSend = func(*transaction.Transaction) { h.chain.SpendElsewhere(tip, 0, other) }
 	h.mu.Unlock()
 	r = h.run("org", "two", "put", "db/password")
 	h.want(r, exitRefused, "lost: its predecessor is spent by "+other[:12])
@@ -865,4 +867,67 @@ func TestALostTransition(t *testing.T) {
 	}
 	// The home's evidence now fails closed: its tip is spent.
 	h.want(h.run("org", "three", "put", "db/password"), exitRefused, "is spent by "+other[:12])
+}
+
+// A persisted transition is given up only when the node names ANOTHER
+// transaction as the spender of its predecessor or its fee coin. A leg
+// that refuses it while the node shows the predecessor spent by this very
+// transaction (it was taken before, and has not mined) changes nothing: it
+// stays persisted, and nothing it listed is thrown away.
+func TestATransitionIsKeptUnlessAnotherSpends(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	r := h.must("org", "vault", "show")
+	var tip string
+	for _, l := range strings.Split(r.stdout, "\n") {
+		if strings.HasPrefix(l, "token   seq 1 ") {
+			tip = strings.Fields(l)[3]
+		}
+	}
+	h.mu.Lock()
+	h.onSend = func(tx *transaction.Transaction) { h.chain.SpendElsewhere(tip, 0, tx.TxID().String()) }
+	h.mu.Unlock()
+	h.env["BSECRET_TIMEOUT"] = "1s"
+	r = h.run("org", "two", "put", "db/password")
+	if r.code != exitUsage || strings.Contains(r.stderr, "lost") || !strings.Contains(r.stderr, "it is persisted; the next command sends it again") {
+		t.Fatalf("a transition the leg refused while the node names it as the spender: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	r = h.must("org", "doctor")
+	if !strings.Contains(r.stdout, "transition  ") || !strings.Contains(r.stdout, "persisted and not yet mined") {
+		t.Fatalf("the transition was discarded:\n%s", r.stdout)
+	}
+}
+
+// A sweep is marked failed only when the node names another transaction
+// as the spender of one of its inputs. A leg's refusal alone leaves it in
+// flight: the next command sends the same bytes again.
+func TestASweepIsKeptUnlessAnotherSpends(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	h.put("api/token", "tok")
+	refused := false
+	// The sweep is refused once by the leg, with every input unspent.
+	h.chain.Refuse = func(tx *transaction.Transaction) string {
+		if refused || len(tx.Outputs) == 0 || !secrec.IsFundingShape(*tx.Outputs[0].LockingScript) {
+			return ""
+		}
+		refused = true
+		return "txn-mempool-conflict"
+	}
+	r := h.run("org", "", "kill", "-confirm", "KILL", "-yes")
+	if !refused || strings.Contains(r.stdout+r.stderr, "marked failed") || !strings.Contains(r.stderr, "NOT SWEPT") {
+		t.Fatalf("a sweep the leg refused once: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	if r := h.must("org", "doctor"); !strings.Contains(r.stdout, "in flight") || strings.Contains(r.stdout, "FAILED") {
+		t.Fatalf("the sweep is not in flight:\n%s", r.stdout)
+	}
+	r = h.must("org", "kill", "-confirm", "KILL", "-yes")
+	if !strings.Contains(r.stdout, "killed  ") {
+		t.Fatalf("the sweep was not finished by the next run:\n%s\n%s", r.stdout, r.stderr)
+	}
+	h.want(h.run("alice", "", "get", "db/password"), exitIncomplete, "no host answers its carrier")
 }

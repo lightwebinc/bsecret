@@ -589,18 +589,22 @@ func (e *Engine) lostOrCopy(ctx context.Context, v *state.Vault, tr *state.Trans
 		}
 	}
 	feeLost := false
-	if by == "" {
-		// The predecessor is unspent, so no transition beat this one. If
-		// its fee coin is spent by another transaction, these bytes can
-		// never mine: the transition is discarded like a lost one, and
-		// built again.
+	if by == "" || by == tr.Txid {
+		// The predecessor is unspent, or spent by this very transaction
+		// (the node took it, and it has not mined yet): no transition beat
+		// this one, whatever a leg answered. Only if its fee coin is spent
+		// by ANOTHER transaction can these bytes never mine: the
+		// transition is then discarded like a lost one, and built again.
+		// Anything else keeps it persisted, to be sent and waited for
+		// again.
+		kept := fmt.Errorf("%s %s: refused (%s), and its predecessor is not spent by another transaction: it is kept, and the next command sends it and waits again", tr.What, Short(tr.Txid), why)
 		f := tr.Fee
 		if f == nil {
-			return fmt.Errorf("%s %s: refused (%s), and its predecessor is unspent (the next command sends it again)", tr.What, Short(tr.Txid), why)
+			return kept
 		}
 		spent, err := e.Legs.Asset.Spender(ctx, f.TxID, f.Vout)
 		if err != nil || spent == "" || spent == tr.Txid {
-			return fmt.Errorf("%s %s: refused (%s), and its predecessor is unspent (the next command sends it again)", tr.What, Short(tr.Txid), why)
+			return kept
 		}
 		by, feeLost = spent, true
 	}

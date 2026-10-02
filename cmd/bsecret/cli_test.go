@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	ec "github.com/bsv-blockchain/go-sdk/primitives/ec"
+	"github.com/bsv-blockchain/go-sdk/transaction"
 
 	"github.com/lightwebinc/bsecret/internal/config"
 	"github.com/lightwebinc/bsecret/internal/engine"
@@ -56,8 +58,8 @@ type harness struct {
 
 	mu sync.Mutex
 	// onSend, when set, runs once, before the chain takes the next
-	// transaction a client sends.
-	onSend func()
+	// transaction a client sends, with that transaction.
+	onSend func(tx *transaction.Transaction)
 }
 
 // serveChain is the chain, with the onSend hook in front of it.
@@ -65,16 +67,20 @@ func (h *harness) serveChain(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/rpc" {
 		body, _ := io.ReadAll(r.Body)
 		r.Body = io.NopCloser(bytes.NewReader(body))
-		h.mu.Lock()
-		hook := h.onSend
-		if hook != nil && bytes.Contains(body, []byte("sendrawtransaction")) {
-			h.onSend = nil
-		} else {
-			hook = nil
+		var req struct {
+			Method string `json:"method"`
+			Params []any  `json:"params"`
 		}
-		h.mu.Unlock()
-		if hook != nil {
-			hook()
+		if json.Unmarshal(body, &req) == nil && req.Method == "sendrawtransaction" && len(req.Params) > 0 {
+			h.mu.Lock()
+			hook := h.onSend
+			h.onSend = nil
+			h.mu.Unlock()
+			if raw, ok := req.Params[0].(string); ok && hook != nil {
+				if tx, err := transaction.NewTransactionFromHex(raw); err == nil {
+					hook(tx)
+				}
+			}
 		}
 	}
 	h.chain.ServeHTTP(w, r)

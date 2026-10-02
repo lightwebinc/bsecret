@@ -15,9 +15,10 @@ import (
 
 // A sweep the network will not mine is not in flight any more: waiting for
 // it, or sending the same bytes again, can never finish it, and while it
-// stayed in flight no later drop could run. Only a definitive answer marks
-// it failed; anything else (a leg that cannot be reached, an answer that
-// says busy, no verdict yet) leaves it in flight to be tried again.
+// stayed in flight no later sweep could run. Only the node naming another
+// transaction as the spender of one of its inputs marks it failed; anything
+// else (a leg that refuses, cannot be reached or says busy, no verdict yet)
+// leaves it in flight to be tried again.
 
 // SweepRefusedError is a sweep the network refused. The sweep is marked
 // failed in the home, its fee coin is back in the pool when the node shows
@@ -34,25 +35,37 @@ func (e *SweepRefusedError) Error() string {
 	return fmt.Sprintf("sweep %s refused by the network: %s; it is marked failed and retracts nothing; %s; drop again to build a new sweep", e.Txid, termsafe.Text(e.Why), termsafe.Text(e.Coin))
 }
 
-// refusal is why the network will never mine sweep tx, or "" while it
-// still might. err is the settlement leg's answer, if any. A sweep that has
-// mined is never refused. Then, in order: the leg's answer; arcade's
-// verdict, when arcade is the leg; and the node's view of each input, one
-// of which spent by another transaction means this one cannot mine.
+// refusal is why the network will never mine tx, or "" while it still
+// might. err is the settlement leg's answer, if any. The only evidence a
+// persisted transaction is given up on is the node naming ANOTHER
+// transaction as the spender of one of its inputs: then these bytes cannot
+// mine. A transaction that has mined is never refused. Nor is one whose
+// inputs the node shows unspent, spent by this very transaction, or cannot
+// answer for, whatever a leg said: a leg's refusal (a node's verify error,
+// arcade's REJECTED or DOUBLE_SPEND_ATTEMPTED) is also what a second
+// submission of a transaction already accepted is answered with, and
+// giving up on that would discard a transition that is about to mine, or
+// mark failed a sweep that then retracts what the home believes it did
+// not. Such a transaction stays persisted, and is sent and waited for
+// again.
 func (e *Engine) refusal(ctx context.Context, tx *transaction.Transaction, err error) string {
 	txid := tx.TxID().String()
 	if _, _, perr := e.Legs.Asset.Proof(ctx, txid); perr == nil {
 		return ""
 	}
+	spent := chainview.SpentElsewhere(ctx, e.Legs.Asset, tx)
+	if spent == "" {
+		return ""
+	}
 	if why, ok := chainview.RefusedAnswer(err); ok {
-		return why
+		return spent + " (" + why + ")"
 	}
 	if a := e.Legs.Arcade; a != nil {
 		if st, serr := a.Status(ctx, txid); serr == nil && st.Refused() {
-			return "arcade reports " + st.Why()
+			return spent + " (arcade reports " + st.Why() + ")"
 		}
 	}
-	return chainview.SpentElsewhere(ctx, e.Legs.Asset, tx)
+	return spent
 }
 
 // failSweep marks sw failed for why, and gives its fee coin back to the

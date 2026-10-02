@@ -270,6 +270,15 @@ func VerifySweep(ctx context.Context, beef []byte, crypt string, headers chaintr
 	return a.Spent, chainhash.Hash(a.Txid).String(), nil
 }
 
+// pageOutputs is the most outputs taken from one page (the contract's
+// largest page is 64 tokens; a page of carriers never splits a secret's, so
+// it may pass 16 by a few), and walkBytes the most bytes one paged walk
+// holds from one host.
+const (
+	pageOutputs = 128
+	walkBytes   = 256 << 20
+)
+
 // HostOutputs is what one host answered to one question, all pages.
 type HostOutputs struct {
 	Host      string
@@ -294,6 +303,7 @@ func (c *Client) Pages(ctx context.Context, host string, q Query, cursor func(lo
 	for k, v := range q {
 		page[k] = v
 	}
+	held := 0
 	for n := 0; ; n++ {
 		if n == maxPages {
 			ho.Truncated = true
@@ -307,7 +317,23 @@ func (c *Client) Pages(ctx context.Context, host string, q Query, cursor func(lo
 		if len(outs) == 0 {
 			return ho
 		}
+		// What one page and one walk may hold is bounded here, whatever a
+		// host answers: a page of this contract is at most 64 outputs, and
+		// a hostile one is cut, and said to be cut, not accumulated.
+		if len(outs) > pageOutputs {
+			outs, ho.Truncated = outs[:pageOutputs], true
+		}
+		for _, o := range outs {
+			held += len(o.Beef) + len(o.Context)
+		}
+		if held > walkBytes {
+			ho.Truncated = true
+			return ho
+		}
 		ho.Outputs = append(ho.Outputs, outs...)
+		if ho.Truncated {
+			return ho
+		}
 		last := ""
 		for _, o := range outs {
 			if k := cursor(o); k != "" && (last == "" || less(last, k)) {

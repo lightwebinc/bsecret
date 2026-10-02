@@ -183,3 +183,42 @@ func TestIdentifiers(t *testing.T) {
 		t.Error("Failure")
 	}
 }
+
+// A seq a token names never sizes anything: a chain is walked by spends
+// from seq 0, so a stray token at an enormous seq is a fork, not an
+// allocation.
+func TestAHostileSeqAllocatesNothing(t *testing.T) {
+	stray := &Tok{Txid: "stray", Token: &secrec.VaultToken{Vault: &secrec.Vault{Seq: 1 << 50}}}
+	v, err := FromTokens("example_crypt_hmqzvtkwrx", nil, [32]byte{}, []*Tok{stray})
+	if !errors.Is(err, ErrNoChain) || len(v.Tokens) != 0 || len(v.Forks) != 1 {
+		t.Fatalf("a stray token at seq 2^50: %v, %d tokens, %d forks", err, len(v.Tokens), len(v.Forks))
+	}
+}
+
+// A paged walk holds what the contract's pages hold and no more, whatever a
+// host answers.
+func TestPagesAreBounded(t *testing.T) {
+	asked := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		asked++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"type":"output-list","outputs":[`))
+		for i := 0; i < 5000; i++ {
+			if i > 0 {
+				_, _ = w.Write([]byte(","))
+			}
+			_, _ = w.Write([]byte(`{"beef":[1,2,3],"outputIndex":0}`))
+		}
+		_, _ = w.Write([]byte(`]}`))
+	}))
+	defer srv.Close()
+	c := &Client{Hosts: []string{srv.URL}}
+	org := "02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5"
+	n := 0
+	ho := c.Pages(context.Background(), srv.URL, Query{"crypt": "example_crypt_hmqzvtkwrx", "vaultsOf": org},
+		func(lookup.Output) string { n++; return hex.EncodeToString(sha256.New().Sum([]byte{byte(n), byte(n >> 8)}))[:64] },
+		func(a, b string) bool { return a < b })
+	if ho.Err != nil || !ho.Truncated || len(ho.Outputs) > pageOutputs || asked != 1 {
+		t.Fatalf("a page of 5000 outputs: %d kept, truncated %v, %d page(s) asked, %v", len(ho.Outputs), ho.Truncated, asked, ho.Err)
+	}
+}

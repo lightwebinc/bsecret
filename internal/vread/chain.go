@@ -44,8 +44,10 @@ type ChainView struct {
 
 	fold *secrec.VaultFold
 	// reused are the content ids of versions a commitment-reuse token
-	// listed under a commitment an earlier token of the vault listed.
+	// listed under a commitment an earlier token of the vault listed; seen
+	// every commitment a token of the chain listed.
 	reused map[[32]byte]bool
+	seen   map[[32]byte]bool
 }
 
 // Latest is the canonical chain's last token, or nil.
@@ -170,6 +172,9 @@ func (c *Client) Chain(ctx context.Context, crypt string, org []byte, vault [32]
 		}
 		return t
 	}
+	// top is the highest seq any host claimed as the vault's latest. It
+	// ends the walk early; it never sizes anything, and a walk never gets
+	// to a seq whose predecessor is not on the chain.
 	var top uint64
 	found := len(known) > 0
 	if found {
@@ -182,7 +187,7 @@ func (c *Client) Chain(ctx context.Context, crypt string, org []byte, vault [32]
 			continue
 		}
 		v.HostLatest[h] = 0
-		for _, o := range outs {
+		for _, o := range capOutputs(outs, seqAnswers) {
 			t := verify(h, o, nil)
 			if t == nil {
 				continue
@@ -202,56 +207,80 @@ func (c *Client) Chain(ctx context.Context, crypt string, org []byte, vault [32]
 		}
 		return v, ErrNoChain
 	}
-	// Every seq of every host above what the reader remembers: candidates
-	// per seq, and which hosts hold which txid.
-	cands := make([][]*Tok, top+1)
+	// The chain is walked seq by seq, and a seq is asked for only once the
+	// one before it is on the chain: a token is taken only as the spend of
+	// the token before it, so the work is bounded by the chain itself and
+	// never by a seq a host, or an owner's stray token, names.
 	for _, t := range known {
-		cands[t.Seq()] = []*Tok{t}
-	}
-	from := uint64(len(known))
-	holds := map[string]map[string]bool{}
-	for _, h := range c.Hosts {
-		if v.HostErr[h] != nil {
-			continue
+		if !v.extend([]*Tok{t}) {
+			// What was kept does not link: walk from the first token.
+			v.Tokens, v.Statuses, v.Forks = nil, nil, nil
+			v.fold, v.reused, v.seen = secrec.NewVaultFold(), map[[32]byte]bool{}, nil
+			break
 		}
-		holds[h] = map[string]bool{}
-		for s := from; s <= top; s++ {
+	}
+	from := uint64(len(v.Tokens))
+	live := map[string]bool{}
+	for _, h := range c.Hosts {
+		live[h] = v.HostErr[h] == nil
+	}
+	for s := from; s <= top; s++ {
+		var cands []*Tok
+		holds := map[string]map[string]bool{}
+		asked := false
+		for _, h := range c.Hosts {
+			if !live[h] {
+				continue
+			}
 			outs, err := c.Ask(ctx, h, with(v.base(), "seq", Seq(s)))
 			if err != nil {
-				v.HostErr[h] = err
-				break
+				v.HostErr[h], live[h] = err, false
+				continue
 			}
-			for _, o := range outs {
+			asked = true
+			holds[h] = map[string]bool{}
+			for _, o := range capOutputs(outs, seqAnswers) {
 				t := verify(h, o, &s)
 				if t == nil {
 					continue
 				}
 				holds[h][t.Txid] = true
 				dup := false
-				for _, x := range cands[s] {
+				for _, x := range cands {
 					dup = dup || x.Txid == t.Txid
 				}
 				if !dup {
-					cands[s] = append(cands[s], t)
+					cands = append(cands, t)
 				}
 			}
 		}
-	}
-	v.walk(cands)
-	if len(v.Tokens) == 0 {
-		return v, fmt.Errorf("%w: no first token verifies", ErrNoChain)
-	}
-	for h, set := range holds {
-		if v.HostErr[h] != nil {
-			continue
+		if !asked || !v.extend(cands) {
+			v.Forks = append(v.Forks, cands...)
+			break
 		}
-		for _, t := range v.Tokens {
-			if t.Seq() >= from && !set[t.Txid] {
-				v.Lacks[h] = append(v.Lacks[h], t.Seq())
+		last := v.Tokens[len(v.Tokens)-1]
+		for h, set := range holds {
+			if !set[last.Txid] {
+				v.Lacks[h] = append(v.Lacks[h], s)
 			}
 		}
 	}
+	if len(v.Tokens) == 0 {
+		return v, fmt.Errorf("%w: no first token verifies", ErrNoChain)
+	}
 	return v, nil
+}
+
+// seqAnswers is the most outputs taken from one answer to a seq: a host
+// keeps at most 8 tokens a seq, and what a hostile one adds is not read.
+const seqAnswers = 16
+
+// capOutputs is at most n of a host's answered outputs.
+func capOutputs(outs []lookup.Output, n int) []lookup.Output {
+	if len(outs) > n {
+		return outs[:n]
+	}
+	return outs
 }
 
 // Memory is what became of the chain a reader kept.
@@ -357,76 +386,85 @@ func (t *Tok) place() {
 }
 
 // FromTokens establishes a chain from tokens a reader was handed (the audit
-// class's answer, or a trail from any source), each already verified.
+// class's answer, or a trail from any source), each already verified. It
+// is walked from seq 0 by spends; a token at a seq the walk never reaches
+// is a fork, whatever seq it names.
 func FromTokens(crypt string, org []byte, vault [32]byte, toks []*Tok) (*ChainView, error) {
 	v := &ChainView{Crypt: crypt, Org: org, Vault: vault, HostLatest: map[string]uint64{}, HostErr: map[string]error{},
 		Lacks: map[string][]uint64{}, fold: secrec.NewVaultFold(), reused: map[[32]byte]bool{}}
-	var top uint64
+	by := map[uint64][]*Tok{}
 	for _, t := range toks {
-		if t.Seq() > top {
-			top = t.Seq()
+		by[t.Seq()] = append(by[t.Seq()], t)
+	}
+	for s := uint64(0); ; s++ {
+		cands := by[s]
+		delete(by, s)
+		if !v.extend(cands) {
+			v.Forks = append(v.Forks, cands...)
+			break
 		}
 	}
-	cands := make([][]*Tok, top+1)
-	for _, t := range toks {
-		cands[t.Seq()] = append(cands[t.Seq()], t)
+	for _, rest := range by {
+		v.Forks = append(v.Forks, rest...)
 	}
-	v.walk(cands)
 	if len(v.Tokens) == 0 {
 		return v, fmt.Errorf("%w: no first token verifies", ErrNoChain)
 	}
 	return v, nil
 }
 
-// walk takes the canonical chain from the candidates: the first-mined
-// first token whose input's outpoint hashes to the vault identifier, then
-// at each seq the first-mined token that spends the token before it under
-// the transition rules. It folds as it goes.
-func (v *ChainView) walk(cands [][]*Tok) {
-	seen := map[[32]byte]bool{}
-	for s := 0; s < len(cands); s++ {
-		var best *Tok
-		for _, t := range cands[s] {
-			if s == 0 {
-				if _, _, err := secrec.CheckFirstToken(t.Tx); err != nil {
-					continue
-				}
-			} else {
-				prev := v.Tokens[s-1]
-				if _, err := secrec.CheckNextToken(prev.Tx, prev.Token, t.Tx); err != nil {
-					continue
-				}
+// extend takes the chain's next token from the candidates at the next seq:
+// at seq 0 the first-mined token whose input's outpoint hashes to the vault
+// identifier, afterwards the first-mined token that spends the token before
+// it under the transition rules. It folds the token it takes, and reports
+// false, taking nothing, when no candidate continues the chain.
+func (v *ChainView) extend(cands []*Tok) bool {
+	s := uint64(len(v.Tokens))
+	var best *Tok
+	for _, t := range cands {
+		if t.Seq() != s {
+			continue
+		}
+		if s == 0 {
+			if _, _, err := secrec.CheckFirstToken(t.Tx); err != nil {
+				continue
 			}
-			if best == nil || t.Before(best) {
-				best = t
+		} else {
+			prev := v.Tokens[s-1]
+			if _, err := secrec.CheckNextToken(prev.Tx, prev.Token, t.Tx); err != nil {
+				continue
 			}
 		}
-		if best == nil {
-			for _, rest := range cands[s:] {
-				v.Forks = append(v.Forks, rest...)
-			}
-			return
+		if best == nil || t.Before(best) {
+			best = t
 		}
-		for _, t := range cands[s] {
-			if t != best {
-				v.Forks = append(v.Forks, t)
-			}
+	}
+	if best == nil {
+		return false
+	}
+	for _, t := range cands {
+		if t != best {
+			v.Forks = append(v.Forks, t)
 		}
-		v.Tokens = append(v.Tokens, best)
-		st := v.fold.Apply(best.Token.Vault)
-		v.Statuses = append(v.Statuses, st)
-		rec := best.Token.Vault
-		if st == secrec.StatusConsistent || st == secrec.StatusCommitmentReuse {
-			for _, l := range [][]secrec.Entry{rec.Create, rec.Update} {
-				for _, e := range l {
-					if seen[e.Commitment] {
-						v.reused[e.ContentID] = true
-					}
-					seen[e.Commitment] = true
+	}
+	v.Tokens = append(v.Tokens, best)
+	st := v.fold.Apply(best.Token.Vault)
+	v.Statuses = append(v.Statuses, st)
+	rec := best.Token.Vault
+	if st == secrec.StatusConsistent || st == secrec.StatusCommitmentReuse {
+		if v.seen == nil {
+			v.seen = map[[32]byte]bool{}
+		}
+		for _, l := range [][]secrec.Entry{rec.Create, rec.Update} {
+			for _, e := range l {
+				if v.seen[e.Commitment] {
+					v.reused[e.ContentID] = true
 				}
+				v.seen[e.Commitment] = true
 			}
 		}
 	}
+	return true
 }
 
 // Commitments are every commitment a usable token of the chain listed.

@@ -802,8 +802,8 @@ never sweeps a version the set holds.
 The removal is borg's command, and nothing in bsecret can stop it. So the
 check that a revoke can be finished is a step of its own, made before the
 removal: `bsecret rotate -check`, given the choices, builds nothing and
-fails when any secret of a vault keyed to the group has none. It is the
-documented step before borg removes anyone. An organisation that removes
+fails when any secret of the vault has none; it is run for each vault keyed
+to the group. It is the documented step before borg removes anyone. An organisation that removes
 first has begun a revoke it may not be able to finish, and the trail shows
 how long it took (section 9.2).
 

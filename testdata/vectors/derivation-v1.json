@@ -1,0 +1,192 @@
+{
+  "crypts": {
+    "drawnFromBytes": {
+      "bytes": "fafb0019e9ea01020304050607",
+      "result": "example_crypt_azzbcdefgh",
+      "rule": "a byte below 234 gives the letter a + byte mod 26; 234 to 255 is skipped"
+    },
+    "sameNameOther": "example_crypt_qzxkvbmwtr",
+    "topic": "tm_bsecret_example_crypt_hmqzvtkwrx",
+    "vectors": "example_crypt_hmqzvtkwrx"
+  },
+  "derivedKeys": [
+    {
+      "party": "org",
+      "identityKey": "03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26",
+      "vault": "03f80fe150d7e59ceec190a7e9ee2e78e9a8fdc9bfe355ccb48cb14aafbf21332c",
+      "secret": "03fb5cd84a384e11da9802ab1138eef4854ecf5f4d14572787c8b3f917b77c6f62",
+      "chain": "02f17e4927252406893ae57dc7238a2ec54effa10d41b8492ea103feeb847b5175"
+    },
+    {
+      "party": "alice",
+      "identityKey": "029c1f585aa80762f9f4458f6806978b7befb46c7b68af82d399630793ff1a2b50",
+      "vault": "03a94872d66f4eaf9d771ee2cdab520f5132456eea274ca6cb38a6f6de21b89e6b",
+      "secret": "03b400fc4c090d90461a1243da48c75ce7f1d5be5f30a160c57a4e21f27af5adc7",
+      "chain": "0235b0b6f9ab95273b47dc66db2d91c62ec1a99a232be9b0fc02382127cb279ebc"
+    },
+    {
+      "party": "bob",
+      "identityKey": "031428f3a3532ff4f1cac70f7292bfad06d1037f800ee8839b56ebba917a22e900",
+      "vault": "02956ee1cd20dedbac3f0702f2b21e5efb63550cca9871977d01f05b71eae54514",
+      "secret": "03e2b68fe5e270bfeadcb00bf68645f0e24778cdce79b61bc1cd5d6184e1e90bf7",
+      "chain": "02518b2f02f9a5d58ee1e0036f1e71862d2977a4d19abe469f6dba36413e63edb2"
+    },
+    {
+      "party": "carol",
+      "identityKey": "031162ffa0f68dda9783c9e3c419ed824a086c1594dc8d3333306016611739dfc1",
+      "vault": "021d67aed2558cee954a41f530295cc403084bb42f74245dae5f91ba940ca4db6b",
+      "secret": "02089a487a97b1a541f4dbff28e24827ba8a2f8784f8cfa419b828db5f494800f3",
+      "chain": "03e5a903c73766fa67aaf890fec7afe4d8354c24a5c051c77b59cd99195425510c"
+    },
+    {
+      "party": "dave",
+      "identityKey": "03887b313b55d7c6706037fe7bd554364faccfe21bc2652a2a6a0b0d7026c585ea",
+      "vault": "037870db74dd98eafda4c39332d583a193e6d465e827380e298a933ed8a15bff90",
+      "secret": "02ce9b3417f6dcb99feca752bcc46c98abf4f0d7fe38b34d753eb99728bb15e15b",
+      "chain": "034a9dc72710a296a88c235f7309da40b9db751a75afcffb23cd423fbcb5856f2c"
+    }
+  ],
+  "group": {
+    "epochs": [
+      {
+        "began": "the group is created with alice and bob; carol is added within the epoch",
+        "commitment": "ceeed5d6813b5155763f35d7209ce29228cd9625bb6527946fcdf6ee1b30f4ee",
+        "epoch": 0,
+        "epochId": "f177512800bb4d36592b8d1828c32da6573fd256908efb8f0a234cd6911e79dc",
+        "holders": [
+          "alice",
+          "bob",
+          "carol"
+        ],
+        "key": "f32d56bd890f105f1e9731d9607b464078644b0ce1df8e7a87196589bd0266ca",
+        "symmetricKey": "3d67c0041301c203085c253fb02a70d5d86ebdbe411759a18c7e63a40af8bd35"
+      },
+      {
+        "began": "bob is removed",
+        "commitment": "33446213fbf23b1a12c81c0b6679ff8cb4345db876f39affabc0050bb46604eb",
+        "epoch": 1,
+        "epochId": "2f7d1933ba956338f37d5b60627c5ba30e86dbde98192030d8c0bed41fe3f421",
+        "holders": [
+          "alice",
+          "carol"
+        ],
+        "key": "2502fa9da5b7f889d8de37defbdda85531e2c6b20626a3e59efa6815aac06189",
+        "symmetricKey": "836a3cd360f7eb2a083d0fd085c537f6fb6d29df6fbca8b68835e48d07d62dc0"
+      },
+      {
+        "began": "a scheduled rotation, no member change",
+        "commitment": "16a5a7e954bc2b7400de9f24edd5d81c62e9d0c88557ee6cf2298e3dd39a62be",
+        "epoch": 2,
+        "epochId": "2eb099db87764574f67fa85ef85a6b467e003a109aaef169755cf2edb56f8ab2",
+        "holders": [
+          "alice",
+          "carol"
+        ],
+        "key": "ceebd5308ddfaee2f1fb4f5f2dc96b596b58f4ad1643136ec53eb35071587947",
+        "symmetricKey": "b73945e40061c4823d1d9cf528a76b2e7a33a2b97ef182828c6aaeca48fea003"
+      }
+    ],
+    "group": "406504d3fbe1ae098f09a49dffa12222",
+    "hall": "example_hall_vkqzmtrwxp",
+    "note": "The vault's group and its epochs, as the group substrate's own golden vectors give them. The keys are stand-ins for random draws."
+  },
+  "identities": [
+    {
+      "party": "org",
+      "privateKey": "5151515151515151515151515151515151515151515151515151515151515151"
+    },
+    {
+      "party": "alice",
+      "privateKey": "5252525252525252525252525252525252525252525252525252525252525252"
+    },
+    {
+      "party": "bob",
+      "privateKey": "5353535353535353535353535353535353535353535353535353535353535353"
+    },
+    {
+      "party": "carol",
+      "privateKey": "5454545454545454545454545454545454545454545454545454545454545454"
+    },
+    {
+      "party": "dave",
+      "privateKey": "5656565656565656565656565656565656565656565656565656565656565656"
+    }
+  ],
+  "ids": {
+    "genesisOutpoint": "12dfa012037a48a5f88a29e482ec6ad5431f072e8fbb6d1d7b5abd0773cccb84.0",
+    "genesisTxid": "84cbcc7307bd5a7b1d6dbb8f2e071f43d56aec82e4298af8a5487a0312a0df12",
+    "secretIdRule": "SHA-256(domainSecretId || vault id || name)",
+    "secrets": {
+      "api/token": "c4e74936ff6d3655a92738dd028236aa689a287fb039bbcfbfdcd36cfe052ecd",
+      "db/password": "613732543f00dc8699966f0ce7118883e28026fc5a359b3c054334294073f07e",
+      "ssh/deploy-key": "d236af74474c417d67e39c1853c7b9156742ead623d4fd23a588de80b8449290",
+      "tls/key": "c518e1f0799ea5deae4f444a0f896dcd7b0c8177bffa4d8474b6c3392e065d7e"
+    },
+    "vaultId": "b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df",
+    "vaultIdRule": "SHA-256(domainVaultId || txid in hash byte order || output index as four bytes big-endian)"
+  },
+  "note": "Public test identities, never for real use. Every key under derivedKeys is derived with counterparty anyone, so a reader computes it from the identity key alone; the owner's wallet derives the same key with forSelf.",
+  "refusedProtocol": {
+    "note": "a protocol name under five characters cannot derive; bsecret's own name is long enough to be its protocol name",
+    "protocol": [
+      1,
+      "bsec"
+    ],
+    "sdkError": "pushdrop: invalid derivation: protocol name \"bsec\" is under 5 characters"
+  },
+  "registry": {
+    "anyoneKey": "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+    "defaultLabels": [
+      "confidential",
+      "internal",
+      "public",
+      "restricted"
+    ],
+    "domainCommitment": "metanet keyed content commitment v1",
+    "domainEpochWrap": "bsecret epoch wrap v1",
+    "domainSecretId": "bsecret secret id v1",
+    "domainSymmetric": "metanet keyed content symmetric v1",
+    "domainVaultId": "bsecret vault id v1",
+    "invoices": [
+      "1-bsecret-vault",
+      "1-bsecret-secret",
+      "1-bsecret-chain",
+      "1-bsecret-fund"
+    ],
+    "keyIds": [
+      "vault",
+      "secret",
+      "chain",
+      "fund"
+    ],
+    "lookupService": "ls_bsecret",
+    "magicPayload": "73657001",
+    "magicSecret": "73657301",
+    "magicVault": "73657601",
+    "protocol": [
+      1,
+      "bsecret"
+    ],
+    "selfProtocol": [
+      2,
+      "bsecret self"
+    ],
+    "tagFunding": "736502",
+    "tagVault": "736501",
+    "topicPrefix": "tm_bsecret_"
+  },
+  "selfWrap": {
+    "contentId": "4d8c1a10ef5bbde5bf4433ef5a62ce62d34aa93e4680e734014b1bbf97f3485b",
+    "counterparty": "self",
+    "invoice": "2-bsecret self-TYwaEO9bveW/RDPvWmLOYtNKqT5GgOc0AUsbv5fzSFs=",
+    "iv": "8e31e5c21acef91be13a1ec3f93b48b75d724f3b5729a2aaa77159ff8f66bfaf",
+    "key": "e668f6a3243c750fabd3282e65add17b03d0ac5c07069db150a28b436749a78b",
+    "keyId": "TYwaEO9bveW/RDPvWmLOYtNKqT5GgOc0AUsbv5fzSFs=",
+    "opens": {
+      "alice": "undecryptable",
+      "org": "opens",
+      "org, another content id": "undecryptable"
+    },
+    "wrap": "8e31e5c21acef91be13a1ec3f93b48b75d724f3b5729a2aaa77159ff8f66bfaf3c9a6ffa1ea9d5b22b1bab6849c77cb8652bb7c5354bee4d3d2fabf4dd369a98ac4b204e613e3970a38f48277f31c118"
+  }
+}

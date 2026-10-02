@@ -1,0 +1,364 @@
+{
+  "classes": [
+    {
+      "class": "vault",
+      "members": [
+        "crypt",
+        "org",
+        "vault"
+      ],
+      "price": "free",
+      "limit": 8
+    },
+    {
+      "class": "vault-seq",
+      "members": [
+        "crypt",
+        "org",
+        "seq",
+        "vault"
+      ],
+      "price": "free",
+      "limit": 8
+    },
+    {
+      "class": "vaults",
+      "members": [
+        "crypt",
+        "vaultsOf"
+      ],
+      "price": "free",
+      "limit": 64
+    },
+    {
+      "class": "vaults-after",
+      "members": [
+        "after",
+        "crypt",
+        "vaultsOf"
+      ],
+      "price": "free",
+      "limit": 64
+    },
+    {
+      "class": "secret",
+      "members": [
+        "crypt",
+        "org",
+        "secret",
+        "vault"
+      ],
+      "price": "free",
+      "limit": 8
+    },
+    {
+      "class": "version",
+      "members": [
+        "crypt",
+        "org",
+        "secret",
+        "vault",
+        "version"
+      ],
+      "price": "free",
+      "limit": 8
+    },
+    {
+      "class": "pending",
+      "members": [
+        "crypt",
+        "org",
+        "pending",
+        "vault"
+      ],
+      "price": "free",
+      "limit": 8
+    },
+    {
+      "class": "secrets",
+      "members": [
+        "crypt",
+        "org",
+        "secretsOf"
+      ],
+      "price": "free",
+      "limit": 16
+    },
+    {
+      "class": "secrets-after",
+      "members": [
+        "after",
+        "crypt",
+        "org",
+        "secretsOf"
+      ],
+      "price": "free",
+      "limit": 16
+    },
+    {
+      "class": "label",
+      "members": [
+        "crypt",
+        "label",
+        "org",
+        "vault"
+      ],
+      "price": "free",
+      "limit": 16
+    },
+    {
+      "class": "label-after",
+      "members": [
+        "after",
+        "crypt",
+        "label",
+        "org",
+        "vault"
+      ],
+      "price": "free",
+      "limit": 16
+    },
+    {
+      "class": "sweep",
+      "members": [
+        "crypt",
+        "spent"
+      ],
+      "price": "free",
+      "limit": 8
+    },
+    {
+      "class": "history",
+      "members": [
+        "crypt",
+        "history",
+        "secret",
+        "vault"
+      ],
+      "price": "priceable",
+      "limit": 16
+    },
+    {
+      "class": "history-after",
+      "members": [
+        "after",
+        "crypt",
+        "history",
+        "secret",
+        "vault"
+      ],
+      "price": "priceable",
+      "limit": 16
+    },
+    {
+      "class": "audit",
+      "members": [
+        "audit",
+        "crypt",
+        "vault"
+      ],
+      "price": "priceable",
+      "limit": 64
+    },
+    {
+      "class": "audit-after",
+      "members": [
+        "after",
+        "audit",
+        "crypt",
+        "vault"
+      ],
+      "price": "priceable",
+      "limit": 64
+    }
+  ],
+  "note": "A question carries exactly the members of one class, every one a string. txids are in display order.",
+  "questions": [
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\"}",
+      "class": "vault",
+      "refused": false
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\",\"seq\":\"0\"}",
+      "class": "vault-seq",
+      "refused": false
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"vaultsOf\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\"}",
+      "class": "vaults",
+      "refused": false
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"vaultsOf\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"after\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\"}",
+      "class": "vaults-after",
+      "refused": false
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\",\"secret\":\"613732543f00dc8699966f0ce7118883e28026fc5a359b3c054334294073f07e\"}",
+      "class": "secret",
+      "refused": false
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\",\"secret\":\"613732543f00dc8699966f0ce7118883e28026fc5a359b3c054334294073f07e\",\"version\":\"2\"}",
+      "class": "version",
+      "refused": false
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\",\"pending\":\"613732543f00dc8699966f0ce7118883e28026fc5a359b3c054334294073f07e\"}",
+      "class": "pending",
+      "refused": false
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"secretsOf\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\"}",
+      "class": "secrets",
+      "refused": false
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"secretsOf\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\",\"after\":\"613732543f00dc8699966f0ce7118883e28026fc5a359b3c054334294073f07e\"}",
+      "class": "secrets-after",
+      "refused": false
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\",\"label\":\"restricted\"}",
+      "class": "label",
+      "refused": false
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\",\"label\":\"restricted\",\"after\":\"613732543f00dc8699966f0ce7118883e28026fc5a359b3c054334294073f07e\"}",
+      "class": "label-after",
+      "refused": false
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"spent\":\"f51b07e77e1e99d34eb6ba62c841ce485e69eaa21dbe6daa4fa49ce12e30ceef.0\"}",
+      "class": "sweep",
+      "refused": false
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"history\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\",\"secret\":\"613732543f00dc8699966f0ce7118883e28026fc5a359b3c054334294073f07e\"}",
+      "class": "history",
+      "refused": false
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"history\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\",\"secret\":\"613732543f00dc8699966f0ce7118883e28026fc5a359b3c054334294073f07e\",\"after\":\"2\"}",
+      "class": "history-after",
+      "refused": false
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"audit\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\"}",
+      "class": "audit",
+      "refused": false
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"audit\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\",\"after\":\"0\"}",
+      "class": "audit-after",
+      "refused": false
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"00\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\"}",
+      "class": "vault",
+      "refused": false,
+      "why": "a repeated member takes its last value"
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\",\"extra\":\"1\"}",
+      "refused": true,
+      "why": "a member no class defines"
+    },
+    {
+      "question": "{\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\"}",
+      "refused": true,
+      "why": "crypt missing"
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\"}",
+      "refused": true,
+      "why": "a crypt without its suffix"
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03BAF7689C0A3558FB604589036A8D1E4B685D909F6E0E2C6018A14049AE64EC26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\"}",
+      "refused": true,
+      "why": "upper-case hex"
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"02fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc30\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\"}",
+      "refused": true,
+      "why": "a key alias"
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\"}",
+      "refused": true,
+      "why": "the anyone key"
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927\"}",
+      "refused": true,
+      "why": "a vault id of 31 bytes"
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\",\"seq\":\"01\"}",
+      "refused": true,
+      "why": "a leading zero"
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\",\"secret\":\"613732543f00dc8699966f0ce7118883e28026fc5a359b3c054334294073f07e\",\"version\":\"0\"}",
+      "refused": true,
+      "why": "version 0"
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\",\"label\":\"Restricted\"}",
+      "refused": true,
+      "why": "a label outside the grammar"
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"history\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\",\"secret\":\"613732543f00dc8699966f0ce7118883e28026fc5a359b3c054334294073f07e\"}",
+      "refused": true,
+      "why": "a free class's members and a priceable one's together"
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"audit\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\"}",
+      "refused": true,
+      "why": "a free class's members and a priceable one's together"
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"vaultsOf\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"after\":\"12\"}",
+      "refused": true,
+      "why": "a vaults cursor is a vault id"
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"audit\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\",\"after\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\"}",
+      "refused": true,
+      "why": "an audit cursor is a seq"
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"spent\":\"f51b07e77e1e99d34eb6ba62c841ce485e69eaa21dbe6daa4fa49ce12e30ceef:0\"}",
+      "refused": true,
+      "why": "an outpoint with a colon"
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"spent\":\"f51b07e77e1e99d34eb6ba62c841ce485e69eaa21dbe6daa4fa49ce12e30ceef.00\"}",
+      "refused": true,
+      "why": "an output index with a leading zero"
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":\"03baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26\",\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\",\"seq\":0}",
+      "refused": true,
+      "why": "a number where a string is required"
+    },
+    {
+      "question": "{\"crypt\":\"example_crypt_hmqzvtkwrx\",\"org\":null,\"vault\":\"b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df\"}",
+      "refused": true,
+      "why": "a null member"
+    },
+    {
+      "question": "[\"crypt\",\"example_crypt_hmqzvtkwrx\"]",
+      "refused": true,
+      "why": "not an object"
+    },
+    {
+      "question": "null",
+      "refused": true,
+      "why": "not an object"
+    }
+  ]
+}

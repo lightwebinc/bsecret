@@ -1,0 +1,275 @@
+{
+  "ciphertext": "8866ea607a527c96ae4b7f3c6d33b7490f02117906fe18ec91398ba1481f31c50c08bd553b08a30f82d8a85c529e0643dfdec581b959ae72a663483fe1d12fef3591b5c89b353d2ee894aee750f18cd76854e3398febb09eecc0a264ec1937eb9b8d77a42422b909c9c1d59a038de392a197a21749c2ca3ccfa89fed5964b362731af7ce106883f9948863c5268579040f3c54f880991cb25513efc18fb9724bd0d22e75a4e177232243aee5bd797624e80320f04e50a1663da30ab3559b5c54",
+  "contentKey": "0ff730f7b66f7bb6626229ca20c5b4c2c47ecc32248203a14cd247ef7ed298d8",
+  "descriptor": "{\"author\":\"@crumbs@nexus.app\",\"content\":{\"cipher\":\"aes-256-gcm\",\"hash\":\"00fdc251d4d520fe8e343c471e293dfbfd20ef352cdd6cbb7b1fc4d266c8988a\",\"length\":192,\"locator\":[\"uhrp://XUSuDZnz4PW5xBBn68YkcJWxZhE22a1ZXraTHPpTLcxrZVXsiiE6\"],\"salt\":\"4168fb26\",\"segment\":64},\"epoch\":0,\"key\":{\"digest\":\"2013064f87db545aa20f273b3abc8bdb470ddc69349cac55b7b397585af15797\"},\"metanetKeyedContent\":\"1.0\",\"release\":{\"condition\":\"payment\",\"on\":\"broadcast\",\"payees\":[{\"handle\":\"@crumbs@nexus.app\",\"share\":9300},{\"handle\":\"@fees@nexus.app\",\"share\":700}],\"price\":{\"amount\":\"1.00\",\"currency\":\"USD\"},\"releasers\":[{\"delegation\":\"d6e8f0c2a41b5937e2c8d1f4a70b6e35c9d2f81a4b7e0c63d5a9f2e841b7c06d_1\",\"handle\":\"@keys@nexus.app\"}]}}",
+  "epochsSameShape": {
+    "epoch0Cipher": "7c43d0c96aaab5466d7546d1e090640bdd9704b224bde33e9646fcb18c5e1467c48260c4c3e24a85436583e279e619ebd0d969dd8316aad221f82cf715602c2f8c953ad225993e8f432a1687a2",
+    "epoch0Key": "f32d56bd890f105f1e9731d9607b464078644b0ce1df8e7a87196589bd0266ca",
+    "epoch0KeyOn0": "reads",
+    "epoch0KeyOn1": "FAILS",
+    "epoch1Cipher": "a901e7ea1d1505522007f0f03908b73f95d0b4a19f696366f578ccd9e3b3ea1c69fc34ae78b920cb1c6507e5d5c998048ced0986c3208a68a5e6ac122aa6c1752340ac95f7b5801f7eff342bba",
+    "epoch1Key": "2502fa9da5b7f889d8de37defbdda85531e2c6b20626a3e59efa6815aac06189",
+    "note": "section 8, on two epoch keys of the scenario's group used as BRC-369 content keys",
+    "plaintext": "616e2065706f6368277320636f6e74656e742c207265616461626c652062792077686f657665722068656c6420746861742065706f63682773206b6579",
+    "salt": "4168fb26",
+    "segment": 64
+  },
+  "labels": {
+    "proofNonce": "BRC-369 schnorr nonce",
+    "publisher": "BRC-369 author",
+    "recipient": "BRC-369 reader",
+    "releaser": "BRC-369 releaser",
+    "salt": "BRC-369 salt",
+    "substitutedKey": "BRC-369 substituted key"
+  },
+  "notReproduced": [
+    {
+      "computed": "e32c0c0014fa761201bb4e764ab6bc33355536345f7ca06423d6e06a01a750d8",
+      "printed": "873de6bc082794ae1de8390aec85b7641fb7dd88106cd0a3230468a8e9484547",
+      "value": "the release payload's shared secret, and the payload itself",
+      "why": "the SDK's BRC-2 key for the printed parties, protocol and key id (the same on both sides) is not the printed value, and a wallet's decrypt of the printed payload under section 5.2's parameters fails. The printed value opens the payload to the content key when it is used directly as the AES-256-GCM key; how the document derived it is not stated. The payload also starts 33104242 where the SDKs write 42421033"
+    },
+    {
+      "value": "the epoch 0 and epoch 1 commitments and content ids",
+      "why": "the document prints the commitments and not the epoch keys or descriptors, and no label reproduces them"
+    },
+    {
+      "value": "the payload's 32-byte IV",
+      "why": "a random draw; no label reproduces it"
+    }
+  ],
+  "note": "BRC-369's own test vectors. Every row of reproduced gives the value the document prints and the value recomputed here, through this codec where the codec has the function and through the SDK's primitives otherwise; the generator fails if a row stops matching. The document's keys and draws are SHA-256 of the labels under labels. notReproduced lists what does not match and why.",
+  "payload": "3310424203e69fe2022f968ea1bc233f6a97ab885d16965d747fdab152dc7e71675d856d6902f409d574960001d82cfc470956b1c13aa60e98fb88101cdf69797d597745c3f77c588ec5954b41fb98efd3a7b30210a3c5f9bc44777e623df365e9637c74b36efef88a7d999ae66f952cc1cef07af27ea4538a999ec5cd15038dd7a8636899298eff7a4477ee7c62fbc7f177a189749f2a17a3f7c57d89bc78ba39f6b1143ed222f3a3d1a7a71e62206123f7e998f676",
+  "plaintext": {
+    "note": "not printed in the document: recovered by opening the printed ciphertext with the printed key",
+    "text": "The paywall we shipped put the restricted text in the same OP_RETURN as the preview. Anyone reading the chain read it for free. This is the fix."
+  },
+  "releasePayload": {
+    "opensWithPrintedValueAsKey": "0ff730f7b66f7bb6626229ca20c5b4c2c47ecc32248203a14cd247ef7ed298d8",
+    "printedHeader": "33104242",
+    "sdkDerivedKey": "e32c0c0014fa761201bb4e764ab6bc33355536345f7ca06423d6e06a01a750d8",
+    "sdkHeader": "42421033",
+    "sdkWalletDecrypt": "fails",
+    "usedHere": "no: this application writes no such payload and reads none; epoch keys are released by the group substrate through the SDK"
+  },
+  "reproduced": [
+    {
+      "section": "Parties",
+      "value": "publisher identity key",
+      "printed": "02390d541cef55960403aed2ef478e5f8c67cdafd353366a46ee8f00c723e9743e",
+      "computed": "02390d541cef55960403aed2ef478e5f8c67cdafd353366a46ee8f00c723e9743e",
+      "through": "the SDK's primitives",
+      "how": "the public key of SHA-256 of the party's label"
+    },
+    {
+      "section": "Parties",
+      "value": "releaser identity key",
+      "printed": "03e69fe2022f968ea1bc233f6a97ab885d16965d747fdab152dc7e71675d856d69",
+      "computed": "03e69fe2022f968ea1bc233f6a97ab885d16965d747fdab152dc7e71675d856d69",
+      "through": "the SDK's primitives",
+      "how": "the public key of SHA-256 of the party's label"
+    },
+    {
+      "section": "Parties",
+      "value": "recipient identity key",
+      "printed": "02f409d574960001d82cfc470956b1c13aa60e98fb88101cdf69797d597745c3f7",
+      "computed": "02f409d574960001d82cfc470956b1c13aa60e98fb88101cdf69797d597745c3f7",
+      "through": "the SDK's primitives",
+      "how": "the public key of SHA-256 of the party's label"
+    },
+    {
+      "section": "Content key and commitment",
+      "value": "symmetric key",
+      "printed": "42dcb945809f42a6f827c8336affc7a04c284dfd6e4b65c6663f6e864240ad0e",
+      "computed": "42dcb945809f42a6f827c8336affc7a04c284dfd6e4b65c6663f6e864240ad0e",
+      "through": "this codec",
+      "how": "SHA-256(symmetric domain || k)"
+    },
+    {
+      "section": "Content key and commitment",
+      "value": "commitment digest",
+      "printed": "2013064f87db545aa20f273b3abc8bdb470ddc69349cac55b7b397585af15797",
+      "computed": "2013064f87db545aa20f273b3abc8bdb470ddc69349cac55b7b397585af15797",
+      "through": "this codec",
+      "how": "SHA-256(commitment domain || k)"
+    },
+    {
+      "section": "Content key and commitment",
+      "value": "commitment point",
+      "printed": "02f340de300c8614f85771ed721b55637b8f729e59f50ff7edc475d5832c522372",
+      "computed": "02f340de300c8614f85771ed721b55637b8f729e59f50ff7edc475d5832c522372",
+      "through": "this codec",
+      "how": "k * G, compressed"
+    },
+    {
+      "section": "Content key and commitment",
+      "value": "salt",
+      "printed": "4168fb26",
+      "computed": "4168fb26",
+      "through": "this codec",
+      "how": "the first four bytes of SHA-256 of the salt's label"
+    },
+    {
+      "section": "Content key and commitment",
+      "value": "segment 0 iv",
+      "printed": "4168fb260000000000000000",
+      "computed": "4168fb260000000000000000",
+      "through": "this codec",
+      "how": "salt || index as eight bytes big-endian"
+    },
+    {
+      "section": "Content key and commitment",
+      "value": "segment 1 iv",
+      "printed": "4168fb260000000000000001",
+      "computed": "4168fb260000000000000001",
+      "through": "this codec",
+      "how": "salt || index as eight bytes big-endian"
+    },
+    {
+      "section": "Content key and commitment",
+      "value": "segment 2 iv",
+      "printed": "4168fb260000000000000002",
+      "computed": "4168fb260000000000000002",
+      "through": "this codec",
+      "how": "salt || index as eight bytes big-endian"
+    },
+    {
+      "section": "Ciphertext",
+      "value": "ciphertext",
+      "printed": "8866ea607a527c96ae4b7f3c6d33b7490f02117906fe18ec91398ba1481f31c50c08bd553b08a30f82d8a85c529e0643dfdec581b959ae72a663483fe1d12fef3591b5c89b353d2ee894aee750f18cd76854e3398febb09eecc0a264ec1937eb9b8d77a42422b909c9c1d59a038de392a197a21749c2ca3ccfa89fed5964b362731af7ce106883f9948863c5268579040f3c54f880991cb25513efc18fb9724bd0d22e75a4e177232243aee5bd797624e80320f04e50a1663da30ab3559b5c54",
+      "computed": "8866ea607a527c96ae4b7f3c6d33b7490f02117906fe18ec91398ba1481f31c50c08bd553b08a30f82d8a85c529e0643dfdec581b959ae72a663483fe1d12fef3591b5c89b353d2ee894aee750f18cd76854e3398febb09eecc0a264ec1937eb9b8d77a42422b909c9c1d59a038de392a197a21749c2ca3ccfa89fed5964b362731af7ce106883f9948863c5268579040f3c54f880991cb25513efc18fb9724bd0d22e75a4e177232243aee5bd797624e80320f04e50a1663da30ab3559b5c54",
+      "through": "this codec",
+      "how": "the printed bytes open in three segments of 64, 64 and 16 to 144 bytes of plaintext, which sealed again give the printed bytes"
+    },
+    {
+      "section": "Ciphertext",
+      "value": "ciphertext sha-256",
+      "printed": "00fdc251d4d520fe8e343c471e293dfbfd20ef352cdd6cbb7b1fc4d266c8988a",
+      "computed": "00fdc251d4d520fe8e343c471e293dfbfd20ef352cdd6cbb7b1fc4d266c8988a",
+      "through": "this codec",
+      "how": "SHA-256 of the 192 bytes"
+    },
+    {
+      "section": "Ciphertext",
+      "value": "uhrp locator",
+      "printed": "uhrp://XUSuDZnz4PW5xBBn68YkcJWxZhE22a1ZXraTHPpTLcxrZVXsiiE6",
+      "computed": "uhrp://XUSuDZnz4PW5xBBn68YkcJWxZhE22a1ZXraTHPpTLcxrZVXsiiE6",
+      "through": "this codec",
+      "how": "Base58Check over ce00 and the hash"
+    },
+    {
+      "section": "Descriptor",
+      "value": "content id",
+      "printed": "4506d4b11347776160524138f6711c7c747d65e6bf0ea2d3f5947b98dec25a97",
+      "computed": "4506d4b11347776160524138f6711c7c747d65e6bf0ea2d3f5947b98dec25a97",
+      "through": "the SDK's primitives",
+      "how": "SHA-256 of the 694-byte canonical form"
+    },
+    {
+      "section": "Descriptor",
+      "value": "publisher signature",
+      "printed": "3045022100f31abc7a941f4fb435cffd7208dce585d1f99d619b2179718858c8d6c897786302207db4f06e22d2bf0637d34915475777a74244a0e7fb7a6ae4ce511cd5e5aece34",
+      "computed": "3045022100f31abc7a941f4fb435cffd7208dce585d1f99d619b2179718858c8d6c897786302207db4f06e22d2bf0637d34915475777a74244a0e7fb7a6ae4ce511cd5e5aece34",
+      "through": "the SDK's primitives",
+      "how": "deterministic ECDSA (RFC 6979) over the content id under the publisher's identity key"
+    },
+    {
+      "section": "Release payload",
+      "value": "invoice number",
+      "printed": "2-keyed content release-fFiOxZVLQfuY79OnswIQo8X5vER3fmI982XpY3x0s24=",
+      "computed": "2-keyed content release-fFiOxZVLQfuY79OnswIQo8X5vER3fmI982XpY3x0s24=",
+      "through": "the SDK's primitives",
+      "how": "2-keyed content release-base64(SHA-256(content id || epoch as four bytes))"
+    },
+    {
+      "section": "Release payload",
+      "value": "payload header: sender, recipient, key id",
+      "printed": "03e69fe2022f968ea1bc233f6a97ab885d16965d747fdab152dc7e71675d856d6902f409d574960001d82cfc470956b1c13aa60e98fb88101cdf69797d597745c3f77c588ec5954b41fb98efd3a7b30210a3c5f9bc44777e623df365e9637c74b36e",
+      "computed": "03e69fe2022f968ea1bc233f6a97ab885d16965d747fdab152dc7e71675d856d6902f409d574960001d82cfc470956b1c13aa60e98fb88101cdf69797d597745c3f77c588ec5954b41fb98efd3a7b30210a3c5f9bc44777e623df365e9637c74b36e",
+      "through": "the SDK's primitives",
+      "how": "bytes 4 to 101 of the 182-byte payload"
+    },
+    {
+      "section": "The substituted key",
+      "value": "fraud ciphertext sha-256",
+      "printed": "9920f5113ce14452add1275a0ab200e148db49c9708a08d6eab707f664b16ccc",
+      "computed": "9920f5113ce14452add1275a0ab200e148db49c9708a08d6eab707f664b16ccc",
+      "through": "this codec",
+      "how": "the plaintext sealed under SHA-256 of the substituted key's label, the same salt"
+    },
+    {
+      "section": "The substituted key",
+      "value": "fraud content id",
+      "printed": "525bdd364e003f08322bbb5927be94b0be97983718aec1ffd43e90ef271d29a1",
+      "computed": "525bdd364e003f08322bbb5927be94b0be97983718aec1ffd43e90ef271d29a1",
+      "through": "the SDK's primitives",
+      "how": "SHA-256 of the printed descriptor with the hash and the locator replaced"
+    },
+    {
+      "section": "Split key",
+      "value": "sum of commitments",
+      "printed": "02f340de300c8614f85771ed721b55637b8f729e59f50ff7edc475d5832c522372",
+      "computed": "02f340de300c8614f85771ed721b55637b8f729e59f50ff7edc475d5832c522372",
+      "through": "the SDK's primitives",
+      "how": "point addition of the two printed share commitments"
+    },
+    {
+      "section": "Shared secret proof",
+      "value": "S",
+      "printed": "02d9f8c1eff274d6dd1a1387c7586c1c1435e085f2741d33083893ec35372f2255",
+      "computed": "02d9f8c1eff274d6dd1a1387c7586c1c1435e085f2741d33083893ec35372f2255",
+      "through": "the SDK's primitives",
+      "how": "the releaser's key times the recipient's identity key"
+    },
+    {
+      "section": "Shared secret proof",
+      "value": "R",
+      "printed": "0250dd7cd4de626292c56d587acefc75a650286805fc37438488e6f6ac8a168415",
+      "computed": "0250dd7cd4de626292c56d587acefc75a650286805fc37438488e6f6ac8a168415",
+      "through": "the SDK's primitives",
+      "how": "the nonce (SHA-256 of its label) times G"
+    },
+    {
+      "section": "Shared secret proof",
+      "value": "S prime",
+      "printed": "025b9fa91ae7e4a067d81792027a5e3e3c07cad78a8bf6f8adfc41d7845374f1f0",
+      "computed": "025b9fa91ae7e4a067d81792027a5e3e3c07cad78a8bf6f8adfc41d7845374f1f0",
+      "through": "the SDK's primitives",
+      "how": "the nonce times the recipient's identity key"
+    },
+    {
+      "section": "Shared secret proof",
+      "value": "z",
+      "printed": "891fb36580433a49de271af6fa65723ffb4ea74f7236d25ca5b0da20099e0e96",
+      "computed": "891fb36580433a49de271af6fa65723ffb4ea74f7236d25ca5b0da20099e0e96",
+      "through": "the SDK's primitives",
+      "how": "r + e*a mod n, e = SHA-256(A || B || S || S' || R) mod n"
+    },
+    {
+      "section": "Payee division",
+      "value": "satoshis: total, first payee, second payee",
+      "printed": "5968368 5550583 417785",
+      "computed": "5968368 5550583 417785",
+      "through": "the SDK's primitives",
+      "how": "half-up conversion, integer division, the remainder to the first payee"
+    }
+  ],
+  "substitutedKey": {
+    "authentication": "FAILS",
+    "ciphertext": "789b1333a4cdac28aefd0cac16a0a875be83a6dd1690459fe8098e2c8ee9ffb030b54011670193dafd3058f70c703360e8cffe18efaf8b947cfb9873519663511f7241dc884b72b94cbefb89d4b22dd6512be524f5a606f43bcea95d9cfef1f866abcccac8d659ea1e48075d3e7593965ea384cd74ef57855f39c719804a39ce01895b1966d107b82a30767a9be9fa508218b504ab07a1ac788c879f347e257bd68a5c88133acd319c587b2c06035c1b8f6087943a57f47a9913b837423b127b",
+    "ciphertextHash": "passes",
+    "keyCommitment": "passes",
+    "note": "section 5.4, as the document made it: the plaintext sealed under another scalar, the hash and locator updated; checked against the committed key",
+    "scalar": "7a6e7cdee9b167ac9892bb909835ef65842348878b7da9b6345ec4b707d5f59a",
+    "verdict": "tag"
+  },
+  "verification": {
+    "authentication": "passes",
+    "brc94Publisher": false,
+    "brc94Releaser": true,
+    "ciphertextHash": "passes",
+    "keyCommitment": "passes",
+    "note": "section 5.3's three checks through this codec, on the printed ciphertext with the printed key",
+    "signatureVerify": true
+  }
+}

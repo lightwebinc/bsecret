@@ -1,0 +1,373 @@
+{
+  "cutAtSeq3": {
+    "note": "the same trail ending at seq 3: epoch 1 is acknowledged and two secrets are still under epoch 0; epoch 2 is not acknowledged",
+    "windows": [
+      {
+        "epoch": 1,
+        "removedAMember": true,
+        "groupBeganAtHeight": 1010,
+        "vaultTokensStillUnderAnEarlierEpoch": 0,
+        "vaultAcknowledgedAtHeight": 1012,
+        "nothingUnderAnEarlierEpochAtHeight": 0,
+        "underAnEarlierEpochAtEnd": 2
+      },
+      {
+        "epoch": 2,
+        "removedAMember": false,
+        "groupBeganAtHeight": 1030,
+        "vaultTokensStillUnderAnEarlierEpoch": 0,
+        "vaultAcknowledgedAtHeight": 0,
+        "nothingUnderAnEarlierEpochAtHeight": 0,
+        "underAnEarlierEpochAtEnd": 3
+      }
+    ]
+  },
+  "groupEpochs": [
+    {
+      "began": "the group is created with alice and bob; carol is added within the epoch",
+      "epoch": 0,
+      "epochId": "f177512800bb4d36592b8d1828c32da6573fd256908efb8f0a234cd6911e79dc",
+      "height": 1000,
+      "removedAMember": false
+    },
+    {
+      "began": "bob is removed",
+      "epoch": 1,
+      "epochId": "2f7d1933ba956338f37d5b60627c5ba30e86dbde98192030d8c0bed41fe3f421",
+      "height": 1010,
+      "removedAMember": true
+    },
+    {
+      "began": "a scheduled rotation, no member change",
+      "epoch": 2,
+      "epochId": "2eb099db87764574f67fa85ef85a6b467e003a109aaef169755cf2edb56f8ab2",
+      "height": 1030,
+      "removedAMember": false
+    }
+  ],
+  "neverAcknowledged": {
+    "heights": [
+      1001,
+      1003,
+      1005,
+      1020,
+      1500
+    ],
+    "note": "the first three tokens, then two more that go on creating and updating under epoch 0 at heights 1020 and 1500, after the group began epoch 1 at 1010. Every host admits them. The audit passes its checks and reports them.",
+    "records": [
+      "b40044736576010178186578616d706c655f63727970745f686d717a76746b77727802582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26035820b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df04000558200000000000000000000000000000000000000000000000000000000000000000066d4578616d706c65207661756c7407776578616d706c655f68616c6c5f766b717a6d74727778700850406504d3fbe1ae098f09a49dffa1222209000a5820f177512800bb4d36592b8d1828c32da6573fd256908efb8f0a234cd6911e79dc0b846c636f6e666964656e7469616c68696e7465726e616c667075626c69636a726573747269637465640c000d82845820613732543f00dc8699966f0ce7118883e28026fc5a359b3c054334294073f07e015820cbacc008b2d391207422f3fc3794d8636b9b20d9ef9754359fb9e0d7f28bebb9582025e126295912139f1acd9ee9b6d01cc0bfdb9a9d6605920d3fbf459b9aa2d7a1845820c4e74936ff6d3655a92738dd028236aa689a287fb039bbcfbfdcd36cfe052ecd015820e9a7e5aefb72b1141c20647da188af6935b05a3babcf77b89763af0d2a2cbdc2582081b9f3de36eabc2ed806997207963cca924de0cf3d781131bfbd63a2c800f9da0e800f8010021100125820e27a68696dff61eff6aff238ba40b3770963ee9696458d9d39a5d168e78a96b3131a6b36ec80",
+      "b40044736576010178186578616d706c655f63727970745f686d717a76746b77727802582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26035820b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df04010558204c267bb3e82a90f7d1eee8ad565ce65ea3c05f28c1d7907841c166f8642825ea066d4578616d706c65207661756c7407776578616d706c655f68616c6c5f766b717a6d74727778700850406504d3fbe1ae098f09a49dffa1222209000a5820f177512800bb4d36592b8d1828c32da6573fd256908efb8f0a234cd6911e79dc0b846c636f6e666964656e7469616c68696e7465726e616c667075626c69636a726573747269637465640c000d800e81845820c4e74936ff6d3655a92738dd028236aa689a287fb039bbcfbfdcd36cfe052ecd0258205fdc7e1c23293fcb90a1d8266dc508ad323bb73cda85a56d49ce4b59f11743295820b6fcb34aa4e442bb6d9bf1ed9be6e1c00bd757288dbc231c4366929613e27aa20f8010021100125820f24c7c69c78f681035a8ce0973df9dd64a4a88c9c9e9b0223812d8e8761e423d131a6b36eed8",
+      "b40044736576010178186578616d706c655f63727970745f686d717a76746b77727802582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26035820b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df040205582004802cf46ea866c58a3255ddfecc65dd7d12add6e17414bdeb10a0ac237f529d066d4578616d706c65207661756c7407776578616d706c655f68616c6c5f766b717a6d74727778700850406504d3fbe1ae098f09a49dffa1222209000a5820f177512800bb4d36592b8d1828c32da6573fd256908efb8f0a234cd6911e79dc0b846c636f6e666964656e7469616c68696e7465726e616c667075626c69636a726573747269637465640c000d81845820c518e1f0799ea5deae4f444a0f896dcd7b0c8177bffa4d8474b6c3392e065d7e015820ed1f004612ab6a56f7e7b17f6df13c19ba7fab89275902b8f18b90abf28d7f85582090ee350f0b908bc7d6de4f43800642f9b1cca5065cc0d982f8e44c63bb1b73290e800f80100311001258204cc1e15f9001d1c78e13e77c67b85d022faee9a499050eae255e1cb241b2b478131a6b36f130",
+      "b40044736576010178186578616d706c655f63727970745f686d717a76746b77727802582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26035820b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df0403055820271c77cfeb90c1df4c046b8f4204c3bcf3dab51f82e6459e96e2796b0baf5b77066d4578616d706c65207661756c7407776578616d706c655f68616c6c5f766b717a6d74727778700850406504d3fbe1ae098f09a49dffa1222209000a5820f177512800bb4d36592b8d1828c32da6573fd256908efb8f0a234cd6911e79dc0b846c636f6e666964656e7469616c68696e7465726e616c667075626c69636a726573747269637465640c000d818458206730689f3fa0e0b1153586adcd55309ae6c511f01fbeb8638a52c91a8abc94820158201e6e9c23409e7d874b734790e709524dfd23a78f4ef8ab5547d9afedf26cbabb58207c50b35025f7d03fb840d63adcaafc3f2124f0cb973975a689e7af78e9b82d0e0e800f80100411001258203b9a0b98e480c2e75cf255a388122586222c652188b82c34872d6cea39284123131a6b36f388",
+      "b40044736576010178186578616d706c655f63727970745f686d717a76746b77727802582103baf7689c0a3558fb604589036a8d1e4b685d909f6e0e2c6018a14049ae64ec26035820b37ea839c54e1dbaa2ce48d09a84526d2659b307320a91a20e60e4d7327927df04040558202e19604f88f957411f3b1f6f2aae34b70b4f1a39694f3b2b251593a4bfce0b02066d4578616d706c65207661756c7407776578616d706c655f68616c6c5f766b717a6d74727778700850406504d3fbe1ae098f09a49dffa1222209000a5820f177512800bb4d36592b8d1828c32da6573fd256908efb8f0a234cd6911e79dc0b846c636f6e666964656e7469616c68696e7465726e616c667075626c69636a726573747269637465640c000d800e818458206730689f3fa0e0b1153586adcd55309ae6c511f01fbeb8638a52c91a8abc94820258209dbe770dd5234235b06de32a3bba0a7d3c0e1741a1c3c18b2304f490e3579ad0582049a80cca45739b2d6b249ffdb63c4e58c186132a3d73b7c387596882e1057f360f8010041100125820dae6d16a86647d9fb39ad7e6810869f51b833e5c6546e03d368005257de7ce81131a6b36f5e0"
+    ],
+    "windows": [
+      {
+        "epoch": 1,
+        "removedAMember": true,
+        "groupBeganAtHeight": 1010,
+        "vaultTokensStillUnderAnEarlierEpoch": 2,
+        "vaultAcknowledgedAtHeight": 0,
+        "nothingUnderAnEarlierEpochAtHeight": 0,
+        "underAnEarlierEpochAtEnd": 4
+      },
+      {
+        "epoch": 2,
+        "removedAMember": false,
+        "groupBeganAtHeight": 1030,
+        "vaultTokensStillUnderAnEarlierEpoch": 1,
+        "vaultAcknowledgedAtHeight": 0,
+        "nothingUnderAnEarlierEpochAtHeight": 0,
+        "underAnEarlierEpochAtEnd": 4
+      }
+    ]
+  },
+  "note": "What an auditor derives from the vault's mined tokens and the group's, each checked against the auditor's own block headers (spec section 9). Heights are those of the blocks the proofs name; here they are fixed examples. The auditor reads no secret record and no key. A window's settled height comes from the fold of the change lists, never from a token's own stale count.",
+  "refused": [
+    {
+      "label": "a token whose epoch id is not the one the group gave that epoch",
+      "problems": [
+        "seq 3: epoch: another epoch id"
+      ]
+    },
+    {
+      "label": "a token that acknowledges an epoch at a height below the block that began it",
+      "problems": [
+        "seq 3: epoch: before the block that began the epoch"
+      ]
+    },
+    {
+      "label": "a token that names an epoch the group has not begun",
+      "problems": [
+        "seq 6: epoch: an epoch the group has not begun"
+      ]
+    },
+    {
+      "label": "group epochs out of height order",
+      "problems": [
+        "seq 0: group"
+      ]
+    },
+    {
+      "label": "a group epoch given twice",
+      "problems": [
+        "seq 0: group"
+      ]
+    },
+    {
+      "label": "a group epoch missing from the middle",
+      "problems": [
+        "seq 0: group"
+      ]
+    },
+    {
+      "label": "no tokens",
+      "problems": [
+        "seq 0: empty"
+      ]
+    },
+    {
+      "label": "a trail that does not start at seq 0",
+      "problems": [
+        "seq 1: first",
+        "seq 1: status: set-mismatch",
+        "seq 2: status: set-mismatch",
+        "seq 3: status: set-mismatch",
+        "seq 4: status: set-mismatch",
+        "seq 5: status: set-mismatch",
+        "seq 6: status: set-mismatch"
+      ]
+    },
+    {
+      "label": "a token left out of the middle",
+      "problems": [
+        "seq 3: transition: transition",
+        "seq 3: status: set-mismatch",
+        "seq 4: status: set-mismatch",
+        "seq 5: status: set-mismatch",
+        "seq 6: status: set-mismatch"
+      ]
+    },
+    {
+      "label": "a token whose prev is not the txid of the one before it",
+      "problems": [
+        "seq 2: transition: transition"
+      ]
+    },
+    {
+      "label": "a token mined below the one it spends",
+      "problems": [
+        "seq 1: height"
+      ]
+    },
+    {
+      "label": "a secret already re-keyed updated again while in debt and counted as clearing it",
+      "problems": [
+        "seq 4: status: stale-mismatch"
+      ]
+    }
+  ],
+  "tokens": [
+    {
+      "seq": 0,
+      "standInTxid": "4c267bb3e82a90f7d1eee8ad565ce65ea3c05f28c1d7907841c166f8642825ea",
+      "height": 1001,
+      "epoch": 0,
+      "count": 2,
+      "stale": 0,
+      "status": "consistent"
+    },
+    {
+      "seq": 1,
+      "standInTxid": "04802cf46ea866c58a3255ddfecc65dd7d12add6e17414bdeb10a0ac237f529d",
+      "height": 1003,
+      "epoch": 0,
+      "count": 2,
+      "stale": 0,
+      "status": "consistent"
+    },
+    {
+      "seq": 2,
+      "standInTxid": "271c77cfeb90c1df4c046b8f4204c3bcf3dab51f82e6459e96e2796b0baf5b77",
+      "height": 1005,
+      "epoch": 0,
+      "count": 3,
+      "stale": 0,
+      "status": "consistent"
+    },
+    {
+      "seq": 3,
+      "standInTxid": "362f4f44064d3b58886004b2c03f61e55750bb5548889f746f9be86d69c65f9d",
+      "height": 1012,
+      "epoch": 1,
+      "count": 3,
+      "stale": 2,
+      "status": "consistent"
+    },
+    {
+      "seq": 4,
+      "standInTxid": "96838c1bbed02b37024e95eb8d25218a2905cc0f19038187f44d1e557de24bd0",
+      "height": 1013,
+      "epoch": 1,
+      "count": 2,
+      "stale": 0,
+      "status": "consistent"
+    },
+    {
+      "seq": 5,
+      "standInTxid": "aca057654b1d84f8f60fe0e173b0ef659738909341300c205130bbad4f5828a7",
+      "height": 1020,
+      "epoch": 1,
+      "count": 3,
+      "stale": 0,
+      "status": "consistent"
+    },
+    {
+      "seq": 6,
+      "standInTxid": "6b072df72043c0afa9dd3d3ab6a3dcbb9c5c1239b916cbceaa017a7d11c70f6a",
+      "height": 1031,
+      "epoch": 2,
+      "count": 3,
+      "stale": 0,
+      "status": "consistent"
+    }
+  ],
+  "trail": [
+    {
+      "seq": 0,
+      "height": 1001,
+      "kind": "create",
+      "secret": "db/password",
+      "id": "613732543f00dc8699966f0ce7118883e28026fc5a359b3c054334294073f07e",
+      "version": 1,
+      "contentId": "cbacc008b2d391207422f3fc3794d8636b9b20d9ef9754359fb9e0d7f28bebb9",
+      "epoch": 0
+    },
+    {
+      "seq": 0,
+      "height": 1001,
+      "kind": "create",
+      "secret": "api/token",
+      "id": "c4e74936ff6d3655a92738dd028236aa689a287fb039bbcfbfdcd36cfe052ecd",
+      "version": 1,
+      "contentId": "e9a7e5aefb72b1141c20647da188af6935b05a3babcf77b89763af0d2a2cbdc2",
+      "epoch": 0
+    },
+    {
+      "seq": 1,
+      "height": 1003,
+      "kind": "update",
+      "secret": "api/token",
+      "id": "c4e74936ff6d3655a92738dd028236aa689a287fb039bbcfbfdcd36cfe052ecd",
+      "version": 2,
+      "contentId": "5fdc7e1c23293fcb90a1d8266dc508ad323bb73cda85a56d49ce4b59f1174329",
+      "epoch": 0,
+      "fromEpoch": 0
+    },
+    {
+      "seq": 2,
+      "height": 1005,
+      "kind": "create",
+      "secret": "tls/key",
+      "id": "c518e1f0799ea5deae4f444a0f896dcd7b0c8177bffa4d8474b6c3392e065d7e",
+      "version": 1,
+      "contentId": "ed1f004612ab6a56f7e7b17f6df13c19ba7fab89275902b8f18b90abf28d7f85",
+      "epoch": 0
+    },
+    {
+      "seq": 3,
+      "height": 1012,
+      "kind": "rekey",
+      "secret": "db/password",
+      "id": "613732543f00dc8699966f0ce7118883e28026fc5a359b3c054334294073f07e",
+      "version": 2,
+      "contentId": "bd0913b80dffb51096c5323dd112cfa98b982542eaa4bc22da8e5ecf58f18e5d",
+      "epoch": 1,
+      "fromEpoch": 0
+    },
+    {
+      "seq": 4,
+      "height": 1013,
+      "kind": "retire",
+      "secret": "tls/key",
+      "id": "c518e1f0799ea5deae4f444a0f896dcd7b0c8177bffa4d8474b6c3392e065d7e",
+      "version": 1,
+      "epoch": 1,
+      "fromEpoch": 0
+    },
+    {
+      "seq": 4,
+      "height": 1013,
+      "kind": "rekey",
+      "secret": "api/token",
+      "id": "c4e74936ff6d3655a92738dd028236aa689a287fb039bbcfbfdcd36cfe052ecd",
+      "version": 3,
+      "contentId": "bd8dce90589d6bae93c27936e1ab9eb2cf690e25edcae66a812d3f803fb2b38b",
+      "epoch": 1,
+      "fromEpoch": 0
+    },
+    {
+      "seq": 5,
+      "height": 1020,
+      "kind": "create",
+      "secret": "ssh/deploy-key",
+      "id": "d236af74474c417d67e39c1853c7b9156742ead623d4fd23a588de80b8449290",
+      "version": 1,
+      "contentId": "dcb27cf4d1e8ddc4a43f8d166a5cdd2c070bc2e268db1ad4437b50b6826f51ad",
+      "epoch": 1
+    },
+    {
+      "seq": 6,
+      "height": 1031,
+      "kind": "rekey",
+      "secret": "db/password",
+      "id": "613732543f00dc8699966f0ce7118883e28026fc5a359b3c054334294073f07e",
+      "version": 3,
+      "contentId": "6ca6fd33c30d384451d299fa207d558cf0e6eca05904b3e80ad0ee5d4feb7e96",
+      "epoch": 2,
+      "fromEpoch": 1
+    },
+    {
+      "seq": 6,
+      "height": 1031,
+      "kind": "rekey",
+      "secret": "api/token",
+      "id": "c4e74936ff6d3655a92738dd028236aa689a287fb039bbcfbfdcd36cfe052ecd",
+      "version": 4,
+      "contentId": "f7efffe36abf2e53c9ed0e9f4e655b65199dc2f462d57ebfb4fffe5e0aeb05a3",
+      "epoch": 2,
+      "fromEpoch": 1
+    },
+    {
+      "seq": 6,
+      "height": 1031,
+      "kind": "rekey",
+      "secret": "ssh/deploy-key",
+      "id": "d236af74474c417d67e39c1853c7b9156742ead623d4fd23a588de80b8449290",
+      "version": 2,
+      "contentId": "c0976979390537b08937f53c6aa28461fa9275506ee9cb0a063c29ea61c4d57e",
+      "epoch": 2,
+      "fromEpoch": 1
+    }
+  ],
+  "windows": [
+    {
+      "epoch": 1,
+      "removedAMember": true,
+      "groupBeganAtHeight": 1010,
+      "vaultTokensStillUnderAnEarlierEpoch": 0,
+      "vaultAcknowledgedAtHeight": 1012,
+      "nothingUnderAnEarlierEpochAtHeight": 1013,
+      "underAnEarlierEpochAtEnd": 0
+    },
+    {
+      "epoch": 2,
+      "removedAMember": false,
+      "groupBeganAtHeight": 1030,
+      "vaultTokensStillUnderAnEarlierEpoch": 0,
+      "vaultAcknowledgedAtHeight": 1031,
+      "nothingUnderAnEarlierEpochAtHeight": 1031,
+      "underAnEarlierEpochAtEnd": 0
+    }
+  ]
+}

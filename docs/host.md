@@ -47,7 +47,7 @@ it again. A crypt is joined by replay (below).
 | `BSECRET_MAX_SWEEP_INPUTS` | 1024 | the most inputs of a sweep the host accepts. At least 1024 |
 | `BSECRET_SPEND_TABLE` | 65536 | the spends of outpoints no carrier used that the host keeps (below). At least 65536 |
 | `BSECRET_LISTEN` | none | `host:port` of the terms route (below) |
-| `BSECRET_PRICES` | none | the classes this host prices, for example `history=5,history-after=5,audit=20,audit-after=20`. Only the four priceable classes, each priced by its own name; a price of 0 charges nothing |
+| `BSECRET_PRICES` | none | the classes this host prices, for example `history=5,history-after=5,audit=20,audit-after=20`. Only the four priceable classes, each priced by its own name; a price of 0 charges nothing. A class and its `-after` form are priced together or not at all: priced apart, the free one would answer every page but the first for nothing |
 | `BSECRET_PAYEE_KEY` | none | the payee's private key, 64 lowercase hex characters: the terms route's BRC-104 identity and the key payments are derived from |
 | `BSECRET_SESSIONS` | 10000 | the most BRC-104 sessions the terms route keeps. Past it the least recently used is forgotten |
 | `BSECRET_SESSION_TTL` | 600 | seconds a BRC-104 session is kept once idle |
@@ -55,6 +55,8 @@ it again. A crypt is joined by replay (below).
 | `BSECRET_HANDSHAKE_BURST` | 8 | the most handshakes the terms route answers at once |
 | `BSECRET_HANDSHAKES_PER_ADDR_PER_SEC` | 1 | handshakes a second one remote address is answered; decimals allowed |
 | `BSECRET_HANDSHAKE_ADDR_BURST` | 4 | the most handshakes one remote address is answered at once |
+| `BSECRET_RESPONSES_PER_SEC` | 5 | signed responses a second one BRC-104 session is given; decimals allowed |
+| `BSECRET_RESPONSE_BURST` | 20 | the most signed responses one session is given at once |
 
 A price needs `BSECRET_LISTEN` and `BSECRET_PAYEE_KEY`. Any mistake stops
 the host before its port opens.
@@ -127,10 +129,12 @@ and txid.
 
 At most 8 tokens are kept at one `seq` of one vault: rooted tokens before
 others, then the lowest txids. A token that is turned away while it is
-pending stays in the engine's storage and is read again at the next start,
-when every token's descent is known before the bound is applied; so more
-than 8 tokens at one `seq`, which only the vault's owner can make, can leave
-a host behind until it restarts or the publisher replays in order.
+pending stays in the engine's storage, and the index keeps its txid under
+the predecessor it names: once that predecessor is rooted the token is read
+back from storage and takes its place ahead of any pending one. Offering it
+again would not do that, because to the engine it is a duplicate. So which
+tokens are kept does not depend on the order a chain was replayed in, live
+or after a restart.
 
 ### Carriers
 
@@ -157,7 +161,9 @@ running minimum), the lowest 8 of the others, a count of the rest, whether
 its winner was dropped, and the admitted sweeps that spend it. Only the
 winner can be answered. The 8 others are kept as evidence that the owner
 equivocated; a carrier the row does not keep is dropped at once, deleted
-from storage, and counted without its commitment. Once a row's winner is
+from storage before its admission completes, and counted once without its
+commitment (a repeat of it that the engine lets through is not counted
+again). Once a row's winner is
 dropped by retention nothing on that outpoint is answered again, a lower
 commitment that arrives later included.
 
@@ -174,8 +180,14 @@ the spend joins its row. A sweep whose every spend has left the table is
 dropped and deleted from storage, so a chain of mined sweeps of a
 stranger's own outputs costs the host the table and nothing more. This is
 the one place where order matters: a sweep pushed out of the table before
-its carrier arrived does not retract it here. The table is rebuilt on start
-from the sweeps storage holds.
+its carrier arrived does not retract it here. A sweep admitted in several
+crypts answers `sweep` in each.
+
+The table is not written down. On start it is rebuilt from the sweeps the
+engine's storage still holds: the unspent tombstones the host hands over,
+and, read back by name, the tombstones a later admitted transaction spent
+(a carrier funded from a sweep's output, say), which the rows file names
+because storage no longer lists them as unspent.
 
 ### Retention
 
@@ -190,9 +202,11 @@ Kept for the host's life: tokens, outpoint rows and the sweeps they record.
 | `superseded` | as an unlisted carrier of its vault |
 | `retracted` | the same period after the host first saw the sweep; it is not answered meanwhile |
 
-Retention runs hourly. A dropped carrier is deleted from storage; the
-engine's record that its transaction was applied remains, so offered again
-it is a duplicate. Funding does not bound what a key can store at a host
+Retention runs hourly. A dropped carrier is deleted from storage at once
+(after every admission and every retention pass); the engine's record that
+its transaction was applied remains, so offered again it is a duplicate. On
+a host whose storage cannot delete an output the module says so once in the
+log, and what it dropped stays in storage, unanswered. Funding does not bound what a key can store at a host
 (the value returns by sweep): these floors, the rows and the table do, and
 a host rate-limits submissions in front of the engine.
 
@@ -201,16 +215,20 @@ a host rate-limits submissions in front of the engine.
 - `bsecret-rows.jsonl` holds what the host keeps for its life beside the
   engine's storage: the carriers each funding outpoint's row took in, a
   count for each it turned away, every drop, every spend of such an outpoint
-  by an admitted sweep, and when the host first saw each token. Replayed in
-  order it rebuilds every row. It keeps a funding output from answering a
+  by an admitted sweep, when the host first saw each token, and each held
+  sweep whose tombstone a later transaction spent. Replayed in order it
+  rebuilds every row. A carrier storage holds that the file does not name
+  (a line lost to a crash, or a directory restored from a copy) is taken
+  into its row again when it is below what the row keeps, so the winner
+  stays the lowest commitment the host holds. It keeps a funding output from answering a
   second carrier and keeps retention's clocks, so it is kept for the host's
   life, backed up with the database, and never edited. Each line is flushed
   to disk before the admission it records completes. It names outpoints,
   txids and commitments, never an identity or a secret.
 - `payments.jsonl` holds every payment the terms route accepted: the Atomic
   BEEF, the derivation prefix and suffix, the sender's identity key, the
-  satoshis and the class. The route answers once the line is on disk. It
-  does not broadcast the payment.
+  satoshis, the class and the outpoints the payment spends. The route
+  answers once the line is on disk. It does not broadcast the payment.
 
 Both files are append-only, so a copy taken while the host runs is safe: at
 worst its last line is cut short, and both readers skip such a line. Any
@@ -221,7 +239,10 @@ Restore it only when it is lost or damaged, never to roll the host back:
 rows written after the copy are gone.
 
 A payment is money only once it is broadcast and mined; until then the
-payer can spend the same coins elsewhere. Settle each line promptly with
+payer can spend the same coins elsewhere. The route refuses a payment that
+spends a coin an accepted payment already spent, across restarts, so two
+unbroadcast transactions on one coin buy one answer and not two; it cannot
+see a spend it was never shown. Settle each line promptly with
 the payee wallet's BRC-100 `internalizeAction` (protocol `wallet payment`,
 output 0, the remittance as written), which broadcasts it.
 
@@ -251,15 +272,16 @@ with BRC-105's headers (`x-bsv-payment-version`,
 an `x-bsv-payment` header whose transaction's output 0 pays at least the
 price to the key BRC-29 derives for the prefix, the suffix and the asker,
 and which verifies against the host's headers, it is answered. One payment
-buys one question, which is one page. A payment used twice is answered 409.
+buys one question, which is one page. A payment used twice is answered 409,
+and so is one that spends a coin an earlier payment spent.
 
 | Status | When |
 | --- | --- |
 | 400 | the question is not one class's, names a crypt the host does not carry, or the payment is malformed, pays too little or the wrong key, or does not verify |
-| 401 | a priced class asked without BRC-104, or a request that does not verify |
+| 401 | a priced class asked without BRC-104, a request that does not verify, or a signed request sent a second time |
 | 402 | a priced class asked without a payment |
-| 409 | a payment already used |
-| 429 | a handshake over the budget, with `Retry-After` |
+| 409 | a payment already used, or one that spends a coin an accepted payment spent |
+| 429 | a handshake over the budget, or a request over its session's budget of signed responses, with `Retry-After` |
 | 503 | the index is not restored yet |
 
 ### The handshake budget
@@ -274,9 +296,19 @@ again. Behind a reverse proxy every client has the proxy's address, so the
 per-address budget becomes a second route budget: limit by address at the
 proxy.
 
+A handshake buys a session, and every answered request on a session costs
+the host another signature. So each session has its own budget of signed
+responses (`BSECRET_RESPONSES_PER_SEC`, `BSECRET_RESPONSE_BURST`), taken
+only by a request that verified, and a request over it is answered 429
+with nothing signed. A signed request sent again byte for byte is refused
+401 before anything is verified or signed: the route remembers the last
+65536 requests it answered, and the session budget bounds what an older
+replay can cost.
+
 `bsecret_handshakes_total{result}` counts `accepted`, `failed`,
-`limited_address` and `limited_global`; `bsecret_sessions` is the sessions
-kept; `bsecret_payments_total{result}` counts `requested`, `accepted`,
+`limited_address` and `limited_global`; `bsecret_requests_total{result}`
+counts authenticated requests refused before any signature (`replayed`,
+`limited`); `bsecret_sessions` is the sessions kept; `bsecret_payments_total{result}` counts `requested`, `accepted`,
 `refused` and `replayed`.
 
 ## Joining a crypt

@@ -114,6 +114,7 @@ tokens costs each one twice.
 | Retention of replaced and retired versions | 31 days | host policy, at least 31 days | A reader in the middle of a change still finds what it was given; longer is what the `history` class sells, and what a removed member can still fetch | Same |
 | Sessions the priced route keeps | 10000, each forgotten after 600 s idle | host policy | A handshake is unauthenticated: the store must not grow without end | Not on the plane |
 | Handshakes the priced route answers | 4 a second, 8 at once; per remote address (IPv6 per /64) 1 a second, 4 at once | host policy; over it answered 429 with `Retry-After`, before any signature | The session cap bounds memory, not work; the budget bounds the signatures a flood can make a host compute | Not on the plane |
+| Signed responses the priced route gives one session | 5 a second, 20 at once | host policy; over it answered 429 with `Retry-After`, with nothing signed; a signed request sent twice is refused | One handshake must not buy signatures without end | Not on the plane |
 | Lookups | host policy | answered 429 with `Retry-After` | A client respects it | Same |
 
 ## Known constraint

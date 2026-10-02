@@ -1319,3 +1319,22 @@ func TestStaleProofsAreReplaced(t *testing.T) {
 		t.Fatalf("the home kept its stale proofs:\n%s", r.stderr)
 	}
 }
+
+// A same-value re-keying in an interval vault re-keys the value readers
+// hold: the latest deferred version's, not the listed one's.
+func TestSameValueRekeyOfADeferredVersion(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault("-anchor", "interval")
+	h.put("svc/token", "t1", "-label", "restricted")
+	h.put("svc/token", "t2", "-defer")
+	h.put("svc/token", "t3", "-defer", "-label", "internal")
+	if err := h.borg.Remove(h.group, h.keys["bob"]); err != nil {
+		t.Fatal(err)
+	}
+	h.must("org", "rotate", "-same-all")
+	r := h.must("alice", "get", "svc/token")
+	if r.stdout != "t3" || !strings.Contains(r.stderr, "version 4 label internal epoch 1") || !strings.Contains(r.stderr, "anchored, current") {
+		t.Fatalf("the re-keyed version: %q\n%s", r.stdout, r.stderr)
+	}
+}

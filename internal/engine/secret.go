@@ -606,21 +606,24 @@ func (e *Engine) Rotate(ctx context.Context, w *Writer, plan map[string]Choice, 
 				res.Retired = append(res.Retired, s.Key())
 				continue
 			}
-			cur := w.Vault.VersionOf(hex.EncodeToString(s.ID[:]), "")
-			if cur == nil {
+			// The version the new one follows is also the one whose value
+			// and label it carries on: in an interval vault that is the
+			// latest deferred version, not the listed one, whose value a
+			// same-value re-keying would otherwise bring back.
+			after, err := e.predecessor(w, s.ID, true)
+			if err != nil {
+				return res, err
+			}
+			if after == nil {
 				return res, fmt.Errorf("%s: this home holds no record of the version the set holds: run `bsecret sync`", s.Key())
 			}
-			it := Item{Name: s.Name, Value: ch.Value, Label: cur.Label}
+			it := Item{Name: s.Name, Value: ch.Value, Label: after.Label}
 			if ch.Same {
-				p, err := e.valueOf(ctx, cur)
+				p, err := e.valueOf(ctx, after)
 				if err != nil {
 					return res, fmt.Errorf("%s: its value could not be read for a same-value re-keying: %w", s.Key(), err)
 				}
 				it.Value, it.Type, it.NotAfter, it.RotateEvery = p.Value, p.Type, p.NotAfter, p.RotateEvery
-			}
-			after, err := e.predecessor(w, s.ID, true)
-			if err != nil {
-				return res, err
 			}
 			m, err := e.mint(ctx, w, it, target, sym, after)
 			if err != nil {

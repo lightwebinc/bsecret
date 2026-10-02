@@ -178,17 +178,35 @@ func (g *global) reportChain(v *vread.ChainView) error {
 
 // ratchet holds a vault to the latest token this home verified before
 // (spec section 14, no going back): a host may not answer an older state
-// as the latest. A token remembered that the chain read does not hold at
-// its seq was displaced by a reorganisation, or the hosts answer a fork:
-// it is said, and the chain read is taken, since every token of it was
-// verified against this home's own headers.
-func (g *global) ratchet(st *state.State, t *target, v *vread.ChainView) error {
+// as the latest. A host whose latest token is below the one remembered is
+// named; when every host that answered is, the answer is refused
+// (rollback), and when only some are it is left open, and the vault is
+// read from the token this home holds and the hosts that are not behind.
+func (g *global) ratchet(st *state.State, t *target, v *vread.ChainView) (problem, fatal error) {
 	if st == nil {
-		return nil
+		return nil, nil
 	}
 	if s := st.SeenOf(t.crypt, t.orgHex, t.vaultHex()); s != nil {
-		if uint64(len(v.Tokens)) <= s.Seq {
-			return &vread.Failure{Label: vread.LabelRollback, Err: fmt.Errorf("the hosts answer the vault to seq %d, and this home verified seq %d (%s): an older state; ask other hosts", v.Latest().Seq(), s.Seq, s.Txid)}
+		behind, level := 0, 0
+		hosts := make([]string, 0, len(v.HostLatest))
+		for h := range v.HostLatest {
+			hosts = append(hosts, h)
+		}
+		sort.Strings(hosts)
+		for _, h := range hosts {
+			if latest := v.HostLatest[h]; latest < s.Seq {
+				behind++
+				g.say("host %s: answers the vault to seq %d as its latest, and this home verified seq %d (%s): an older state", h, latest, s.Seq, s.Txid)
+			} else {
+				level++
+			}
+		}
+		rolled := &vread.Failure{Label: vread.LabelRollback, Err: fmt.Errorf("every host that answered gives an older state of the vault than this home verified (seq %d, %s); ask other hosts", s.Seq, s.Txid)}
+		switch {
+		case uint64(len(v.Tokens)) <= s.Seq, behind > 0 && level == 0:
+			return nil, rolled
+		case behind > 0:
+			problem = incomplete("a host answers an older state of the vault than this home verified; the vault is read from the others")
 		}
 		if v.Tokens[s.Seq].Txid != s.Txid {
 			g.say("the token at seq %d is %s, and this home verified %s: a reorganisation displaced it, or the hosts answer a fork", s.Seq, v.Tokens[s.Seq].Txid, s.Txid)
@@ -196,7 +214,7 @@ func (g *global) ratchet(st *state.State, t *target, v *vread.ChainView) error {
 	}
 	last := v.Latest()
 	st.See(state.Seen{Crypt: t.crypt, Org: t.orgHex, Vault: t.vaultHex(), Seq: last.Seq(), Txid: last.Txid})
-	return nil
+	return problem, nil
 }
 
 // opened is a vault established for reading: its chain, its group and its
@@ -216,19 +234,44 @@ type opened struct {
 // holds its lock, so that what it verified is remembered; nil remembers
 // nothing.
 func (g *global) open(ctx context.Context, t *target, st *state.State) (*opened, error) {
-	cv, err := t.rd.Chain(ctx, t.crypt, t.org, t.vault)
+	// With the home's lock held, the chain this home verified before is
+	// where the walk starts; otherwise it is walked from seq 0.
+	var known []*vread.Tok
+	if st != nil {
+		kept := state.LoadChain(g.cfg.Home, t.crypt, t.orgHex, t.vaultHex())
+		if known = vread.Remembered(ctx, kept, t.crypt, t.org, t.vault, t.rd.Headers); known == nil && len(kept) > 0 {
+			g.say("the token this home remembered of the vault no longer verifies against the header source: a reorganisation displaced it; the chain is read again from its first token")
+			state.DropChain(g.cfg.Home, t.crypt, t.orgHex, t.vaultHex())
+			st.Forget(t.crypt, t.orgHex, t.vaultHex())
+		}
+	}
+	cv, err := t.rd.Chain(ctx, t.crypt, t.org, t.vault, known...)
 	if err != nil {
 		if errors.Is(err, vread.ErrNoChain) {
 			return nil, incomplete("vault %s: %v: an empty answer proves nothing", vread.Short(t.vaultHex()), err)
 		}
 		return nil, err
 	}
-	o := &opened{t: t, chain: cv, problem: g.reportChain(cv)}
-	if st == nil {
-		st = t.st
+	if st != nil && len(cv.Tokens) > len(known) {
+		beefs := make([][]byte, len(cv.Tokens))
+		for i, tok := range cv.Tokens {
+			beefs[i] = tok.Beef
+		}
+		if err := state.SaveChain(g.cfg.Home, t.crypt, t.orgHex, t.vaultHex(), beefs); err != nil {
+			g.say("the chain verified could not be kept in the home: %v", err)
+		}
 	}
-	if err := g.ratchet(st, t, cv); err != nil {
-		return nil, failure(err)
+	o := &opened{t: t, chain: cv, problem: g.reportChain(cv)}
+	held := st
+	if held == nil {
+		held = t.st
+	}
+	rolled, fatal := g.ratchet(held, t, cv)
+	if fatal != nil {
+		return nil, failure(fatal)
+	}
+	if rolled != nil && o.problem == nil {
+		o.problem = rolled
 	}
 	head := cv.Head()
 	if head == nil {
@@ -314,11 +357,12 @@ func (g *global) latest(ctx context.Context, o *opened) (string, bool, error) {
 		return fmt.Sprintf("seq %d is the latest: its output is unspent per the node", head.Seq()), true, nil
 	}
 	raw, err := sp.TxRaw(ctx, by)
-	if err == nil {
-		if tx, perr := parseTx(raw, by); perr == nil {
-			if next, rerr := secrec.ReadToken(tx); rerr == nil && next.Vault.Vault == o.t.vault && bytes.Equal(next.Vault.Org, o.t.org) && next.Vault.Seq == head.Seq()+1 {
-				return "", false, incomplete("the vault's token at seq %d is spent by its next token %s, which no host asked answers yet (not mined, not yet published, or withheld): what the hosts answer is not the latest", head.Seq(), by)
-			}
+	if err != nil {
+		return "", false, incomplete("the vault's token at seq %d is spent by %s, which the node could not show (%s): a later token exists, or the vault is terminated; what the hosts answer is not known to be the latest", head.Seq(), by, firstLine(err.Error()))
+	}
+	if tx, perr := parseTx(raw, by); perr == nil {
+		if next, rerr := secrec.ReadToken(tx); rerr == nil && next.Vault.Vault == o.t.vault && bytes.Equal(next.Vault.Org, o.t.org) && next.Vault.Seq == head.Seq()+1 {
+			return "", false, incomplete("the vault's token at seq %d is spent by its next token %s, which no host asked answers yet (not mined, not yet published, or withheld): what the hosts answer is not the latest", head.Seq(), by)
 		}
 	}
 	return "", false, refused("the vault is TERMINATED: its latest token's output is spent by %s, which is not the vault's next token; nothing new is taken from it", by)

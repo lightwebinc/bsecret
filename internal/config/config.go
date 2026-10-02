@@ -51,8 +51,10 @@ type Config struct {
 	Delay time.Duration
 	// Facade is the overlay host a publisher submits to in mode plane.
 	Facade string
-	// Freshness bounds how old the evidence that a vault's and a group's
-	// latest tokens are unspent may be (spec section 7.1).
+	// Freshness bounds how old a writer's evidence that the vault's and the
+	// group's latest tokens are unspent may be when it publishes a version
+	// (spec section 7.1). Every transition retakes the evidence as it is
+	// built, whatever this says.
 	Freshness time.Duration
 	// Hall is the borg hall a new vault's group lives in.
 	Hall string

@@ -555,3 +555,44 @@ func Lock(path string) (func(), error) {
 		f.Close()
 	}, nil
 }
+
+// chainFile is where a reader keeps the chain of one vault it verified: the
+// tokens from seq 0, each as a host answered it, so that the next read
+// starts from the token it remembers and asks the hosts only what came
+// after (docs/spec.md section 14). The tokens are public, mined
+// transactions with their proofs: the file holds no secret.
+func chainFile(home, crypt, org, vault string) string {
+	return filepath.Join(home, "chains", crypt+"-"+org+"-"+vault+".json")
+}
+
+// LoadChain reads the tokens a reader kept of a vault, in seq order from 0;
+// nil when it kept none.
+func LoadChain(home, crypt, org, vault string) [][]byte {
+	raw, err := os.ReadFile(chainFile(home, crypt, org, vault)) //nolint:gosec // the home's own file
+	if err != nil {
+		return nil
+	}
+	var out [][]byte
+	if json.Unmarshal(raw, &out) != nil {
+		return nil
+	}
+	return out
+}
+
+// SaveChain keeps the tokens of a vault a reader verified, atomically.
+func SaveChain(home, crypt, org, vault string, beefs [][]byte) error {
+	p := chainFile(home, crypt, org, vault)
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(beefs)
+	if err != nil {
+		return err
+	}
+	return WriteAtomic(p, raw, 0o600)
+}
+
+// DropChain forgets the tokens kept of a vault.
+func DropChain(home, crypt, org, vault string) {
+	_ = os.Remove(chainFile(home, crypt, org, vault))
+}

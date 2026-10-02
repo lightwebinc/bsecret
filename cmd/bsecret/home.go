@@ -175,7 +175,11 @@ func (g *global) reader() (*vread.Client, error) {
 	if len(g.cfg.Hosts) == 0 {
 		return nil, usage("no overlay host configured (config key hosts, or -hosts)")
 	}
-	return &vread.Client{Hosts: g.cfg.Hosts, Headers: hc, Timeout: g.cfg.Timeout, HTTP: httpClient}, nil
+	rd := &vread.Client{Hosts: g.cfg.Hosts, Headers: hc, Timeout: g.cfg.Timeout, HTTP: httpClient}
+	if sp := g.spends(); sp != nil {
+		rd.Source = sp
+	}
+	return rd, nil
 }
 
 // groups is borg's reader over the hosts of the group's hall and the same

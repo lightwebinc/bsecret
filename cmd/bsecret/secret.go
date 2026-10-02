@@ -438,12 +438,14 @@ func cmdGet(ctx context.Context, g *global, args []string) error {
 	fmt.Fprintf(g.stderr, "latest  %s\n", word)
 	rec := car.Carrier.Secret
 	state := "anchored"
-	if !rd.Anchored {
+	switch {
+	case *version != 0:
+		state = "history: a token of the vault listed it, and it is not the vault's current version"
+	case !rd.Anchored:
 		state = "UNANCHORED (no mined token lists it yet; taken by its link to the listed version)"
 	}
 	switch {
 	case *version != 0:
-		state += ", history (not the vault's current version)"
 	case rd.Exposed:
 		state += fmt.Sprintf(", EXPOSED: keyed under epoch %d and the group is at epoch %d, so a key the group has since removed or rotated away from opens it", rec.Epoch, o.group.Current().Epoch)
 	case fresh:
@@ -451,14 +453,14 @@ func cmdGet(ctx context.Context, g *global, args []string) error {
 	default:
 		state += ", not known to be current"
 	}
-	fmt.Fprintf(g.stderr, "secret  %s version %d label %s epoch %d, read as %s: %s\n", rd.Payload.Name, rec.Version, rec.Label, rec.Epoch, who, state)
+	fmt.Fprintf(g.stderr, "secret  %s version %d label %s epoch %d, read as %s: %s\n", termsafe.Text(rd.Payload.Name), rec.Version, termsafe.Text(rec.Label), rec.Epoch, who, state)
 	if later {
 		g.say("a later version exists that does not link to the listed one; the highest that links is read")
 	}
 	if p := rd.Payload; p.Type != "" || p.NotAfter != 0 {
 		line := "claims "
 		if p.Type != "" {
-			line += " type " + termsafe.Abbrev(p.Type)
+			line += " type " + termsafe.Text(p.Type)
 		}
 		if p.NotAfter != 0 {
 			line += " not after " + time.Unix(int64(p.NotAfter), 0).UTC().Format(time.RFC3339) //nolint:gosec // bounded by the record
@@ -590,7 +592,13 @@ func cmdList(ctx context.Context, g *global, args []string) error {
 	if err != nil {
 		return err
 	}
-	o, err := g.open(ctx, t, nil)
+	var st *state.State
+	if h, err := g.openHome(); err == nil {
+		defer h.close()
+		st = h.st
+		defer func() { _ = st.Save() }()
+	}
+	o, err := g.open(ctx, t, st)
 	if err != nil {
 		return err
 	}
@@ -632,7 +640,7 @@ func cmdList(ctx context.Context, g *global, args []string) error {
 			continue
 		}
 		rec := c.Carrier.Secret
-		tail := fmt.Sprintf("version %d label %s epoch %d", rec.Version, rec.Label, rec.Epoch)
+		tail := fmt.Sprintf("version %d label %s epoch %d", rec.Version, termsafe.Text(rec.Label), rec.Epoch)
 		if rec.Epoch < o.group.Current().Epoch {
 			tail += " EXPOSED"
 		}
@@ -646,7 +654,9 @@ func cmdList(ctx context.Context, g *global, args []string) error {
 			rows = append(rows, row{"~" + id, fmt.Sprintf("id:%s  %s: %s", id, tail, label)})
 			continue
 		}
-		rows = append(rows, row{rd.Payload.Name, fmt.Sprintf("%s  %s", rd.Payload.Name, tail)})
+		// The name met the name grammar when the payload was decoded; it
+		// is someone else's text all the same, and is filtered like any.
+		rows = append(rows, row{rd.Payload.Name, fmt.Sprintf("%s  %s", termsafe.Text(rd.Payload.Name), tail)})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].name < rows[j].name })
 	for _, r := range rows {

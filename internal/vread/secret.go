@@ -10,6 +10,7 @@ import (
 	"github.com/bsv-blockchain/go-sdk/transaction"
 	"github.com/bsv-blockchain/go-sdk/wallet"
 
+	"github.com/lightwebinc/bcommon/guard"
 	"github.com/lightwebinc/bcommon/lookup"
 
 	"github.com/lightwebinc/bsecret/internal/secrec"
@@ -241,9 +242,11 @@ func (v *ChainView) Linked(listed *Car, links []*Car) ([]*Car, bool, error) {
 	return out, len(recs) > len(run), nil
 }
 
-// Swept reports the sweep that spends op, when a host answers one whose
-// proof verifies against the reader's headers: a reader must not use a
-// record whose funding outpoint a mined sweep spends (spec section 14).
+// Swept reports the mined transaction that spends op, when one is found by
+// the sweep class at a host or by the chain source, and its proof verifies
+// against the reader's headers: a reader must not use a record whose
+// funding outpoint a mined sweep spends (spec section 14). Only a mined
+// spend retracts: a spender with no proof that verifies does not count.
 func (c *Client) Swept(ctx context.Context, crypt string, op transaction.Outpoint) (string, error) {
 	q := Query{"crypt": crypt, "spent": op.String()}
 	var lastErr error
@@ -267,10 +270,41 @@ func (c *Client) Swept(ctx context.Context, crypt string, op transaction.Outpoin
 			}
 		}
 	}
+	if c.Source != nil {
+		if by, err := c.Source.Spender(ctx, op.Txid.String(), op.Index); err == nil && by != "" && c.minedSpend(ctx, by, op) {
+			return by, nil
+		}
+	}
 	if asked == 0 && lastErr != nil {
 		return "", lastErr
 	}
 	return "", nil
+}
+
+// minedSpend reports whether the chain source's transaction by spends op
+// and its proof verifies against the reader's headers.
+func (c *Client) minedSpend(ctx context.Context, by string, op transaction.Outpoint) bool {
+	raw, err := c.Source.TxRaw(ctx, by)
+	if err != nil {
+		return false
+	}
+	tx, err := guard.ParseTransaction(raw, guard.DefaultBound)
+	if err != nil || tx.TxID().String() != by {
+		return false
+	}
+	spends := false
+	for _, in := range tx.Inputs {
+		spends = spends || (in.SourceTXID != nil && *in.SourceTXID == op.Txid && in.SourceTxOutIndex == op.Index)
+	}
+	if !spends {
+		return false
+	}
+	mp, err := c.Source.MerkleProof(ctx, by)
+	if err != nil || mp == nil {
+		return false
+	}
+	ok, err := mp.Verify(ctx, tx.TxID(), c.Headers)
+	return err == nil && ok
 }
 
 // Keys are what a reader opens a content key with.

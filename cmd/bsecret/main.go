@@ -166,7 +166,12 @@ type global struct {
 	terminal bool
 }
 
-func (g *global) say(format string, args ...any) { fmt.Fprintf(g.stderr, format+"\n", args...) }
+// say writes a note to standard error. A note may quote what a host, a
+// node or a record said, which is someone else's text: every note is
+// filtered for the terminal.
+func (g *global) say(format string, args ...any) {
+	fmt.Fprintln(g.stderr, termsafe.Text(fmt.Sprintf(format, args...)))
+}
 
 type command func(ctx context.Context, g *global, args []string) error
 

@@ -57,6 +57,18 @@ type Client struct {
 	HTTP    *http.Client
 	// MaxPages bounds the pages one question reads per host.
 	MaxPages int
+	// Source, when set, is a chain source that indexes spends: a sweep is
+	// also looked for there (Swept), by its proof.
+	Source ChainSource
+}
+
+// ChainSource is a node's view of what spends an output, with the
+// spender's bytes and proof: nodeapi.Asset is one. An answer of "" with no
+// error is "unspent".
+type ChainSource interface {
+	Spender(ctx context.Context, txid string, vout uint32) (string, error)
+	TxRaw(ctx context.Context, txid string) ([]byte, error)
+	MerkleProof(ctx context.Context, txid string) (*transaction.MerklePath, error)
 }
 
 // Query is one ls_bsecret question: its members, every one a string.

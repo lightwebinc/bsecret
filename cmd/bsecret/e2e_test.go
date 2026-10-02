@@ -372,7 +372,7 @@ func TestClientE2E(t *testing.T) {
 		}
 	}
 	r = h.must("bob", "get", "db/password", "-version", "1")
-	if r.stdout != "hunter2" || !strings.Contains(r.stderr, "history") {
+	if r.stdout != "hunter2" || !strings.Contains(r.stderr, "history: a token of the vault listed it") {
 		t.Fatalf("bob and the old version: %q\n%s", r.stdout, r.stderr)
 	}
 	step("acknowledge and re-key (a new value, two same-value re-keyings): alice and carol read the new versions; bob reads none of them, and still reads the old ones the owner kept")

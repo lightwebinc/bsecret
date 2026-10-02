@@ -1,12 +1,14 @@
 package vread
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
 
 	"github.com/bsv-blockchain/go-sdk/chainhash"
+	"github.com/bsv-blockchain/go-sdk/transaction/chaintracker"
 	"github.com/lightwebinc/bcommon/lookup"
 
 	"github.com/lightwebinc/bsecret/internal/limits"
@@ -141,7 +143,13 @@ func with(q Query, k, val string) Query {
 // host, so the reader walks the chain from seq 0 itself: the first token by
 // the outpoint its vault identifier hashes, every later one by its spend of
 // the token before it and the transition rules, each folded as it goes.
-func (c *Client) Chain(ctx context.Context, crypt string, org []byte, vault [32]byte) (*ChainView, error) {
+//
+// known is the chain this reader verified before, from seq 0 (Remembered):
+// the walk then starts from the token it remembers (spec section 14), and
+// the hosts are asked only the seqs above it. A host that answers a latest
+// token below the remembered one is answering an older state; the caller
+// refuses that (rollback).
+func (c *Client) Chain(ctx context.Context, crypt string, org []byte, vault [32]byte, known ...*Tok) (*ChainView, error) {
 	if c.Headers == nil {
 		return nil, ErrNoHeaders
 	}
@@ -162,7 +170,10 @@ func (c *Client) Chain(ctx context.Context, crypt string, org []byte, vault [32]
 		return t
 	}
 	var top uint64
-	found := false
+	found := len(known) > 0
+	if found {
+		top = known[len(known)-1].Seq()
+	}
 	for _, h := range c.Hosts {
 		outs, err := c.Ask(ctx, h, v.base())
 		if err != nil {
@@ -190,16 +201,20 @@ func (c *Client) Chain(ctx context.Context, crypt string, org []byte, vault [32]
 		}
 		return v, ErrNoChain
 	}
-	// Every seq of every host: candidates per seq, and which hosts hold
-	// which txid.
+	// Every seq of every host above what the reader remembers: candidates
+	// per seq, and which hosts hold which txid.
 	cands := make([][]*Tok, top+1)
+	for _, t := range known {
+		cands[t.Seq()] = []*Tok{t}
+	}
+	from := uint64(len(known))
 	holds := map[string]map[string]bool{}
 	for _, h := range c.Hosts {
 		if v.HostErr[h] != nil {
 			continue
 		}
 		holds[h] = map[string]bool{}
-		for s := uint64(0); s <= top; s++ {
+		for s := from; s <= top; s++ {
 			outs, err := c.Ask(ctx, h, with(v.base(), "seq", Seq(s)))
 			if err != nil {
 				v.HostErr[h] = err
@@ -230,12 +245,41 @@ func (c *Client) Chain(ctx context.Context, crypt string, org []byte, vault [32]
 			continue
 		}
 		for _, t := range v.Tokens {
-			if !set[t.Txid] {
+			if t.Seq() >= from && !set[t.Txid] {
 				v.Lacks[h] = append(v.Lacks[h], t.Seq())
 			}
 		}
 	}
 	return v, nil
+}
+
+// Remembered rebuilds the chain a reader verified before from the tokens it
+// kept, each as a host answered it (Tok.Beef), in seq order from 0. Every
+// token is read again as a well-formed token of the vault; the last one's
+// proof must still verify against the reader's headers. When it does not,
+// a reorganisation displaced it: the reader forgets what it kept and reads
+// the chain again (spec section 14), so nothing is returned. The tokens
+// before the last are held to it by spends when the chain is walked, and a
+// transaction that is spent by a mined one is mined.
+func Remembered(ctx context.Context, beefs [][]byte, crypt string, org []byte, vault [32]byte, headers chaintracker.ChainTracker) []*Tok {
+	var out []*Tok
+	for i, b := range beefs {
+		tx, tok, err := secrec.StoredToken(b)
+		if err != nil || tok.Vault.Crypt != crypt || !bytes.Equal(tok.Vault.Org, org) || tok.Vault.Vault != vault || tok.Vault.Seq != uint64(i) || tx.MerklePath == nil {
+			return nil
+		}
+		t := &Tok{Txid: tx.TxID().String(), Tx: tx, Token: tok, Height: tx.MerklePath.BlockHeight, Beef: b}
+		for _, l := range tx.MerklePath.Path[0] {
+			if l.Hash != nil && *l.Hash == *tx.TxID() {
+				t.Pos = l.Offset
+			}
+		}
+		out = append(out, t)
+	}
+	if len(out) == 0 || !secrec.IsMined(ctx, out[len(out)-1].Tx, headers) {
+		return nil
+	}
+	return out
 }
 
 // FromTokens establishes a chain from tokens a reader was handed (the audit

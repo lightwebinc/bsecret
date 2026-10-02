@@ -12,6 +12,7 @@ import (
 
 	"github.com/lightwebinc/bsecret/internal/engine"
 	"github.com/lightwebinc/bsecret/internal/secrec"
+	"github.com/lightwebinc/bsecret/internal/testhost"
 )
 
 // The exit criterion: a revoke forces rotation. The removed member reads
@@ -162,7 +163,7 @@ func TestUpdateAndHistory(t *testing.T) {
 		t.Fatalf("get: %q\n%s", r.stdout, r.stderr)
 	}
 	r = h.must("alice", "get", "db/password", "-version", "1")
-	if r.stdout != "one" || !strings.Contains(r.stderr, "history (not the vault's current version)") {
+	if r.stdout != "one" || !strings.Contains(r.stderr, "history: a token of the vault listed it") || strings.Contains(r.stderr, "UNANCHORED") {
 		t.Fatalf("get -version 1: %q\n%s", r.stdout, r.stderr)
 	}
 	h.want(h.run("alice", "", "get", "db/password", "-version", "9"), exitIncomplete, "no host answers a carrier")
@@ -289,26 +290,53 @@ func TestHostsDisagreeAndFill(t *testing.T) {
 	}
 }
 
-// A reader keeps the highest seq it verified and refuses an older state
-// from every host: no going back.
-func TestRollbackIsRefused(t *testing.T) {
+// A reader keeps the chain it verified: the next read starts from the
+// token it remembers and asks the hosts only what came after; and it
+// refuses an older state from every host: no going back.
+func TestAReaderRemembersAndNeverGoesBack(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.vault()
 	h.put("db/password", "one")
 	h.must("alice", "get", "db/password")
-	h.put("db/password", "two")
-	if r := h.must("alice", "get", "db/password"); r.stdout != "two" {
-		t.Fatal("setup")
+	// A second read walks nothing again: the chain it kept is where it
+	// starts, held to its own headers.
+	before := h.a.Questions("vault-seq")
+	h.must("alice", "get", "db/password")
+	if n := h.a.Questions("vault-seq") - before; n != 0 {
+		t.Fatalf("a reader that remembers the chain asked %d seqs again", n)
 	}
-	// Both hosts go back to the state before the update.
+	h.put("db/password", "two")
+	before = h.a.Questions("vault-seq")
+	if r := h.must("alice", "get", "db/password"); r.stdout != "two" {
+		t.Fatalf("alice: %q\n%s", r.stdout, r.stderr)
+	}
+	if n := h.a.Questions("vault-seq") - before; n != 1 {
+		t.Fatalf("a reader that remembers seq 1 asked %d seqs for one new token", n)
+	}
+	// A reader with no home remembers nothing and walks from seq 0.
+	before = h.a.Questions("vault-seq")
+	h.must("nobody", "vault", "show")
+	if n := h.a.Questions("vault-seq") - before; n != 3 {
+		t.Fatalf("a reader with no memory asked %d seqs of a chain of 3", n)
+	}
+	// One host goes back to the state before the update: it is named, and
+	// the vault is read from the other.
+	var latest string
 	r := h.must("alice", "vault", "show")
 	for _, l := range strings.Split(r.stdout, "\n") {
 		if strings.HasPrefix(l, "token   seq 2 ") {
-			h.a.Forget(strings.Fields(l)[3])
-			h.b.Forget(strings.Fields(l)[3])
+			latest = strings.Fields(l)[3]
 		}
 	}
+	h.b.Forget(latest)
+	r = h.run("alice", "", "get", "db/password")
+	h.want(r, exitIncomplete, "answers the vault to seq 1 as its latest, and this home verified seq 2")
+	if r.stdout != "two" {
+		t.Fatalf("the value is read from the host that is not behind: %q", r.stdout)
+	}
+	// Both hosts go back: refused.
+	h.a.Forget(latest)
 	r = h.run("alice", "", "get", "db/password")
 	h.want(r, exitRefused, "rollback")
 	if r.stdout != "" {
@@ -316,7 +344,6 @@ func TestRollbackIsRefused(t *testing.T) {
 	}
 	// A reader with no memory has only the spend source: the node says the
 	// token the hosts answer is spent by the vault's next token.
-	h.identity("carol2", false)
 	h.want(h.run("carol", "", "get", "db/password"), exitIncomplete, "is spent by its next token")
 }
 
@@ -631,6 +658,19 @@ func TestKillAndARetractedVersionIsNeverRead(t *testing.T) {
 		t.Fatalf("fill of a sweep:\n%s\n%s", r.stdout, r.stderr)
 	}
 	h.want(h.run("alice", "", "get", "db/password"), exitIncomplete, "no host answers its carrier")
+	// With no host answering the sweep, the node's view of the funding
+	// output finds it, by its proof; with neither, a reader cannot know.
+	for _, host := range []*testhost.Host{h.a, h.b} {
+		for _, id := range host.Txids("sweep") {
+			host.Forget(id)
+		}
+	}
+	h.want(h.run("alice", "", "get", "db/password"), exitRefused, "retracted")
+	delete(h.env, "BSECRET_ASSET")
+	if r := h.run("alice", "", "get", "db/password"); r.code != exitOK || r.stdout != "one" {
+		t.Fatalf("with neither a host's sweep nor a chain source: exit %d %q\n%s", r.code, r.stdout, r.stderr)
+	}
+	h.env["BSECRET_ASSET"] = h.chainS.URL
 	// Nothing is funded from a killed tree again.
 	if r := h.must("org", "kill", "-confirm", "KILL"); !strings.Contains(r.stdout, "0 tree(s) to sweep") {
 		t.Fatalf("after the kill:\n%s", r.stdout)

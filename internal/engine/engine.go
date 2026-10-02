@@ -105,7 +105,9 @@ type Options struct {
 	Wait time.Duration
 	// Delay is the propagation delay before a mined object is published.
 	Delay time.Duration
-	// Freshness is how old a writer's evidence may be (spec section 7.1).
+	// Freshness is how old a writer's evidence may be when it publishes a
+	// version (spec section 7.1); every transition retakes it as it is
+	// built.
 	Freshness time.Duration
 	// Segment is the plaintext bytes of one segment of a new version.
 	Segment uint64

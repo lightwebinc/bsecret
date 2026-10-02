@@ -78,9 +78,11 @@ type Host struct {
 	// Substitute, when set, rewrites a carrier's answered BEEF: a host
 	// that serves other bytes.
 	Substitute func(beef []byte) []byte
-	// Submits counts submissions; Refused counts refusals by reason.
+	// Submits counts submissions; Refused counts refusals by reason; Asked
+	// counts the ls_bsecret questions answered, by class.
 	Submits int
 	Refused map[string]int
+	Asked   map[string]int
 }
 
 type tokRow struct {
@@ -112,7 +114,7 @@ type sweepRow struct {
 func NewHost(chain *Chain) *Host {
 	return &Host{chain: chain, crypts: map[string]bool{}, halls: map[string]bool{}, applied: map[string]bool{},
 		tokens: map[string]*tokRow{}, cars: map[string]*carRow{}, sweeps: map[string]*sweepRow{},
-		coins: map[transaction.Outpoint]string{}, Refused: map[string]int{}, borg: newBorgIndex()}
+		coins: map[transaction.Outpoint]string{}, Refused: map[string]int{}, Asked: map[string]int{}, borg: newBorgIndex()}
 }
 
 // Carry adds a crypt.
@@ -157,6 +159,13 @@ func (h *Host) Forget(txid string) {
 		}
 	}
 	h.gen++
+}
+
+// Questions is how many ls_bsecret questions of a class the host answered.
+func (h *Host) Questions(class string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.Asked[class]
 }
 
 // Txids are the txids of the bsecret objects the host holds of a kind:
@@ -549,6 +558,7 @@ func (h *Host) Answer(q *secrec.Question) ([]Output, error) {
 	if !h.crypts[crypt] {
 		return nil, errors.New("this host does not carry the crypt")
 	}
+	h.Asked[q.Class.Name]++
 	n := q.Class.Limit
 	toks := func(rs []*tokRow) []Output {
 		out := []Output{}

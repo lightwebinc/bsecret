@@ -100,6 +100,13 @@ func defaultLabel(labels []string) (string, error) {
 // to the host's rules.
 func (e *Engine) mint(ctx context.Context, w *Writer, it Item, epoch secrec.EpochEvent, sym [32]byte, after *state.SecretVersion) (*Minted, error) {
 	v := w.Vault
+	// A version is published under evidence no older than the freshness
+	// bound; the token that lists it retakes the evidence when it is built.
+	if e.Now().Sub(w.At) > e.Opts.Freshness {
+		if err := e.refresh(ctx, w); err != nil {
+			return nil, err
+		}
+	}
 	if err := secrec.CheckSecretName(it.Name); err != nil {
 		return nil, fmt.Errorf("name %q: 1 to %d bytes of lowercase letters, digits, '.', '_', '-' and '/', with no empty path segment", it.Name, secrec.MaxSecretName)
 	}

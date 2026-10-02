@@ -67,6 +67,14 @@ type State struct {
 	// Trees are the funding trees by kind.
 	Trees map[string]*TreeSet `json:"trees,omitempty"`
 
+	// PendingTrees are the funding trees signed for a pool coin that the
+	// home has not adopted yet, each with its kind and the coin it spends:
+	// the record made before a tree reaches the settlement leg, so a run
+	// that stops before the tree is adopted leaves what the next command
+	// needs to ask the node what became of it. Adopting a tree drops its
+	// record in the same save.
+	PendingTrees []PendingTree `json:"pendingTrees,omitempty"`
+
 	// Vaults are the vaults this identity owns.
 	Vaults []Vault `json:"vaults,omitempty"`
 
@@ -119,6 +127,80 @@ type State struct {
 // OnSave sets what runs before every Save: a publisher records the pool
 // with it. Nil clears it.
 func (s *State) OnSave(f func()) { s.beforeSave = f }
+
+// PendingTree is a funding tree signed for a pool coin and not yet
+// adopted, keyed by the tree's txid.
+type PendingTree struct {
+	// Kind is the tree's kind.
+	Kind string `json:"kind"`
+	// Tree is the record the tree is adopted as, without a proof.
+	Tree funding.Tree `json:"tree"`
+	// Coin is the fee coin the tree spends, as the pool held it.
+	Coin bwallet.Output `json:"coin"`
+	// ReturnedOnce is set when a command found the tree absent from the
+	// node and the coin unspent, and put the coin back: the record is kept
+	// for one more command, in case the tree reaches the node after all.
+	ReturnedOnce bool `json:"returned_once,omitempty"`
+}
+
+// KeepPendingTree records p, replacing a record of the same tree.
+func (s *State) KeepPendingTree(p PendingTree) {
+	for i := range s.PendingTrees {
+		if s.PendingTrees[i].Tree.Txid == p.Tree.Txid {
+			s.PendingTrees[i] = p
+			return
+		}
+	}
+	s.PendingTrees = append(s.PendingTrees, p)
+}
+
+// PendingTreeOf finds the record of the tree txid.
+func (s *State) PendingTreeOf(txid string) *PendingTree {
+	for i := range s.PendingTrees {
+		if s.PendingTrees[i].Tree.Txid == txid {
+			return &s.PendingTrees[i]
+		}
+	}
+	return nil
+}
+
+// DropPendingTree drops the record of the tree txid, and reports whether
+// there was one.
+func (s *State) DropPendingTree(txid string) bool {
+	n := len(s.PendingTrees)
+	s.PendingTrees = slices.DeleteFunc(s.PendingTrees, func(p PendingTree) bool { return p.Tree.Txid == txid })
+	return len(s.PendingTrees) != n
+}
+
+// MintedAhead finds txid among the trees minted ahead and not adopted, of
+// every kind.
+func (s *State) MintedAhead(txid string) *funding.Tree {
+	for _, ts := range s.Trees {
+		if ts == nil {
+			continue
+		}
+		for i := range ts.Ahead {
+			if ts.Ahead[i].Txid == txid {
+				return &ts.Ahead[i]
+			}
+		}
+	}
+	return nil
+}
+
+// UnsettledTrees are the records of trees the home records nowhere else:
+// those a command has yet to ask the node about. A tree minted ahead and
+// recorded in its kind's Ahead keeps its record until it is adopted, and
+// is settled.
+func (s *State) UnsettledTrees() []PendingTree {
+	var out []PendingTree
+	for _, p := range s.PendingTrees {
+		if s.MintedAhead(p.Tree.Txid) == nil {
+			out = append(out, p)
+		}
+	}
+	return out
+}
 
 // TreeSet is one kind's funding trees: the one carriers spend now, every
 // tree minted, and the trees minted ahead and never adopted when a run

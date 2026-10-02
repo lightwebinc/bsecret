@@ -241,32 +241,19 @@ func (e *Engine) RetireTrees() error {
 }
 
 // sweepFee takes the sweep's fee coin, and the coin as the pool held it,
-// so a refused sweep can give it back. When every coin left is change from
-// a transaction not yet mined, it waits up to Opts.Wait for one.
+// so a refused sweep can give it back. A funding tree this run minted ahead
+// holds the coin it took until its mint is collected, and the library's
+// take waits for that mint itself (producer.Payer.Take), so a home with
+// one coin is not told its wallet is empty in between. The change the mint
+// leaves is unproven until its block (the trees' payer is Async): when
+// every coin left is change from a transaction not yet mined, the fee
+// waits up to Opts.Wait for one.
 func (e *Engine) sweepFee(ctx context.Context, payer *producer.Payer) (mint.Input, *bwallet.Output, error) {
 	var deadline time.Time
-	collected := false
-	for {
+	for again := false; ; {
 		before := e.Pool.Outputs()
 		fee, err := payer.Take(ctx)
 		var nc *producer.NoCoinError
-		if errors.As(err, &nc) && nc.Held == 0 && !collected {
-			// A funding tree this run minted ahead holds the coin it took
-			// until its mint is collected, and its change is this home's
-			// next coin: a home with one coin has none in between. The
-			// mint is collected here, so that the change is waited for
-			// below rather than reported as an empty wallet.
-			collected = true
-			for _, kind := range state.TreeKinds {
-				if t := e.trees[kind]; t != nil {
-					_ = t.Wait(ctx)
-				}
-			}
-			if ctx.Err() != nil {
-				return mint.Input{}, nil, ctx.Err()
-			}
-			continue
-		}
 		if errors.As(err, &nc) && nc.Held > 0 {
 			if deadline.IsZero() {
 				deadline = time.Now().Add(e.Opts.Wait)
@@ -293,6 +280,15 @@ func (e *Engine) sweepFee(ctx context.Context, payer *producer.Payer) (mint.Inpu
 			if before[i].Outpoint() == op {
 				return fee, &before[i], nil
 			}
+		}
+		if !again {
+			// The take waited for a mint and was paid from what the mint
+			// left, a coin the pool did not hold when this was asked. It
+			// goes back, and is taken again from a pool that is seen to
+			// hold it, so the coin is recorded as the pool held it.
+			again = true
+			payer.GiveBack()
+			continue
 		}
 		return fee, nil, nil
 	}

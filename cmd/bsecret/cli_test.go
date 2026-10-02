@@ -60,6 +60,9 @@ type harness struct {
 	// onSend, when set, runs once, before the chain takes the next
 	// transaction a client sends, with that transaction.
 	onSend func(tx *transaction.Transaction)
+	// refuse, when set, is asked for every such transaction; true answers
+	// the client with an error and keeps the transaction from the chain.
+	refuse func(tx *transaction.Transaction) bool
 }
 
 // serveChain is the chain, with the onSend hook in front of it.
@@ -73,12 +76,18 @@ func (h *harness) serveChain(w http.ResponseWriter, r *http.Request) {
 		}
 		if json.Unmarshal(body, &req) == nil && req.Method == "sendrawtransaction" && len(req.Params) > 0 {
 			h.mu.Lock()
-			hook := h.onSend
+			hook, refuse := h.onSend, h.refuse
 			h.onSend = nil
 			h.mu.Unlock()
-			if raw, ok := req.Params[0].(string); ok && hook != nil {
+			if raw, ok := req.Params[0].(string); ok && (hook != nil || refuse != nil) {
 				if tx, err := transaction.NewTransactionFromHex(raw); err == nil {
-					hook(tx)
+					if hook != nil {
+						hook(tx)
+					}
+					if refuse != nil && refuse(tx) {
+						http.Error(w, "refused by the test", http.StatusInternalServerError)
+						return
+					}
 				}
 			}
 		}

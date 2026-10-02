@@ -124,7 +124,7 @@ both the hall and the crypt.
 | `fill` | optional | a reader's settings, `asset` | replays to each host what another host answered and it lacks: the vault's chain, its set's carriers, and sweeps; signs nothing |
 | `payee key -out FILE` | yes | nothing | writes `BSECRET_PAYEE_KEY` for this home's identity to a new file, mode 0600 |
 | `payee settle <payments.jsonl>...` | yes, the payee's | `header_url`, `asset`, `settle` | internalizes every payment in a host's ledger this home has not: all broadcast, then awaited together (`-in-flight`) |
-| `doctor` | optional | nothing | the home's state (trees, vaults, a transition in flight, the outbox, versions published and not listed, commitments recorded, unmined payments) and whether the node, headers, hosts and priced host answer; reads only |
+| `doctor` | optional | nothing | the home's state (trees, a tree signed and not yet recorded as minted, vaults, a transition in flight, the outbox, versions published and not listed, commitments recorded, unmined payments) and whether the node, headers, hosts and priced host answer; reads only |
 | `version` | no | nothing | prints the version |
 
 A reader's settings are `hosts`, `header_url`, `crypt`, `org` (the owner's
@@ -231,7 +231,8 @@ paid_host    = https://terms.host-a.example.com
 
 `init` creates the home at mode 0700: `identity.json` (the identity key),
 `wallet.json` (the coin pool) and, once anything is done, `state.json`. The
-state holds what must survive a crash: the two kinds of funding tree; each
+state holds what must survive a crash: the two kinds of funding tree, and
+each tree signed and not yet adopted (`pendingTrees`, below); each
 vault's chain of mined tokens and every version the home published (its
 carrier, the funding output it spends, whether a token lists it); every
 object persisted and not yet confirmed published; the sweeps built; every
@@ -249,6 +250,53 @@ a reading command too: it would otherwise read with no memory of what the
 home verified before.
 
 A member's home needs no coin unless it asks a priced question.
+
+## A funding tree a run left
+
+A funding tree's fee coin leaves the pool when the tree is signed, and the
+tree is recorded as the home's only once the settlement leg took it; a tree
+minted ahead is recorded later still, when the command ends. So a funding
+tree has a record of its own. Before a tree of either kind reaches the
+settlement leg, the state records it with its kind and the coin it spends
+(`pendingTrees`), and the save that records the tree as adopted drops that
+record. A command that stopped in between leaves the record, and `doctor`
+names it (`tree ... signed for coin ... and not recorded as minted`). The
+next command that publishes asks the node what became of the tree before it
+spends anything, and says what it found:
+
+| The node shows | The command does | It says |
+| --- | --- | --- |
+| the tree, and the current tree of its kind is used up or there is none | adopts the tree and takes its unspent change into the pool | `funding tree ... is recovered` |
+| the tree, and the current tree of its kind still has outputs | holds the tree, behind any tree already held, takes its change, and adopts it when the trees before it run out; the record stays until then | `funding tree ... is recovered and waits for the switch` |
+| no such tree, and the coin unspent | puts the coin back in the pool and keeps the record for one more command; the second such answer drops it | `... never reached the chain: its fee coin ... is unspent and back in the pool`, then `its record is kept for one more command` |
+| no such tree, and the coin spent by another transaction | drops the record | `... never reached the chain: its fee coin ... is spent by ...` |
+| nothing: it cannot be asked, or cannot say | keeps the record and goes on; the next command asks again | `... could not be settled now (...): its record is kept and the next command asks again` |
+
+A tree that reaches the node after its coin went back is found by the next
+command, which adopts it and takes the coin, now spent, out of the pool
+(`... its fee coin ... is spent and is taken out of the pool`). Several
+trees found on the chain while the current tree has outputs are all held,
+and are spent one after the other, in the order of their records; `doctor`
+lists each as `minted ahead`. Signing is deterministic, so a command that
+mints a tree from a coin that went back builds the tree the stopped run
+signed, under the same txid, and adopts it. A command that only reads
+(`get`, `list`, `vault show`, `due`, `audit`, `fill`, `doctor`) asks
+nothing about a tree and needs no node for it. What is left open is in
+[limits.md](limits.md).
+
+A fee needed while a tree is being minted ahead waits for that tree: a home
+with one coin has none between the moment the tree takes it and the moment
+its change comes back, and the command waits for the change, up to ten
+minutes, where it would otherwise report an empty wallet. If the wait ends
+first the command says that a funding tree minted ahead still holds the
+coin (exit 2): run it again.
+
+The home pays for its trees from its own pool. A deployment that funded
+trees through a BRC-100 wallet instead (bcommon's `Trees.Fund`) would not
+be covered by any of this: such a wallet chooses the coins, signs and
+broadcasts inside one call, so there is no moment before the broadcast to
+record the tree in, and a run that stopped after the broadcast and before
+the tree was adopted would leave a tree only that wallet knows.
 
 ## Crypts
 

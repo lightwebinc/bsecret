@@ -21,8 +21,9 @@ import (
 
 const doctorHelp = `usage: bsecret doctor
 
-Report the home (identity, pool, funding trees, the vaults it owns, any
-transition in flight, what is persisted and not yet published) and whether
+Report the home (identity, pool, funding trees, a funding tree signed and
+not yet recorded as minted, the vaults it owns, any transition in flight,
+what is persisted and not yet published) and whether
 the configured node, header source, hosts, hall hosts and priced host
 answer. Reads only: it publishes nothing and spends nothing. What a vault
 owes its group is 'bsecret due'.`
@@ -145,6 +146,20 @@ func doctorState(out io.Writer, st *state.State) {
 			continue
 		}
 		fmt.Fprintf(out, "tree        %s: %s %d of %d left\n", kind, ts.Tree.Txid, ts.Tree.Remaining(), ts.Tree.Count)
+	}
+	// Every record of a tree signed and not yet adopted: one the node has
+	// yet to be asked about, and one found on the chain, or minted ahead,
+	// that waits for the current tree to run out.
+	for _, p := range st.PendingTrees {
+		if a := st.MintedAhead(p.Tree.Txid); a != nil {
+			fmt.Fprintf(out, "tree        %s: %s minted ahead, %d of %d left; it is switched to when the current tree runs out\n", field(p.Kind), p.Tree.Txid, a.Remaining(), a.Count)
+			continue
+		}
+		line := fmt.Sprintf("tree        %s: %s signed for coin %s and not recorded as minted; the next command that publishes asks the node what became of it", field(p.Kind), p.Tree.Txid, p.Coin.Outpoint())
+		if p.ReturnedOnce {
+			line += " (asked once: the node did not know it, and its coin went back to the pool)"
+		}
+		fmt.Fprintln(out, line)
 	}
 	for i := range st.Vaults {
 		v := &st.Vaults[i]

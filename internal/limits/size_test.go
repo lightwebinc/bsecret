@@ -299,3 +299,37 @@ func TestSizes(t *testing.T) {
 		t.Log(l)
 	}
 }
+
+// TestLargestInlineValue finds the largest value whose ciphertext still
+// rides in its record: the payload is padded to a multiple of 256 bytes and
+// sealed as one segment with a 16-byte tag, and the inline bound is 16384
+// bytes of ciphertext. docs/limits.md quotes the result, for the name and
+// type secretRecord uses (8 and 10 bytes).
+func TestLargestInlineValue(t *testing.T) {
+	fits := func(n int) bool {
+		p := &secrec.Payload{Name: "a/secret", Value: bytes.Repeat([]byte{7}, n), Type: "text/plain"}
+		b, err := p.EncodePadded(256)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ct, err := secrec.Seal(sha256.Sum256([]byte("size")), [secrec.SaltLen]byte{1}, 16384, b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(ct) <= secrec.MaxInline
+	}
+	lo, hi := 1, secrec.MaxInline
+	for lo < hi {
+		if mid := (lo + hi + 1) / 2; fits(mid) {
+			lo = mid
+		} else {
+			hi = mid - 1
+		}
+	}
+	rec := secretRecord(t, lo, true)
+	n := carrierBEEF(t, rec, 32)
+	t.Logf("the largest value carried inline: %d bytes (record %d, BEEF %d, packets %d)", lo, len(rec), n, packets(n))
+	if lo != 16092 {
+		t.Errorf("the largest inline value is %d bytes, not what docs/limits.md prints", lo)
+	}
+}

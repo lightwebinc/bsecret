@@ -1495,7 +1495,13 @@ sibling's answer is not a submission a host admits as it stands. A replayer
 assembles each token's BEEF itself: the token from the `vault-seq` answer at
 `seq`, and its parent from the answer at `seq - 1`; at `seq` 0 the parent is
 the chain tree, which no host keeps, so it comes from the publisher or from a
-chain source by its txid, with its proof. A replayer checks each proof
+chain source by its txid, with its proof. A chain source may drop a
+transaction once all its outputs are spent, and a chain tree is fully spent
+once each of its outputs paid for a vault's first token, so the publisher's
+own record of the tree is what lasts. Which of the two a replayer asks first
+is its own choice; either way the tree is held to the same checks: its txid
+is the one the token's input names, its proof verifies against the
+replayer's headers, and the assembled BEEF passes section 11.1. A replayer checks each proof
 against its own headers before it submits, and fetches a current proof from a
 chain source for a token whose stored proof names an orphaned block.
 Tokens, carriers and sweeps are self-verifying and may be replayed in any
@@ -1937,7 +1943,7 @@ and the wrap that releases an epoch's key to a member) and `reader`, at the
 tag `go.mod` pins. Nothing of them is copied or restated here. This
 contract's vectors are bound to borg's group by borg's golden vectors, kept
 unchanged under `internal/borgread/testdata`. bsecret pins bcommon v0.6.4
-and borg v0.1.3.
+and borg v0.1.6.
 
 ## 17. Size and rate bounds
 

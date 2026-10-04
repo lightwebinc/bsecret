@@ -113,7 +113,7 @@ this version chooses) or **the contract's** (a record bound).
 | Rollback memory of a reader | the latest token of each vault and of each vault's group this home verified | the reader's storage | A reader that keeps it refuses an older state from any host. A reader with no home has none: it relies on `WITHHELD`, on the node, and on naming more than one host | Same |
 | Writer freshness (`freshness`) | 60 s | 600 s | The age of the evidence that the vault's and the group's latest tokens are unspent when a version is published; every token retakes it as it is built | Same |
 | Reader freshness, for a value it acts on | taken at the read | none: a reader that keeps a value keeps its age | The same evidence, for a reader; `get -strict` refuses a value without it | Same |
-| What `fill` copies | every token, carrier of the set and sweep a host lacks and another answered | the reading caps | Each copy is one submit and one lookup at the host that lacks it. A first token also needs its chain tree, from the node: see the known limits | Off the plane, or a host a publisher missed |
+| What `fill` copies | every token, carrier of the set and sweep a host lacks and another answered | the reading caps | Each copy is one submit and one lookup at the host that lacks it. A first token also needs its chain tree: from the owner's home when `fill` runs there, else from the node; see the known limits | Off the plane, or a host a publisher missed |
 
 ### Coins
 
@@ -167,19 +167,21 @@ this version chooses) or **the contract's** (a record bound).
 These are not settings. Each is something the tooling or the contract does
 not do, stated so that nobody finds it by accident.
 
-1. **A first token a host lost is repaired from the node, or by the
-   owner.** `fill` replays a token in the BEEF a host admits: the token and
-   its parent. A first token's parent is its chain tree, which no host
-   keeps and no host answers, so `fill` reads it from the node (`asset`),
-   with its proof. A node that has pruned the chain tree cannot serve it:
-   `fill` then says so for seq 0 (`cannot assemble its BEEF: the chain
-   tree ...`, exit 3), and whatever it replays above seq 0 that host holds
-   as pending and never answers as the vault's chain, since a host roots a
-   chain at its first token. The owner's home keeps the chain tree, and the
-   owner's tooling publishes a first token with it; but nothing sends a
-   first token again once every host named has taken it. So repairing such
-   a host needs a node that still serves the chain tree, or the owner's
-   home and the owner's hand.
+1. **A first token a host lost is repaired from the owner's home, or from
+   the node.** `fill` replays a token in the BEEF a host admits: the token
+   and its parent. A first token's parent is its chain tree, which no host
+   keeps and no host answers. Run in the owner's home, `fill` takes the tree
+   from the home's own record, which keeps every tree it minted with its
+   proof, and checks it as it would the node's answer; a second home
+   records the tree when `sync` first takes the vault's chain. Run anywhere
+   else, or in a home made by `sync` before v0.1.1 (which has no record),
+   it reads the tree from the node (`asset`), with its proof. A node that
+   has pruned the chain tree cannot serve it: `fill` then says so for seq 0
+   (`cannot assemble its BEEF: the chain tree ...`, exit 3, asking for the
+   fill to be run from the owner's home), and whatever it replays above
+   seq 0 that host holds as pending and never answers as the vault's
+   chain, since a host roots a chain at its first token. Hosts do not keep
+   chain trees: that would change the host contract.
 2. **A home wedged by a first token no host admits is repaired by hand.**
    A client older than the fix for a first token's fee could mine, from a
    home with one coin, a first token with two inputs from its chain tree.

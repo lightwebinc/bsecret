@@ -337,7 +337,8 @@ filled by replay (spec section 11.6). A sibling host answers each token
 alone with its proof, so a replayer assembles each token's BEEF itself, the
 token from `vault-seq` at `seq` and its parent from `seq - 1`, with the
 library's `tokenBEEF`, and submits it; at `seq` 0 the parent is the chain
-tree, which no host keeps and the publisher supplies. Tokens, carriers and
+tree, which no host keeps: the publisher's home supplies it, or a chain
+source while it still serves the tree. Tokens, carriers and
 sweeps may be replayed in any order: a token ahead of its predecessor is
 `pending` until the predecessor arrives.
 

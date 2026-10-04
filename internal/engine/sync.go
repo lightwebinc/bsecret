@@ -11,6 +11,7 @@ import (
 	"github.com/bsv-blockchain/go-sdk/transaction"
 
 	"github.com/lightwebinc/bcommon/funding"
+	"github.com/lightwebinc/bcommon/guard"
 
 	"github.com/lightwebinc/borg/reader"
 
@@ -126,6 +127,7 @@ func (e *Engine) Sync(ctx context.Context, crypt string) (*SyncReport, error) {
 				rep.Tokens++
 			}
 		}
+		e.keepChainTree(ctx, v.Tokens)
 		// What the chain lists, from seq 0: versions, ends and commitments.
 		for i := range v.Versions {
 			v.Versions[i].Listed, v.Versions[i].Ended = false, false
@@ -228,6 +230,59 @@ func (e *Engine) adoptCarrier(ctx context.Context, x *state.SecretVersion, car *
 	}
 	x.Name, x.RotateEvery, x.NotAfter = p.Name, p.RotateEvery, p.NotAfter
 	rep.Named++
+}
+
+// keepChainTree records the chain tree a vault's first token spends, read
+// from the node with its proof, when this home keeps no record of it: the
+// owner's other home minted it. No host keeps a chain tree and a node
+// drops a fully spent transaction, so fill replays the first token from
+// this record (spec section 11.6). Nothing is spent from it. A node that
+// does not answer leaves the home as it was.
+func (e *Engine) keepChainTree(ctx context.Context, tokens []state.Token) {
+	if len(tokens) == 0 || e.Legs.Asset == nil || e.Legs.Headers == nil {
+		return
+	}
+	tok, err := funding.Rebuild(tokens[0].RawHex, tokens[0].BumpHex, "")
+	if err != nil {
+		return
+	}
+	_, op, err := secrec.CheckFirstToken(tok)
+	if err != nil {
+		return
+	}
+	id := op.Txid.String()
+	if _, _, ok := e.St.TreeOf(id); ok {
+		return
+	}
+	raw, err := e.Legs.Asset.TxRaw(ctx, id)
+	if err != nil {
+		return
+	}
+	tree, err := guard.ParseTransaction(raw, guard.DefaultBound)
+	if err != nil || tree.TxID().String() != id {
+		return
+	}
+	mp, err := e.Legs.Asset.MerkleProof(ctx, id)
+	if err != nil {
+		return
+	}
+	if ok, err := mp.Verify(ctx, tree.TxID(), e.Legs.Headers); err != nil || !ok {
+		return
+	}
+	idx := int(op.Index)
+	if idx >= len(tree.Outputs) || tree.Outputs[idx].LockingScript == nil {
+		return
+	}
+	lock := tree.Outputs[idx].LockingScript
+	var count uint32
+	for _, o := range tree.Outputs {
+		if o != nil && o.LockingScript != nil && bytes.Equal(*o.LockingScript, *lock) {
+			count++
+		}
+	}
+	ts := e.St.Set(state.TreeChain)
+	ts.Trees = append(ts.Trees, funding.Tree{IdentityKeyHex: e.orgHex(), Txid: id, RawHex: tree.Hex(), BumpHex: mp.Hex(),
+		Height: mp.BlockHeight, Sats: tree.Outputs[idx].Satoshis, Count: count, Next: count, Funder: "another instance"})
 }
 
 // keepTree records the funding tree a carrier spends when the home does

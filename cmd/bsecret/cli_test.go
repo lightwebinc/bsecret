@@ -63,10 +63,37 @@ type harness struct {
 	// refuse, when set, is asked for every such transaction; true answers
 	// the client with an error and keeps the transaction from the chain.
 	refuse func(tx *transaction.Transaction) bool
+	// pruned are the transactions the node no longer answers, as a node
+	// that drops fully spent transactions: neither their bytes nor a
+	// proof.
+	pruned map[string]bool
+}
+
+// prune makes the node answer neither the bytes nor a proof of txids.
+func (h *harness) prune(txids ...string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.pruned == nil {
+		h.pruned = map[string]bool{}
+	}
+	for _, id := range txids {
+		h.pruned[id] = true
+	}
 }
 
 // serveChain is the chain, with the onSend hook in front of it.
 func (h *harness) serveChain(w http.ResponseWriter, r *http.Request) {
+	for _, pre := range []string{"/api/v1/tx/", "/api/v1/merkle_proof/", "/api/v1/txmeta/"} {
+		if id, ok := strings.CutPrefix(r.URL.Path, pre); ok {
+			h.mu.Lock()
+			gone := h.pruned[strings.TrimSuffix(id, "/json")]
+			h.mu.Unlock()
+			if gone {
+				http.NotFound(w, r)
+				return
+			}
+		}
+	}
 	if r.URL.Path == "/rpc" {
 		body, _ := io.ReadAll(r.Body)
 		r.Body = io.NopCloser(bytes.NewReader(body))

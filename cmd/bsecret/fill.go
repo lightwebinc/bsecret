@@ -8,10 +8,12 @@ import (
 
 	"github.com/bsv-blockchain/go-sdk/transaction"
 
+	"github.com/lightwebinc/bcommon/funding"
 	"github.com/lightwebinc/bcommon/termsafe"
 
 	"github.com/lightwebinc/bsecret/internal/engine"
 	"github.com/lightwebinc/bsecret/internal/secrec"
+	"github.com/lightwebinc/bsecret/internal/state"
 	"github.com/lightwebinc/bsecret/internal/unicast"
 	"github.com/lightwebinc/bsecret/internal/vread"
 )
@@ -23,7 +25,9 @@ sections 11.6 and 13, "Filling a host that missed something"), for one
 vault: its chain, the carriers of its set, and the sweeps of those
 carriers' funding outputs. Each token is replayed in the BEEF a host
 admits, assembled here from the token and its parent (the token at seq - 1,
-or at seq 0 the chain tree, read from the node: config key asset); each
+or at seq 0 the chain tree: from this home when it is the vault owner's
+home that keeps the tree, else from the node, config key asset, which
+drops a fully spent transaction; the tree is checked either way); each
 carrier and sweep is submitted as another host answered it, once it
 verifies here. Everything is checked against this home's headers before it
 is sent, and each fill is confirmed by a lookup at the host it was sent to.
@@ -34,9 +38,12 @@ Exit 0 when every host holds everything any host answered (or now does),
 3 when a host could not be asked or a fill was not confirmed.`
 
 type filler struct {
-	g           *global
-	t           *target
-	asset       *spendSource
+	g     *global
+	t     *target
+	asset *spendSource
+	// home is the vault owner's home state when fill runs in it: the
+	// chain trees it keeps are taken before the node is asked.
+	home        *state.State
 	filled      int
 	hostsFilled map[string]bool
 	problem     bool
@@ -54,6 +61,9 @@ func cmdFill(ctx context.Context, g *global, args []string) error {
 		return err
 	}
 	f := &filler{g: g, t: t, asset: g.spends(), hostsFilled: map[string]bool{}}
+	if t.own {
+		f.home = t.st
+	}
 	cv, err := t.rd.Chain(ctx, t.crypt, t.org, t.vault)
 	if err != nil {
 		if errors.Is(err, vread.ErrNoChain) {
@@ -129,18 +139,51 @@ func (f *filler) tokenBEEF(ctx context.Context, v *vread.ChainView, s uint64) ([
 		return engine.TokenBEEF(ctx, v.Crypt, tok.Tx, v.Tokens[s-1].Tx, f.t.rd.Headers)
 	}
 	// The chain tree: the transaction the first token's chain input
-	// spends, which no host keeps; read from the node with its proof.
-	if f.asset == nil {
-		return nil, errors.New("the first token's parent is its chain tree, which no host keeps: it is read from the node (config key asset)")
-	}
+	// spends, which no host keeps. The owner's home keeps it with its
+	// proof, and is asked first; the node is asked after, since a node
+	// drops a fully spent transaction.
 	_, op, err := secrec.CheckFirstToken(tok.Tx)
 	if err != nil {
 		return nil, err
 	}
 	id := op.Txid.String()
+	var refused error
+	if f.home != nil {
+		if rec, _, ok := f.home.TreeOf(id); ok {
+			tree, err := f.homeTree(ctx, id, rec)
+			if err == nil {
+				var beef []byte
+				if beef, err = engine.TokenBEEF(ctx, v.Crypt, tok.Tx, tree, f.t.rd.Headers); err == nil {
+					return beef, nil
+				}
+			}
+			refused = fmt.Errorf("this home's record of the chain tree %s is REFUSED: %w", id, err)
+		}
+	}
+	beef, nerr := f.nodeTree(ctx, v, tok.Tx, id)
+	if nerr == nil {
+		return beef, nil
+	}
+	const node = "a node drops a fully spent transaction, and no host keeps a chain tree"
+	switch {
+	case refused != nil:
+		return nil, fmt.Errorf("%w; and from the node: %v (%s)", refused, nerr, node)
+	case f.home == nil:
+		return nil, fmt.Errorf("the chain tree %s: this home is not the vault owner's, and from the node: %v (%s); run bsecret fill from the owner's home that created the vault", id, nerr, node)
+	default:
+		return nil, fmt.Errorf("the chain tree %s: this home keeps no record of it (a home made by sync before bsecret v0.1.1 does not), and from the node: %v (%s); run bsecret fill from the owner's home that created the vault", id, nerr, node)
+	}
+}
+
+// nodeTree assembles the first token's BEEF with its chain tree read from
+// the node, with its proof.
+func (f *filler) nodeTree(ctx context.Context, v *vread.ChainView, tok *transaction.Transaction, id string) ([]byte, error) {
+	if f.asset == nil {
+		return nil, errors.New("no node is configured (config key asset)")
+	}
 	raw, err := f.asset.TxRaw(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("the chain tree %s: %w", id, err)
+		return nil, err
 	}
 	tree, err := parseTx(raw, id)
 	if err != nil {
@@ -148,10 +191,47 @@ func (f *filler) tokenBEEF(ctx context.Context, v *vread.ChainView, s uint64) ([
 	}
 	var mp *transaction.MerklePath
 	if mp, err = f.asset.MerkleProof(ctx, id); err != nil {
-		return nil, fmt.Errorf("the chain tree %s: its proof: %w", id, err)
+		return nil, fmt.Errorf("its proof: %w", err)
 	}
 	tree.MerklePath = mp
-	return engine.TokenBEEF(ctx, v.Crypt, tok.Tx, tree, f.t.rd.Headers)
+	return engine.TokenBEEF(ctx, v.Crypt, tok, tree, f.t.rd.Headers)
+}
+
+// homeTree is the chain tree id as the home's record keeps it, held to
+// what the node's answer would be held to: its bytes are the transaction
+// the token spends, and its proof verifies against this home's headers. A
+// kept proof that no longer verifies (a reorganisation) is replaced by the
+// node's current one when the node answers; the home is not written.
+func (f *filler) homeTree(ctx context.Context, id string, rec *funding.Tree) (*transaction.Transaction, error) {
+	tx, err := funding.Rebuild(rec.RawHex, rec.BumpHex, rec.BeefHex)
+	if err != nil {
+		return nil, fmt.Errorf("it does not parse: %w", err)
+	}
+	if got := tx.TxID().String(); got != id {
+		return nil, fmt.Errorf("its bytes are transaction %s, not the token's parent", got)
+	}
+	if tx.MerklePath != nil {
+		ok, err := tx.MerklePath.Verify(ctx, tx.TxID(), f.t.rd.Headers)
+		if err != nil {
+			return nil, fmt.Errorf("checking its proof against the header source: %w", err)
+		}
+		if ok {
+			return tx, nil
+		}
+	}
+	if f.asset == nil {
+		return nil, errors.New("its kept proof does not verify against the header source (a reorganisation, or no proof kept), and no node is configured (config key asset) to give a current one")
+	}
+	mp, err := f.asset.MerkleProof(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("its kept proof does not verify against the header source (a reorganisation, or no proof kept), and the node gives no current one: %w", err)
+	}
+	if ok, err := mp.Verify(ctx, tx.TxID(), f.t.rd.Headers); err != nil || !ok {
+		return nil, errors.New("neither its kept proof nor the node's current one verifies against the header source")
+	}
+	f.g.say("chain tree %s: the proof this home kept does not verify against the header source; the node's current proof, at height %d, is used", vread.Short(id), mp.BlockHeight)
+	tx.MerklePath = mp
+	return tx, nil
 }
 
 // set submits each carrier of the vault's set to every host that did not

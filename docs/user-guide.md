@@ -323,8 +323,12 @@ every answer itself, and says `DISAGREES` when one lacks what another
 answered; it never merges silently. `bsecret fill` then copies what a host
 lacks from the others' answers, verified first. Anyone can run it.
 
-`fill` cannot repair one thing without help: a vault's first token, at a
-host that lost it, once the node no longer serves the vault's chain tree
+A vault's first token needs its chain tree, which no host keeps and a node
+may have dropped once all its outputs were spent. The owner's home keeps
+it: run `fill` there and the tree comes from the home, checked like
+anything else. From any other home, a host missing a vault's first token
+can be filled only while the node still serves its chain tree; otherwise
+`fill` names the tree and asks you to run it from the owner's home
 ([limits.md](limits.md)).
 
 | | Plane (`mode = plane`, `facade`) | Unicast (`mode = unicast`) |
@@ -415,6 +419,7 @@ every endpoint answers.
 | `EXPOSED` | the version is keyed under an epoch before the group's latest | as above; treat the value as known to whoever was removed |
 | `undecryptable` | this key was not a member of the epoch the record names; or, when the message says this key opened that epoch's key, the owner wrapped the content key under another key | ask the organisation to add the key to the group; the second names the owner |
 | `was a member of epoch N ... no host of the hall answers a wrap` (exit 3) | the hall's hosts withhold, lost or have not yet received borg's wrap of that epoch's key to this key; a host that answered one that does not verify is named | other hosts of the hall (`hall_hosts`); the organisation runs a borg command, which publishes the wraps it owes |
+| `hall host ...: REFUSED wrap carrier` (exit 3) | a host of the hall answered a wrap of the epoch's key to this key that does not verify; another host's wrap opened the key, which the group's commitment binds, so the value was read | that host of the hall is at fault or damaged on the way; ask it again, or name other hosts of the hall (`hall_hosts`) |
 | `hash` | the content source named served other bytes than the record names: it substituted or cut them | use another content source; the record names what is right |
 | `commitment`, `tag`, `payload` | the owner wrapped or encrypted something other than what it committed to | this names the owner; nothing a host did |
 | `listing` | every host that answered, answered another version than the vault lists, or the owner listed a record as it is not | another host; `bsecret fill` |

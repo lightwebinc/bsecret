@@ -951,10 +951,22 @@ func TestAMemberWhoseWrapNoHostAnswers(t *testing.T) {
 		!strings.Contains(r.stderr, "which does not verify") {
 		t.Fatalf("a member whose wrap a host substituted: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
 	}
-	// One honest host of the hall is enough.
+	// One honest host of the hall is enough to read, and the host that lied
+	// beside it is still named: the read is incomplete (exit 3).
 	h.b.RewriteBorg = nil
-	if r := h.must("alice", "get", "db/password"); r.stdout != "one" {
-		t.Fatalf("alice, one hall host honest: %q\n%s", r.stdout, r.stderr)
+	r = h.run("alice", "", "get", "db/password")
+	if r.code != exitIncomplete || r.stdout != "one" || !strings.Contains(r.stderr, "hall host "+h.aS.URL+": REFUSED wrap carrier") ||
+		strings.Contains(r.stderr, "hall host "+h.bS.URL) {
+		t.Fatalf("alice, one hall host honest and one lying: exit %d %q\n%s", r.code, r.stdout, r.stderr)
+	}
+	if r := h.run("alice", "", "list"); r.code != exitIncomplete || !strings.Contains(r.stdout, "db/password") ||
+		!strings.Contains(r.stderr, "hall host "+h.aS.URL+": REFUSED wrap carrier") {
+		t.Fatalf("list, one hall host honest and one lying: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	// Both honest: nothing to name.
+	h.a.RewriteBorg = nil
+	if r := h.must("alice", "get", "db/password"); r.stdout != "one" || strings.Contains(r.stderr, "REFUSED") {
+		t.Fatalf("alice, both hall hosts honest: %q\n%s", r.stdout, r.stderr)
 	}
 	// A key the group never named.
 	h.identity("dave", false)

@@ -479,7 +479,12 @@ vault lists; the value is read from a host that answered the listed one,
 and the command is incomplete (exit 3). When no host answers the listed
 one, a carrier that does not verify leaves nothing to read (exit 3), and
 one that verifies and is another version fails the first of a reader's
-checks (`listing`, exit 1). The walk is bounded by the chain itself: a seq
+checks (`listing`, exit 1). A host of the hall is held to the same rule
+for the wraps of an epoch's key: one that answers a wrap to this key that
+does not verify is named (`hall host ...: REFUSED wrap carrier`), also when
+another host's wrap opened the key, and the command is incomplete (exit 3);
+the key opened is bound by the group's commitment, so the value is still
+read. The walk is bounded by the chain itself: a seq
 is asked for only once the one before it is on the chain, and an answer is
 read up to 16 MiB and the outputs a page of the contract holds. The group is read from the hall's hosts by borg's
 reader, and the vault is held to it: its owner is the group's
@@ -574,12 +579,35 @@ lacks what the others hold, and nothing resends it: `get`, `list` and
 `vault show` report it (`DISAGREES`). `fill` repairs it from the other
 hosts' answers (spec sections 11.6 and 13). Each token a host lacks is
 replayed in the BEEF a host admits, assembled from the token and its parent
-(the token at `seq - 1`, or at `seq` 0 the chain tree, read from `asset`
-with its proof); each carrier of the vault's set, and each sweep of such a
+(the token at `seq - 1`, or at `seq` 0 the chain tree with its proof); each carrier of the vault's set, and each sweep of such a
 carrier's funding output, is submitted as another host answered it.
 Everything is verified against `header_url` first, and each fill is
 confirmed by a lookup at the host it went to. Anyone who reads the crypt
 can run it; it needs no coin.
+
+The chain tree at `seq` 0 is the one part no host keeps. Run in the
+owner's home, `fill` takes it from the home's own record of its funding
+trees, which keeps every tree it minted with its proof, and asks `asset`
+only when the home holds no record of it. Elsewhere it asks `asset`, which
+may have dropped the tree: a node can prune a transaction whose outputs are
+all spent, and each chain tree output is spent by a vault's first token. A
+tree taken from the home is checked as the node's answer would be: its txid
+must be the one the token spends, its proof must verify against
+`header_url` (a proof a reorganisation left stale is replaced by the node's
+current one when the node gives one), and the token's BEEF must pass the
+host's rules. A record whose bytes are another transaction is named
+(`REFUSED`) and not used. A second home records the vault's chain tree,
+with its proof, when `sync` first takes the chain, while the node still
+answers it; a home made by `sync` before bsecret v0.1.1 holds no such
+record. When neither the home nor the node supplies the tree, `fill` names
+it and exits 3:
+
+```text
+vault token seq 0 <txid>: cannot assemble its BEEF: the chain tree <txid>: this home keeps no record of it (a home made by sync before bsecret v0.1.1 does not), and from the node: <the node's answer> (a node drops a fully spent transaction, and no host keeps a chain tree); run bsecret fill from the owner's home that created the vault
+```
+
+From a home that is not the owner's, the message says `this home is not
+the vault owner's` in place of `this home keeps no record of it ...`.
 
 On the plane the owner's own tooling does part of this as it publishes:
 every object is submitted once to the facade, then looked for at every host

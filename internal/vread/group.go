@@ -150,9 +150,15 @@ func (g *Group) Stand(v *secrec.Vault) Standing {
 // the epoch's BRC-369 symmetric key, the input of the epoch wrap key
 // (docs/spec.md section 6.3). A key that was not a member of the epoch
 // holds no wrap of it and opens nothing.
-func OpenEpoch(ctx context.Context, rd *reader.Client, w wallet.Interface, me []byte, g *Group, epoch uint64) ([32]byte, error) {
+//
+// Every hall host is asked, and every wrap each answers for me is checked
+// after one has opened the key: refused are the wraps a hall host answered
+// that did not verify, each naming its host, also when another host's wrap
+// opened the key. What a host refused here is not used; a caller names
+// each host and treats the read as incomplete.
+func OpenEpoch(ctx context.Context, rd *reader.Client, w wallet.Interface, me []byte, g *Group, epoch uint64) (key [32]byte, refused []reader.Refusal, err error) {
 	if epoch > secrec.MaxEpoch {
-		return [32]byte{}, fmt.Errorf("epoch %d is out of range", epoch)
+		return [32]byte{}, nil, fmt.Errorf("epoch %d is out of range", epoch)
 	}
 	op := rd.Open(ctx, w, me, g.GroupView, uint32(epoch)) //nolint:gosec // bounded above
 	if op.Label != "" {
@@ -162,12 +168,16 @@ func OpenEpoch(ctx context.Context, rd *reader.Client, w wallet.Interface, me []
 		// another epoch (token), the hosts are what failed: nothing was
 		// opened and found wrong, and it proves nothing about the record.
 		if (op.Label == "entry" || op.Label == "token") && slices.Contains(g.EpochsOf(me), uint32(epoch)) { //nolint:gosec // bounded above
-			_, refused := rd.Wraps(ctx, g.GroupView, uint32(epoch)) //nolint:gosec // bounded above
-			return [32]byte{}, &NoWrapError{Epoch: epoch, Label: op.Label, Err: op.Err, Refused: refused}
+			return [32]byte{}, op.Refused, &NoWrapError{Epoch: epoch, Label: op.Label, Err: op.Err, Refused: op.Refused}
 		}
-		return [32]byte{}, fmt.Errorf("epoch %d (%s): %w", epoch, op.Label, op.Err)
+		return [32]byte{}, op.Refused, fmt.Errorf("epoch %d (%s): %w", epoch, op.Label, op.Err)
 	}
-	return borgrec.SymmetricKey(op.Key), nil
+	return borgrec.SymmetricKey(op.Key), op.Refused, nil
+}
+
+// HallRefused words a wrap a hall host answered that did not verify.
+func HallRefused(r reader.Refusal) string {
+	return fmt.Sprintf("hall host %s: REFUSED wrap carrier %s (%s): what this host answered does not verify, so it is not used: %v", r.Host, Short(r.Txid), r.Reason, r.Err)
 }
 
 // ErrNoWrap is the key of an epoch that a member of that epoch could not

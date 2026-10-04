@@ -256,7 +256,15 @@ func (e *Engine) EpochKey(ctx context.Context, g *vread.Group, epoch uint64) ([3
 	if err != nil {
 		return [32]byte{}, err
 	}
-	sym, err := vread.OpenEpoch(ctx, e.Legs.Groups, w, pub, g, epoch)
+	sym, refused, err := vread.OpenEpoch(ctx, e.Legs.Groups, w, pub, g, epoch)
+	// A wrap a hall host answered that does not verify is not used; the
+	// key, when another host's wrap opened it, is bound by the group's
+	// commitment. The host is named.
+	if !errors.Is(err, vread.ErrNoWrap) {
+		for _, r := range refused {
+			e.note("%s", vread.HallRefused(r))
+		}
+	}
 	if errors.Is(err, vread.ErrNoWrap) {
 		return [32]byte{}, fmt.Errorf("the organisation's signer key %s: %w; a borg command run in the organisation's borg home publishes the wraps it still owes", hex.EncodeToString(pub), err)
 	}

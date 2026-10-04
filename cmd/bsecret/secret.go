@@ -339,7 +339,18 @@ func (g *global) keysFor(o *opened) (vread.Keys, string, error) {
 		if k, ok := cache[epoch]; ok {
 			return k, nil
 		}
-		k, err := vread.OpenEpoch(ctx, o.t.groups, s, me, o.group, epoch)
+		k, refused, err := vread.OpenEpoch(ctx, o.t.groups, s, me, o.group, epoch)
+		// A hall host whose wrap does not verify is named and leaves the
+		// read incomplete, also when another host's wrap opened the key.
+		if !errors.Is(err, vread.ErrNoWrap) {
+			// A NoWrapError names them itself.
+			for _, r := range refused {
+				g.say("%s", vread.HallRefused(r))
+			}
+		}
+		if len(refused) > 0 {
+			o.leave(incomplete("a hall host answered a wrap that does not verify; it is not used"))
+		}
 		if err == nil {
 			cache[epoch] = k
 		}
@@ -750,6 +761,10 @@ func cmdList(ctx context.Context, g *global, args []string) error {
 	g.say("vault %s seq %d: %d secret(s); %s", vread.Short(t.vaultHex()), o.chain.Head().Seq(), len(o.chain.Set()), o.stand)
 	if !matched && len(o.chain.Set()) > 0 {
 		return incomplete("no host's answer reproduces the set's root")
+	}
+	if problem == nil {
+		// A hall host named while a key was opened.
+		problem = o.problem
 	}
 	return problem
 }

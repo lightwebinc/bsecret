@@ -82,7 +82,7 @@ $ make quickstart-check # QUICKSTART.md, run as written
 
 Go 1.27.1 or later, and Node 24 for the TypeScript package under `host/`
 (`make verify NODE=/path/to/node24` when it is not on `PATH`). The direct Go
-dependencies are go-sdk v1.5.2, bcommon v0.6.4 and borg v0.1.6, and nothing
+dependencies are go-sdk v1.5.2, bcommon v0.7.0 and borg v0.1.7, and nothing
 else.
 
 borg is a private module. Its tagged archive is kept under

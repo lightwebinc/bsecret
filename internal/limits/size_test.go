@@ -333,3 +333,16 @@ func TestLargestInlineValue(t *testing.T) {
 		t.Errorf("the largest inline value is %d bytes, not what docs/limits.md prints", lo)
 	}
 }
+
+// Every tree this tooling mints is within bcommon's funding-tree cap
+// (mint.MaxFundingOutputs, 1023): tree_count is bounded at MaxTreeCount
+// and a chain tree at MaxChainTreeCount, and each spend takes one output,
+// so no tree is ever asked for over the cap.
+func TestTreeCountsAreWithinTheFundingTreeCap(t *testing.T) {
+	for name, n := range map[string]int{"tree_count": MaxTreeCount, "chain_tree_count": MaxChainTreeCount,
+		"default tree_count": DefaultTreeCount, "default chain_tree_count": DefaultChainTreeCount} {
+		if n < 1 || n > mint.MaxFundingOutputs {
+			t.Errorf("%s bound %d is outside 1 to %d", name, n, mint.MaxFundingOutputs)
+		}
+	}
+}

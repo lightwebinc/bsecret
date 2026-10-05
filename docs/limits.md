@@ -99,7 +99,7 @@ this version chooses) or **the contract's** (a record bound).
 | Tries per submission | 4, waiting 1, 2 and 4 s | fixed | A host that fails four tries is reported missed; the object stays persisted and the next command resends it | Plane: the facade, and each host named for mined objects; unicast: each host |
 | Request timeout (`timeout`) | 15 s | 1 s to 5 min | Bounds every request | Same |
 | Wait for a token, a sweep or a tree to mine | 10 min | fixed | Past the wait it stays persisted and the next command waits again | Same |
-| Funding tree outputs (`tree_count`) | 32 | 1000 | Every carrier's BEEF carries its whole tree, about 49 bytes an output | Plane warns above 100 |
+| Funding tree outputs (`tree_count`) | 32 | 1000 | Every carrier's BEEF carries its whole tree, about 49 bytes an output; within bcommon's cap of 1023 funding outputs a tree (`mint.MaxFundingOutputs`) | Plane warns above 100 |
 | Chain tree outputs (`chain_tree_count`) | 8 | 32 | A vault's first token carries its chain tree whole | Same |
 | Trees kept apart | secret and chain trees, each under its own key and basket | fixed | A chain tree's output gives a vault its identifier | Same |
 | Tree minted ahead | one secret tree, when 4 outputs are left (half the tree when it has 4 or fewer) | one at a time | The next tree is settled while the last outputs are spent, so a version seldom waits a block for a tree | Same |

@@ -348,8 +348,14 @@ func (g *global) keysFor(o *opened) (vread.Keys, string, error) {
 				g.say("%s", vread.HallRefused(r))
 			}
 		}
-		if len(refused) > 0 {
-			o.leave(incomplete("a hall host answered a wrap that does not verify; it is not used"))
+		// An answer over borg's bound is named the same way: what the host
+		// answered past the bound is not read.
+		for _, r := range refused {
+			if vread.Overfull(r) {
+				o.leave(incomplete("a hall host answered over borg's bound (%s); what it answered past the bound is not read", r.Reason))
+			} else {
+				o.leave(incomplete("a hall host answered a wrap that does not verify; it is not used"))
+			}
 		}
 		if err == nil {
 			cache[epoch] = k

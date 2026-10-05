@@ -239,6 +239,15 @@ func (e *Engine) group(ctx context.Context, v *state.Vault) (*vread.Group, error
 	if err != nil {
 		return nil, fmt.Errorf("the vault's group %s in hall %s: %w", v.Group, v.Hall, err)
 	}
+	// What a hall host answered that did not verify, or over borg's bound,
+	// is not used; the host is named.
+	for _, r := range g.Refused {
+		if vread.Overfull(r) {
+			e.note("%s", vread.OverfullWords(r))
+			continue
+		}
+		e.note("hall host %s: REFUSED group token %s (%s): %v", r.Host, vread.Short(r.Txid), r.Reason, r.Err)
+	}
 	if g.Rejoined {
 		e.note("warning: the group re-added a removed key without a new epoch (rejoin-unrotated): that key reads what was written while it was away; rotate the group (borg epoch rotate)")
 	}

@@ -973,6 +973,81 @@ func TestAMemberWhoseWrapNoHostAnswers(t *testing.T) {
 	h.want(h.run("dave", "", "get", "db/password"), exitRefused, "undecryptable: this key holds no key of epoch 0")
 }
 
+// A hall host that floods its answers past borg's bound (borg v0.1.7: 128
+// outputs to one question, 16 tokens to one seq) is named overfull, and
+// the read is incomplete (exit 3): what it answered past the bound is not
+// read. What was read below the bound is used, so the value is still read,
+// from it or from the honest host beside it. A flood is not a carrier that
+// does not verify, and is not worded as one.
+func TestAFloodingHallHostIsNamedOverfull(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	if r := h.must("alice", "get", "db/password"); r.stdout != "one" {
+		t.Fatalf("alice: %q\n%s", r.stdout, r.stderr)
+	}
+	flood := func(n int) func(*borgrec.Question, []testhost.Output) []testhost.Output {
+		return func(q *borgrec.Question, outs []testhost.Output) []testhost.Output {
+			if len(outs) == 0 {
+				return outs
+			}
+			k := 0
+			switch q.Class.Name {
+			case "wrap":
+				k = n
+			case "group-seq":
+				k = 40
+			default:
+				return outs
+			}
+			flooded := append([]testhost.Output(nil), outs...)
+			for len(flooded) < k {
+				flooded = append(flooded, outs[len(flooded)%len(outs)])
+			}
+			return flooded
+		}
+	}
+	overfull := "hall host " + h.aS.URL + ": OVERFULL: its answer is over borg's bound"
+	// Host a floods; host b is honest. The member reads, and host a is
+	// named.
+	h.a.RewriteBorg = flood(200)
+	r := h.run("alice", "", "get", "db/password")
+	if r.code != exitIncomplete || r.stdout != "one" || !strings.Contains(r.stderr, overfull) ||
+		!strings.Contains(r.stderr, "over the bound of 128") || !strings.Contains(r.stderr, "over the bound of 16") ||
+		strings.Contains(r.stderr, "does not verify") || strings.Contains(r.stderr, "hall host "+h.bS.URL) {
+		t.Fatalf("alice, hall host a flooding: exit %d %q\n%s", r.code, r.stdout, r.stderr)
+	}
+	// The owner reads through its self wrap, and the group's chain is still
+	// read from a flooded answer: named, incomplete.
+	r = h.run("org", "", "get", "db/password")
+	if r.code != exitIncomplete || r.stdout != "one" || !strings.Contains(r.stderr, overfull) {
+		t.Fatalf("org, hall host a flooding: exit %d %q\n%s", r.code, r.stdout, r.stderr)
+	}
+	if r := h.run("alice", "", "list"); r.code != exitIncomplete || !strings.Contains(r.stdout, "db/password") || !strings.Contains(r.stderr, overfull) {
+		t.Fatalf("list, hall host a flooding: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	// Both hosts flood: the member's wrap is the first of each answer, so
+	// the key still opens; both are named, and the read is incomplete.
+	h.b.RewriteBorg = flood(129)
+	r = h.run("alice", "", "get", "db/password")
+	if r.code != exitIncomplete || r.stdout != "one" || !strings.Contains(r.stderr, overfull) ||
+		!strings.Contains(r.stderr, "hall host "+h.bS.URL+": OVERFULL") {
+		t.Fatalf("alice, both hall hosts flooding: exit %d %q\n%s", r.code, r.stdout, r.stderr)
+	}
+	// A page exactly at the bound is no fault.
+	h.a.RewriteBorg, h.b.RewriteBorg = flood(128), nil
+	r = h.run("alice", "", "get", "db/password")
+	if r.stdout != "one" || strings.Contains(r.stderr, "over the bound of 128") {
+		t.Fatalf("alice, a page at the bound: exit %d %q\n%s", r.code, r.stdout, r.stderr)
+	}
+	// Both honest: nothing to name.
+	h.a.RewriteBorg = nil
+	if r := h.must("alice", "get", "db/password"); r.stdout != "one" || strings.Contains(r.stderr, "OVERFULL") {
+		t.Fatalf("alice, both hall hosts honest: %q\n%s", r.stdout, r.stderr)
+	}
+}
+
 // A host that substitutes bytes in a carrier it answers is named, and what
 // it answered is not used: with an honest host beside it the value is read
 // from that one and the read is incomplete (exit 3), never refused; alone,

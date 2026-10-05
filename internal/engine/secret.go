@@ -594,9 +594,12 @@ func (e *Engine) Rotate(ctx context.Context, w *Writer, plan map[string]Choice, 
 	if err := e.Readable(ctx, w, owes, plan); err != nil {
 		return nil, fmt.Errorf("%w; nothing was built", err)
 	}
-	missing, err := vread.WrapsMissing(ctx, e.Legs.Groups, w.Group, target.Epoch)
+	missing, refused, err := vread.WrapsMissing(ctx, e.Legs.Groups, w.Group, target.Epoch)
 	if err != nil {
 		return nil, err
+	}
+	for _, r := range refused {
+		e.note("%s", vread.HallRefused(r))
 	}
 	if len(missing) > 0 {
 		var who []string

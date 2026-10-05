@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	ec "github.com/bsv-blockchain/go-sdk/primitives/ec"
@@ -175,8 +176,26 @@ func OpenEpoch(ctx context.Context, rd *reader.Client, w wallet.Interface, me []
 	return borgrec.SymmetricKey(op.Key), op.Refused, nil
 }
 
-// HallRefused words a wrap a hall host answered that did not verify.
+// Overfull reports a refusal that names no carrier: a hall host's answer
+// over borg's bound for one question (reader.ErrOverfull, reason overfull)
+// or a paged walk cut at the reader's bound (reader.ErrTruncated, reason
+// truncated). What was read below the bound is used as any answer is; what
+// the host answered past it is not read, so the read is incomplete.
+func Overfull(r reader.Refusal) bool {
+	return errors.Is(r.Err, reader.ErrOverfull) || errors.Is(r.Err, reader.ErrTruncated)
+}
+
+// OverfullWords words an Overfull refusal.
+func OverfullWords(r reader.Refusal) string {
+	return fmt.Sprintf("hall host %s: %s: its answer is over borg's bound, and what it answered past the bound is not read: %v", r.Host, strings.ToUpper(r.Reason), r.Err)
+}
+
+// HallRefused words a wrap a hall host answered that did not verify, or an
+// answer over borg's bound (Overfull).
 func HallRefused(r reader.Refusal) string {
+	if Overfull(r) {
+		return OverfullWords(r)
+	}
 	return fmt.Sprintf("hall host %s: REFUSED wrap carrier %s (%s): what this host answered does not verify, so it is not used: %v", r.Host, Short(r.Txid), r.Reason, r.Err)
 }
 
@@ -198,6 +217,10 @@ type NoWrapError struct {
 func (e *NoWrapError) Error() string {
 	msg := fmt.Sprintf("this key was a member of epoch %d by the group's own chain, and no host of the hall answers a wrap of that epoch's key to it that verifies (%s: %v): that proves nothing about the record; ask other hosts of the hall (config key hall_hosts)", e.Epoch, e.Label, e.Err)
 	for _, r := range e.Refused {
+		if Overfull(r) {
+			msg += fmt.Sprintf("; hall host %s answered over borg's bound (%s): %v", r.Host, r.Reason, r.Err)
+			continue
+		}
 		msg += fmt.Sprintf("; hall host %s answered wrap carrier %s, which does not verify (%s)", r.Host, Short(r.Txid), r.Reason)
 	}
 	return msg
@@ -226,25 +249,27 @@ func SignerWallet(orgKey *ec.PrivateKey) (wallet.Interface, []byte, error) {
 // WrapsMissing are the members of the group's latest token that no host
 // answers a wrap of epoch for: a version keyed under a new epoch is
 // published only after borg's wraps of the epoch's key are (spec section
-// 8.3), or the members who remain could not open it.
-func WrapsMissing(ctx context.Context, rd *reader.Client, g *Group, epoch uint64) ([][]byte, error) {
+// 8.3), or the members who remain could not open it. refused are the
+// wraps a hall host answered that did not verify, and its answers over
+// borg's bound (Overfull): a wrap past a cut is not read, so its members
+// are counted missing.
+func WrapsMissing(ctx context.Context, rd *reader.Client, g *Group, epoch uint64) (missing [][]byte, refused []reader.Refusal, err error) {
 	if epoch > secrec.MaxEpoch {
-		return nil, fmt.Errorf("epoch %d is out of range", epoch)
+		return nil, nil, fmt.Errorf("epoch %d is out of range", epoch)
 	}
-	cars, _ := rd.Wraps(ctx, g.GroupView, uint32(epoch)) //nolint:gosec // bounded above
+	cars, refused := rd.Wraps(ctx, g.GroupView, uint32(epoch)) //nolint:gosec // bounded above
 	have := map[string]bool{}
 	for _, car := range cars {
 		for _, r := range car.Carrier.Wrap.Recipients() {
 			have[string(r)] = true
 		}
 	}
-	var missing [][]byte
 	for _, m := range g.Members {
 		if !have[string(m)] {
 			missing = append(missing, m)
 		}
 	}
-	return missing, nil
+	return missing, refused, nil
 }
 
 // Spends is a source that indexes spends (borg's reader.Spends).

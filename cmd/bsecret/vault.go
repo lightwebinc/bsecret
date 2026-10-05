@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -89,6 +90,10 @@ func (g *global) resolveGroup(ctx context.Context, rd *reader.Client, hall strin
 	}
 	ids, errs := rd.GroupsAll(ctx, hall, org)
 	for h, e := range errs {
+		if errors.Is(e, reader.ErrTruncated) {
+			g.say("hall host %s: TRUNCATED: its answer of the groups is over borg's bound, and what it answered past the bound is not read: %v", h, e)
+			continue
+		}
 		g.say("hall host %s: NOT ASKED for the groups: %s", h, firstLine(e.Error()))
 	}
 	var match []string
@@ -102,6 +107,12 @@ func (g *global) resolveGroup(ctx context.Context, rd *reader.Client, hall strin
 	case 1:
 		return reader.ParseGroup(match[0])
 	case 0:
+		if len(errs) > 0 {
+			// A host not asked, or whose walk was cut at borg's bound
+			// (reader.ErrTruncated), may hold the group: an empty answer
+			// proves nothing.
+			return [secrec.GroupIDLen]byte{}, incomplete("no group named %q of this organisation is answered in hall %s, and %d hall host(s) did not answer in full; name it by its identifier", termsafe.Abbrev(name), hall, len(errs))
+		}
 		return [secrec.GroupIDLen]byte{}, usage("no group named %q of this organisation is answered in hall %s; name it by its identifier", termsafe.Abbrev(name), hall)
 	}
 	return [secrec.GroupIDLen]byte{}, usage("%d groups are named %q; name one by its identifier: %v", len(match), termsafe.Abbrev(name), match)

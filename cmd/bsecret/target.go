@@ -357,6 +357,13 @@ func (g *global) reportGroup(gr *vread.Group) error {
 		problem = incomplete("a host of the group's hall could not be asked")
 	}
 	for _, r := range gr.Refused {
+		if vread.Overfull(r) {
+			// Over borg's bound: what was read below it is used, what the
+			// host answered past it is not.
+			g.say("%s", vread.OverfullWords(r))
+			problem = incomplete("a host of the group's hall answered over borg's bound (%s); what it answered past the bound is not read", r.Reason)
+			continue
+		}
 		g.say("hall host %s: REFUSED group token %s (%s): %v", r.Host, termsafe.Abbrev(r.Txid), r.Reason, r.Err)
 		problem = incomplete("a host answered a group token that does not verify; it is not used")
 	}

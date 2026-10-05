@@ -484,7 +484,11 @@ for the wraps of an epoch's key: one that answers a wrap to this key that
 does not verify is named (`hall host ...: REFUSED wrap carrier`), also when
 another host's wrap opened the key, and the command is incomplete (exit 3);
 the key opened is bound by the group's commitment, so the value is still
-read. The walk is bounded by the chain itself: a seq
+read. A host of the hall that answers one question with more than borg's
+reader takes (128 outputs, or 16 tokens to one seq of the group's chain),
+or whose paged walk the reader cuts, is named (`hall host ...: OVERFULL`
+or `TRUNCATED`): what it answered below the bound is used, what it
+answered past it is not read, and the command is incomplete (exit 3). The walk is bounded by the chain itself: a seq
 is asked for only once the one before it is on the chain, and an answer is
 read up to 16 MiB and the outputs a page of the contract holds. The group is read from the hall's hosts by borg's
 reader, and the vault is held to it: its owner is the group's

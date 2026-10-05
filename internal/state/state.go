@@ -31,6 +31,7 @@ import (
 
 	"github.com/lightwebinc/bcommon/bwallet"
 	"github.com/lightwebinc/bcommon/funding"
+	"github.com/lightwebinc/bcommon/payee"
 )
 
 // Version is the state file's format version.
@@ -104,11 +105,10 @@ type State struct {
 	// next payment may spend the change of one, and then carries it.
 	Payments []Payment `json:"payments,omitempty"`
 
-	// Settled are the txids of payments to this identity as a host's payee
-	// that payee settle internalized; Unsettleable those the network
-	// refused for good.
-	Settled      []string       `json:"settled,omitempty"`
-	Unsettleable []Unsettleable `json:"unsettleable,omitempty"`
+	// Book is what payee settle did for this identity as a host's payee:
+	// the payments it settled ("settled") and those the network refused
+	// for good ("unsettleable").
+	payee.Book
 
 	// Taking is the coin pool as it stood when a command that spends from
 	// it last saved this state: the record made before a coin is taken. A
@@ -449,17 +449,6 @@ func (s *State) KeepPayments(waiting []string) bool {
 	n := len(s.Payments)
 	s.Payments = slices.DeleteFunc(s.Payments, func(p Payment) bool { return !slices.Contains(waiting, p.Txid) })
 	return len(s.Payments) != n
-}
-
-// Unsettleable is a payment the network refused, and why.
-type Unsettleable struct {
-	Txid string `json:"txid"`
-	Why  string `json:"why"`
-}
-
-// IsUnsettleable reports whether txid is a payment recorded as refused.
-func (s *State) IsUnsettleable(txid string) bool {
-	return slices.ContainsFunc(s.Unsettleable, func(u Unsettleable) bool { return u.Txid == txid })
 }
 
 // Load reads the home's state, or a new one for identity when the home has

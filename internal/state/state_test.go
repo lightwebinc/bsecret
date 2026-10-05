@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lightwebinc/bcommon/payee"
 )
 
 func TestSaveLoadRoundTripAndModes(t *testing.T) {
@@ -77,7 +79,7 @@ func TestSweepsAndPayments(t *testing.T) {
 	if !s.KeepPayments([]string{"p2"}) || s.PaymentOf("p1") != nil || s.PaymentOf("p2") == nil || s.KeepPayments([]string{"p2"}) {
 		t.Fatal("KeepPayments")
 	}
-	s.Unsettleable = []Unsettleable{{Txid: "u"}}
+	s.Unsettleable = []payee.Unsettleable{{Txid: "u"}}
 	if !s.IsUnsettleable("u") || s.IsUnsettleable("v") {
 		t.Fatal("IsUnsettleable")
 	}

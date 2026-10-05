@@ -25,6 +25,7 @@ import (
 	"github.com/lightwebinc/bcommon/guard"
 	"github.com/lightwebinc/bcommon/mint"
 	"github.com/lightwebinc/bcommon/nodeapi"
+	"github.com/lightwebinc/bcommon/payee"
 	"github.com/lightwebinc/bcommon/publish"
 	"github.com/lightwebinc/bcommon/termsafe"
 
@@ -141,21 +142,7 @@ func (g *global) peekState() *state.State {
 // identityKey is the home's identity private key: an organisation's when
 // this home owns vaults, from which its signer key is derived.
 func (g *global) identityKey() (*ec.PrivateKey, error) {
-	raw, err := os.ReadFile(filepath.Join(g.cfg.Home, "identity.json"))
-	if err != nil {
-		return nil, fmt.Errorf("open the home %s: %w (run `bsecret init`)", g.cfg.Home, err)
-	}
-	var id struct {
-		WIF string `json:"wif"`
-	}
-	if err := json.Unmarshal(raw, &id); err != nil {
-		return nil, fmt.Errorf("identity.json: %w", err)
-	}
-	k, err := ec.PrivateKeyFromWif(id.WIF)
-	if err != nil {
-		return nil, fmt.Errorf("identity.json: %w", err)
-	}
-	return k, nil
+	return payee.HomeKey(g.cfg.Home, "bsecret")
 }
 
 // node is the configured node: its JSON-RPC and asset API.

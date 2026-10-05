@@ -10,7 +10,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256"
-	"encoding/binary"
 	"fmt"
 	"io"
 
@@ -42,12 +41,7 @@ func CommitmentPoint(k [32]byte) []byte {
 
 // SegmentIV is BRC-369 section 2.3 rule 2: the 4-byte salt followed by the
 // segment index as eight bytes big-endian.
-func SegmentIV(salt [SaltLen]byte, i uint64) [12]byte {
-	var iv [12]byte
-	copy(iv[:], salt[:])
-	binary.BigEndian.PutUint64(iv[SaltLen:], i)
-	return iv
-}
+func SegmentIV(salt [SaltLen]byte, i uint64) [12]byte { return keyed.SegmentIV(salt, i) }
 
 // CheckSegment bounds a segment size.
 func CheckSegment(segment uint64) error {

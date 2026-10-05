@@ -1926,7 +1926,9 @@ application. bsecret takes from bcommon:
   and commitment, the check on a key just unwrapped, and BRC-2's symmetric
   form, in which both wraps are written. borg uses the same functions for
   its epoch keys. They are checked here against BRC-369's own vectors
-  (`brc369-v1.json`);
+  (`brc369-v1.json`). The epoch wrap of section 6.3 is `keyed`'s epoch
+  wrap under the domain string `bsecret epoch wrap v1`, and a segment's IV
+  is `keyed`'s, the same bytes by this contract's vectors;
 - **the record reader** (`record`): the bounded, ordered decoding of a
   canonical CBOR record with integer keys, its refusals, and the first look
   a classifier takes (`pushdrop.FirstPush`, `record.Claims`).

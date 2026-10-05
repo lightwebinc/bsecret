@@ -166,6 +166,21 @@ func TestEpochWrap(t *testing.T) {
 	if _, err := WrapToEpoch(sym, cid, [32]byte{}, nil); !errors.Is(err, ErrScalar) {
 		t.Error("the zero key wrapped")
 	}
+	// The wrap is the domain string, the epoch's symmetric key and the
+	// content id hashed, sealed in BRC-2's symmetric form: the bytes bsecret
+	// wrote before bcommon's keyed generalised it.
+	want := sha256.Sum256(append(append([]byte("bsecret epoch wrap v1"), sym[:]...), cid[:]...))
+	if EpochWrapKey(sym, cid) != want {
+		t.Error("the wrapping key is not the domain, the symmetric key and the content id hashed")
+	}
+	iv := key(16)
+	w3, err := WrapToEpoch(sym, cid, k, bytes.NewReader(iv[:]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w4, _ := WrapToEpochWithIV(sym, cid, k, iv); !bytes.Equal(w3, w4) || !bytes.Equal(w3[:32], iv[:]) {
+		t.Error("a wrap from a reader is not the wrap with that IV")
+	}
 }
 
 func TestSelfWrap(t *testing.T) {

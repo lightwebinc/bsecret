@@ -2,8 +2,6 @@ package secrec
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -14,32 +12,24 @@ import (
 	"github.com/lightwebinc/bcommon/keyed"
 )
 
+// The epoch wrap is bcommon's keyed epoch wrap under bsecret's domain
+// string, DomainEpochWrap: the same bytes bsecret wrote before bcommon
+// generalised it, held to by the vectors (docs/spec.md section 6.3).
+
 // EpochWrapKey is the key a content key is wrapped under for the members of
 // one epoch: SHA-256 of the domain string, the epoch's BRC-369 symmetric key
 // and the content id of the secret version. It is derived from the epoch's
 // symmetric key, never used as it: one wrapping key wraps one content key,
 // and no other application's use of the epoch key meets it.
 func EpochWrapKey(epochSymmetric, contentID [32]byte) [32]byte {
-	b := append([]byte(DomainEpochWrap), epochSymmetric[:]...)
-	return sha256.Sum256(append(b, contentID[:]...))
+	return keyed.EpochWrapKey(DomainEpochWrap, epochSymmetric, contentID)
 }
 
 // WrapToEpoch wraps the content key k under EpochWrapKey in BRC-2's
 // symmetric form: a 32-byte IV from r (crypto/rand.Reader when r is nil),
 // the 32-byte ciphertext and the 16-byte tag, WrapLen bytes.
 func WrapToEpoch(epochSymmetric, contentID, k [32]byte, r io.Reader) ([]byte, error) {
-	if err := CheckScalar(k); err != nil {
-		return nil, err
-	}
-	if r == nil {
-		r = rand.Reader
-	}
-	var iv [32]byte
-	if _, err := io.ReadFull(r, iv[:]); err != nil {
-		return nil, err
-	}
-	w := EpochWrapKey(epochSymmetric, contentID)
-	return keyed.SymmetricSeal(w[:], iv, k[:])
+	return keyed.WrapToEpoch(DomainEpochWrap, epochSymmetric, contentID, k, r)
 }
 
 // UnwrapFromEpoch is a member's checks 2a and 2b. A reader runs check 1
@@ -50,15 +40,7 @@ func WrapToEpoch(epochSymmetric, contentID, k [32]byte, r io.Reader) ([]byte, er
 // another epoch's key derives another wrapping key, and the wrap does not
 // open (ErrUnwrap).
 func UnwrapFromEpoch(epochSymmetric, contentID [32]byte, wrap []byte, commitment [32]byte) ([32]byte, error) {
-	if len(wrap) != WrapLen {
-		return [32]byte{}, fmt.Errorf("%w: length %d", ErrUnwrap, len(wrap))
-	}
-	w := EpochWrapKey(epochSymmetric, contentID)
-	pt, err := keyed.SymmetricOpen(w[:], wrap)
-	if err != nil {
-		return [32]byte{}, fmt.Errorf("%w: %v", ErrUnwrap, err)
-	}
-	return keyed.CheckOpened(pt, commitment)
+	return keyed.UnwrapFromEpoch(DomainEpochWrap, epochSymmetric, contentID, wrap, commitment)
 }
 
 // SelfKeyID is the self wrap's BRC-43 key id: the standard padded base64 of
@@ -111,7 +93,9 @@ func WrapToSelfWithIV(owner *ec.PrivateKey, contentID, k [32]byte, iv [32]byte) 
 }
 
 // WrapToEpochWithIV is WrapToEpoch with a caller's IV, for golden vectors
-// only.
+// only. Unlike keyed.WrapToEpochWithIV it wraps a k that is not a scalar,
+// so a vector can hold the wrap a reader refuses (undecryptable); the bytes
+// are the same for every k both accept.
 func WrapToEpochWithIV(epochSymmetric, contentID, k [32]byte, iv [32]byte) ([]byte, error) {
 	w := EpochWrapKey(epochSymmetric, contentID)
 	return keyed.SymmetricSeal(w[:], iv, k[:])

@@ -10,6 +10,8 @@ import (
 	"github.com/lightwebinc/bcommon/chainview"
 	"github.com/lightwebinc/bcommon/termsafe"
 
+	"github.com/lightwebinc/borg/reader"
+
 	"github.com/lightwebinc/bsecret/internal/state"
 )
 
@@ -77,6 +79,7 @@ func (e *Engine) failSweep(ctx context.Context, sw *state.Sweep, why string) err
 		by, err := "", errors.New("no node is configured")
 		if e.Legs.Asset != nil {
 			by, err = e.Legs.Asset.Spender(ctx, f.TxID, f.Vout)
+			err = reader.QuietSpend(err)
 		}
 		switch {
 		case err != nil:

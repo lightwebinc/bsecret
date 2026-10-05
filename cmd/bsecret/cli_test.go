@@ -67,7 +67,26 @@ type harness struct {
 	// that drops fully spent transactions: neither their bytes nor a
 	// proof.
 	pruned map[string]bool
+	// unknown are the transactions whose outputs the node's UTXO view
+	// answers with status NOT_FOUND, as a node does for outputs it has
+	// pruned or could not read: neither unspent nor spent.
+	unknown map[string]bool
 }
+
+// unknownSpend makes the node's UTXO view of txids answer NOT_FOUND for
+// every output.
+func (h *harness) unknownSpend(txids ...string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.unknown == nil {
+		h.unknown = map[string]bool{}
+	}
+	for _, id := range txids {
+		h.unknown[id] = true
+	}
+}
+
+var reStatus = regexp.MustCompile(`"status":"[A-Z_]*"`)
 
 // prune makes the node answer neither the bytes nor a proof of txids.
 func (h *harness) prune(txids ...string) {
@@ -92,6 +111,18 @@ func (h *harness) serveChain(w http.ResponseWriter, r *http.Request) {
 				http.NotFound(w, r)
 				return
 			}
+		}
+	}
+	if id, ok := strings.CutPrefix(r.URL.Path, "/api/v1/utxos/"); ok {
+		h.mu.Lock()
+		unknown := h.unknown[strings.TrimSuffix(id, "/json")]
+		h.mu.Unlock()
+		if unknown {
+			rec := httptest.NewRecorder()
+			h.chain.ServeHTTP(rec, r)
+			w.WriteHeader(rec.Code)
+			_, _ = w.Write(reStatus.ReplaceAll(rec.Body.Bytes(), []byte(`"status":"NOT_FOUND"`)))
+			return
 		}
 	}
 	if r.URL.Path == "/rpc" {

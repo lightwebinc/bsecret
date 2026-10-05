@@ -987,6 +987,93 @@ func TestATransitionIsKeptUnlessAnotherSpends(t *testing.T) {
 	}
 }
 
+// vaultTip is the txid of the vault's token at seq.
+func (h *harness) vaultTip(name string, seq int) string {
+	h.t.Helper()
+	r := h.must(name, "vault", "show")
+	for _, l := range strings.Split(r.stdout, "\n") {
+		if strings.HasPrefix(l, fmt.Sprintf("token   seq %d ", seq)) {
+			return strings.Fields(l)[3]
+		}
+	}
+	h.t.Fatalf("no token at seq %d:\n%s", seq, r.stdout)
+	return ""
+}
+
+// A writer's evidence is the node's status OK for the vault's latest
+// token. A node that answers NOT_FOUND (as for an output it pruned or could
+// not read) is no evidence: the writer fails closed (exit 1) and writes
+// nothing, and writes once the node answers again.
+func TestAWriterFailsClosedWhenTheNodeDoesNotSay(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	tip := h.vaultTip("org", 1)
+	h.unknownSpend(tip)
+	r := h.run("org", "two", "put", "db/password")
+	if r.code != exitRefused || !strings.Contains(r.stderr, "the node could not say whether "+tip+".0 is spent") || !strings.Contains(r.stderr, "NOT_FOUND") {
+		t.Fatalf("a put while the node does not say: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	if r := h.must("org", "doctor"); strings.Contains(r.stdout, "transition  ") {
+		t.Fatalf("a transition was built without evidence:\n%s", r.stdout)
+	}
+	if got := h.vaultTip("org", 1); got != tip {
+		t.Fatalf("the tip moved: %s", got)
+	}
+	h.mu.Lock()
+	delete(h.unknown, tip)
+	h.mu.Unlock()
+	h.put("db/password", "two")
+}
+
+// A predecessor the node does not say about (status NOT_FOUND) settles
+// nothing, even when the fee coin is spent by another transaction: that may
+// be a copy of this very token. The transition stays persisted (exit 2),
+// and a later command that has the node's word decides.
+func TestAPredecessorTheNodeDoesNotSayAboutDiscardsNothing(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.vault()
+	h.put("db/password", "one")
+	tip := h.vaultTip("org", 1)
+	other := strings.Repeat("ab", 32)
+	h.mu.Lock()
+	h.onSend = func(tx *transaction.Transaction) {
+		spendsTip := false
+		for _, in := range tx.Inputs {
+			if in.SourceTXID != nil && in.SourceTXID.String() == tip {
+				spendsTip = true
+			}
+		}
+		if !spendsTip {
+			return
+		}
+		for _, in := range tx.Inputs {
+			if in.SourceTXID != nil && in.SourceTXID.String() != tip {
+				h.chain.SpendElsewhere(in.SourceTXID.String(), in.SourceTxOutIndex, other)
+			}
+		}
+		h.unknownSpend(tip)
+	}
+	h.mu.Unlock()
+	h.env["BSECRET_TIMEOUT"] = "5s"
+	r := h.run("org", "two", "put", "db/password")
+	if r.code != exitUsage || strings.Contains(r.stderr, "lost") || !strings.Contains(r.stderr, "could not say what spends its predecessor") || !strings.Contains(r.stderr, "the next command looks again") {
+		t.Fatalf("a predecessor the node does not say about: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+	if r := h.must("org", "doctor"); !strings.Contains(r.stdout, "transition  ") || !strings.Contains(r.stdout, "persisted and not yet mined") {
+		t.Fatalf("the transition was discarded:\n%s", r.stdout)
+	}
+	h.mu.Lock()
+	delete(h.unknown, tip)
+	h.mu.Unlock()
+	r = h.run("org", "two", "put", "db/password")
+	if !strings.Contains(r.stderr, "lost: its fee coin is spent by "+other[:12]) {
+		t.Fatalf("with the node's word that the predecessor is unspent and the fee coin spent elsewhere: exit %d\n%s\n%s", r.code, r.stdout, r.stderr)
+	}
+}
+
 // A sweep is marked failed only when the node names another transaction
 // as the spender of one of its inputs. A leg's refusal alone leaves it in
 // flight: the next command sends the same bytes again.

@@ -168,6 +168,7 @@ func (e *Engine) Ready(ctx context.Context, v *state.Vault) (*Writer, error) {
 		return nil, fmt.Errorf("%w: the vault's latest token: %v", ErrStale, err)
 	}
 	by, err := e.Legs.Asset.Spender(ctx, last.Txid, last.Vout)
+	err = reader.QuietSpend(err)
 	if err != nil {
 		return nil, fmt.Errorf("%w: the node could not say whether %s.%d is spent: %v", ErrStale, last.Txid, last.Vout, err)
 	}
@@ -194,6 +195,7 @@ func (e *Engine) Ready(ctx context.Context, v *state.Vault) (*Writer, error) {
 // that moved since Ready is no evidence: fail closed.
 func (e *Engine) refresh(ctx context.Context, w *Writer) error {
 	by, err := e.Legs.Asset.Spender(ctx, w.Last.Txid, w.Last.Vout)
+	err = reader.QuietSpend(err)
 	if err != nil {
 		return fmt.Errorf("%w: the node could not say whether %s.%d is spent: %v", ErrStale, w.Last.Txid, w.Last.Vout, err)
 	}
@@ -737,8 +739,9 @@ func (e *Engine) finish(ctx context.Context, v *state.Vault) error {
 // else won, and this one is discarded.
 func (e *Engine) lostOrCopy(ctx context.Context, v *state.Vault, tr *state.Transition, why string, payer *producer.Payer) error {
 	by, err := e.Legs.Asset.Spender(ctx, tr.Parent, tr.ParentVout)
+	err = reader.QuietSpend(err)
 	if err != nil {
-		return fmt.Errorf("%s: refused (%s), and the node could not say what spends its predecessor: %w (the next command looks again)", tr.What, why, err)
+		return fmt.Errorf("%s: the node could not say what spends its predecessor, so it is kept and the next command looks again; refused (%s): %w", tr.What, why, err)
 	}
 	if by != "" && by != tr.Txid {
 		// Another transaction spends the predecessor. Whether it won, or is

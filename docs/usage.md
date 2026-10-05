@@ -318,7 +318,12 @@ holds it, verifies against `header_url` and its output is unspent per
 unspent too. The evidence is taken again as each token is built. Without
 it nothing is written (exit 1): a vault's tip spent by something this home
 does not know means another home moved the vault (`bsecret sync`), or the
-vault is terminated.
+vault is terminated. Only the node's status `OK` is unspent: a node that
+answers any other status (`NOT_FOUND`, which a node also answers for an
+output it pruned or could not read, `IMMATURE`, `FROZEN`, a `SPENT` naming
+no spender) or cannot be read is no evidence either, and the message says
+`the node could not say whether ... is spent`; run the command again once
+the node answers.
 
 **A version.** `put` draws a content key and a salt at random, pads the
 payload (the name, the value, the claims) to a multiple of 256 bytes, seals
@@ -345,7 +350,11 @@ waited for until it is mined in this home's headers. It took effect only
 when a transaction spending its predecessor is mined and carries byte for
 byte the record built: a copy of it with another txid is taken as the same
 transition; any other spender won, and the transition is discarded (exit
-1, `lost`). Then, after `delay`, the token is published with its parent,
+1, `lost`). When a leg refuses the token and the node does not say whether
+its predecessor is spent (`the node could not say what spends its
+predecessor`), nothing is discarded, even if its fee coin is spent
+elsewhere, since that may be a copy of this token: it stays persisted (exit
+2) and the next command looks again. Then, after `delay`, the token is published with its parent,
 each with its minimal proof, to the facade and to every host named (in
 unicast to every host), and confirmed at each host by a lookup. Every token
 and sweep must reach every host named; a carrier in unicast needs the

@@ -11,6 +11,8 @@ import (
 	"github.com/lightwebinc/bcommon/guard"
 	"github.com/lightwebinc/bcommon/nodeapi"
 
+	"github.com/lightwebinc/borg/reader"
+
 	"github.com/lightwebinc/bsecret/internal/state"
 )
 
@@ -64,6 +66,7 @@ func Reconcile(ctx context.Context, st *state.State, pool *bwallet.Pool, asset *
 			continue
 		}
 		by, err := asset.Spender(ctx, o.TxID, o.Vout)
+		err = reader.QuietSpend(err)
 		switch {
 		case err != nil:
 			note("coin %s was taken from the pool by a run that stopped before it recorded what spent it, and the node could not say whether it is spent (%v): it is looked at again by the next command", op, err)

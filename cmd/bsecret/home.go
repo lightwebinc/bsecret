@@ -170,7 +170,7 @@ type spendSource struct{ *nodeapi.Asset }
 func (s spendSource) Spender(ctx context.Context, txid string, vout uint32) (string, error) {
 	by, err := s.Asset.Spender(ctx, txid, vout)
 	if err != nil {
-		return "", err
+		return "", reader.QuietSpend(err)
 	}
 	by = strings.ToLower(by)
 	if by != "" && !config.IsHex32(by) {

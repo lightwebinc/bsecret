@@ -4,8 +4,8 @@ go 1.27.1
 
 require (
 	github.com/bsv-blockchain/go-sdk v1.5.2
-	github.com/lightwebinc/bcommon v0.8.0
-	github.com/lightwebinc/borg v0.1.8
+	github.com/lightwebinc/bcommon v0.9.1
+	github.com/lightwebinc/borg v0.1.9
 )
 
 require (

@@ -46,6 +46,15 @@
  *                            the signed responses a second one BRC-104
  *                            session is given, and at once; default 5 and
  *                            20
+ *   BSECRET_ARCADE_URL, BSECRET_ASSET_URL
+ *                            arcade, which the host broadcasts payments
+ *                            through, and the node's asset service (spend
+ *                            view, proofs); without both every payment is
+ *                            held until mined (accept.ts)
+ *   BSECRET_ACCEPT_THRESHOLD_SATS, BSECRET_ACCEPT_PAYER_LIMIT,
+ *   BSECRET_ACCEPT_TOTAL_LIMIT, BSECRET_ACCEPT_WINDOW, BSECRET_ACCEPT_WATCH
+ *                            the acceptance rule; default 25000000, one
+ *                            and ten thresholds, 1h, 0s
  *
  * Every `tm_bsecret_` topic in OVERLAY_TOPICS must be a crypt named here,
  * because a bsecret topic left to the host's default manager would admit
@@ -55,7 +64,9 @@
 import { isAbsolute } from 'node:path'
 import type { Server } from 'node:http'
 import { PrivateKey, ProtoWallet, type ChainTracker } from '@bsv/sdk'
+import { Transaction, Utils } from '@bsv/sdk'
 import type { Module, ModuleHost } from '@lightwebinc/bcommon'
+import { gateFor, parseAcceptConfig, type AcceptConfig } from './accept.js'
 import { DefaultMaxBEEF, DefaultMaxSweepInputs } from './admit.js'
 import { DefaultBudget, DefaultResponseBudget, type BudgetConfig, type ResponseBudgetConfig } from './budget.js'
 import { HeaderTracker, isNativeSource } from './headers.js'
@@ -74,6 +85,8 @@ declare const BSECRET_BUILD: string | undefined
 
 /** How often retention runs, seconds. */
 const PruneEvery = 3600
+/** How often the background tick runs (payment watch; retention every PruneEvery), seconds. */
+const TickEvery = 30
 
 /** The token statuses the index reports (spec section 11.2), each counted. */
 export const TokenStatuses = ['consistent', 'pending', 'set-mismatch', 'stale-mismatch', 'commitment-reuse'] as const
@@ -93,6 +106,8 @@ export interface Config {
   sessions: { max: number; ttlSeconds: number }
   handshakes: BudgetConfig
   responses: ResponseBudgetConfig
+  /** Payment acceptance; bcommon's DefaultPolicy with no arcade or node (every payment held) when unset. */
+  accept?: AcceptConfig
 }
 
 /** Parses BSECRET_CRYPTS. Throws on anything it cannot take exactly. */
@@ -169,6 +184,7 @@ export function parseConfig(env: NodeJS.ProcessEnv): Config {
       perSec: rate('BSECRET_RESPONSES_PER_SEC', env['BSECRET_RESPONSES_PER_SEC'], DefaultResponseBudget.perSec),
       burst: integer('BSECRET_RESPONSE_BURST', env['BSECRET_RESPONSE_BURST'], DefaultResponseBudget.burst, 1),
     },
+    accept: parseAcceptConfig('BSECRET', env),
   }
   const listen = env['BSECRET_LISTEN']?.trim()
   if (listen !== undefined && listen !== '') {
@@ -217,7 +233,6 @@ export function secretModule(host: ModuleHost, c: Config, overlayTopics?: readon
   for (const status of TokenStatuses) host.metrics.preset('bsecret_token_status_total', { status })
   for (const why of ['evidence', 'retention', 'table']) host.metrics.preset('bsecret_dropped_total', { why })
   for (const why of ['cap', 'idle']) host.metrics.preset('bsecret_sessions_evicted_total', { why })
-  for (const result of ['requested', 'accepted', 'refused', 'replayed']) host.metrics.preset('bsecret_payments_total', { result })
   host.metrics.preset('bsecret_retractions_total')
   host.metrics.preset('bsecret_equivocations_total')
   const priced = new Set([...c.prices].filter(([, p]) => p > 0).map(([name]) => name))
@@ -244,24 +259,47 @@ export function secretModule(host: ModuleHost, c: Config, overlayTopics?: readon
   const topics: Record<string, SecretTopicManager> = {}
   for (const crypt of c.crypts) topics[topic(crypt)] = new SecretTopicManager(topic(crypt), host, tracker, c.maxBEEF, c.maxSweepInputs)
   let front: LookupFront | undefined
+  const accept = c.accept ?? parseAcceptConfig('BSECRET', {})
+  const receiver = c.listen !== undefined && priced.size > 0 ? new LedgerReceiver(c.stateDir) : undefined
+  const gate = receiver !== undefined && tracker !== undefined ? gateFor('bsecret', host, tracker, accept, c.stateDir) : undefined
+  if (gate !== undefined && receiver !== undefined) {
+    for (const f of receiver.fast) {
+      try {
+        gate.restore(Transaction.fromAtomicBEEF(Utils.toArray(f.beef, 'base64')), f.senderIdentityKey, f.satoshis, f.at)
+      } catch {
+        // a line whose BEEF does not parse was never answered fast
+      }
+    }
+  }
   if (c.listen !== undefined) {
     front = new LookupFront({
       ls,
       host,
       prices: c.prices,
       wallet: c.payeeKey === undefined ? undefined : new ProtoWallet(c.payeeKey),
-      receiver: priced.size > 0 ? new LedgerReceiver(c.stateDir) : undefined,
+      receiver,
       headers: tracker,
+      gate,
       sessions: c.sessions,
       budget: c.handshakes,
       responses: c.responses,
     })
   }
   const start = async (): Promise<Server | undefined> => {
+    let pruned = Date.now()
+    let sweeping = false
     const timer = setInterval(() => {
-      if (!ls.restored) return
+      if (gate !== undefined && !sweeping) {
+        sweeping = true
+        gate
+          .sweep()
+          .catch((e: unknown) => host.log('bsecret payment watch failed', { err: String(e) }))
+          .finally(() => (sweeping = false))
+      }
+      if (!ls.restored || Date.now() - pruned < PruneEvery * 1000) return
+      pruned = Date.now()
       ls.prune().catch((e: unknown) => host.log('ls_bsecret retention failed', { err: String(e) }))
-    }, PruneEvery * 1000)
+    }, TickEvery * 1000)
     timer.unref()
     if (front === undefined || c.listen === undefined) return undefined
     const server = await front.listen(c.listen.port, c.listen.host)
@@ -278,6 +316,7 @@ export function secretModule(host: ModuleHost, c: Config, overlayTopics?: readon
     sessions: c.listen === undefined ? 'none' : `${c.sessions.max}, idle ${c.sessions.ttlSeconds}s`,
     handshakes: c.listen === undefined ? 'none' : `${c.handshakes.perSec}/s burst ${c.handshakes.burst}, per address ${c.handshakes.perAddressPerSec}/s burst ${c.handshakes.addressBurst}`,
     responses: c.listen === undefined ? 'none' : `${c.responses.perSec}/s burst ${c.responses.burst} a session`,
+    payments: gate === undefined ? 'none' : gate.networked ? `fast to ${accept.policy.thresholdSats} sat, payer ${accept.policy.payerLimit}, total ${accept.policy.totalLimit}` : 'held until mined (no arcade or asset URL)',
     build,
   })
   return { module: { topics, lookups: { [LookupService]: ls } }, ls, front, start }

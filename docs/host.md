@@ -76,6 +76,13 @@ it again. A crypt is joined by replay (below).
 | `BSECRET_HANDSHAKE_ADDR_BURST` | 4 | the most handshakes one remote address is answered at once |
 | `BSECRET_RESPONSES_PER_SEC` | 5 | signed responses a second one BRC-104 session is given; decimals allowed |
 | `BSECRET_RESPONSE_BURST` | 20 | the most signed responses one session is given at once |
+| `BSECRET_ARCADE_URL` | none | arcade, which the host broadcasts each payment through before it answers (`POST /tx`, `GET /tx/<txid>`) |
+| `BSECRET_ASSET_URL` | none | the node's asset service: the spend view of a payment's inputs and the proof of a held or watched payment. Without both URLs every payment is held until it mines |
+| `BSECRET_ACCEPT_THRESHOLD_SATS` | 25000000 | the largest payment answered on the network's acceptance; above it a payment is held until it mines |
+| `BSECRET_ACCEPT_PAYER_LIMIT` | the threshold | satoshis one payer may have answered fast and not yet mined; past it, held |
+| `BSECRET_ACCEPT_TOTAL_LIMIT` | ten thresholds | the same across every payer |
+| `BSECRET_ACCEPT_WINDOW` | `1h` | how long a fast payment counts against the limits unless it mines first (`ms`, `s`, `m`, `h`) |
+| `BSECRET_ACCEPT_WATCH` | `0s` | how long the host keeps watching for a conflict after arcade's acceptance before it answers |
 
 A price needs `BSECRET_LISTEN` and `BSECRET_PAYEE_KEY`. Any mistake stops
 the host before its port opens.
@@ -247,7 +254,7 @@ a host rate-limits submissions in front of the engine.
 - `payments.jsonl` holds every payment the terms route accepted: the Atomic
   BEEF, the derivation prefix and suffix, the sender's identity key, the
   satoshis, the class and the outpoints the payment spends. The route
-  answers once the line is on disk. It does not broadcast the payment.
+  answers once the line is on disk. The host broadcasts the payment ([Payment acceptance](#payment-acceptance)); the payee still settles it.
 
 Both files are append-only, so a copy taken while the host runs is safe: at
 worst its last line is cut short, and both readers skip such a line. Any
@@ -257,11 +264,11 @@ the directory daily beside the database backup and keep several days.
 Restore it only when it is lost or damaged, never to roll the host back:
 rows written after the copy are gone.
 
-A payment is money only once it is broadcast and mined; until then the
-payer can spend the same coins elsewhere. The route refuses a payment that
+A payment is money only once it is mined; until then the payer can race a conflicting spend to a miner. The route refuses a payment that
 spends a coin an accepted payment already spent, across restarts, so two
-unbroadcast transactions on one coin buy one answer and not two; it cannot
-see a spend it was never shown. Settle each line promptly with
+transactions on one coin buy one answer and not two, and the host's own
+broadcast and the node's spend view catch a spend it was never shown
+([Payment acceptance](#payment-acceptance)). Settle each line promptly with
 the payee wallet's BRC-100 `internalizeAction` (protocol `wallet payment`,
 output 0, the remittance as written), which broadcasts it.
 
@@ -327,8 +334,19 @@ replay can cost.
 `bsecret_handshakes_total{result}` counts `accepted`, `failed`,
 `limited_address` and `limited_global`; `bsecret_requests_total{result}`
 counts authenticated requests refused before any signature (`replayed`,
-`limited`); `bsecret_sessions` is the sessions kept; `bsecret_payments_total{result}` counts `requested`, `accepted`,
-`refused` and `replayed`.
+`limited`); `bsecret_sessions` is the sessions kept;
+`bsecret_payments_total{decision,reason}` counts paid questions by what the
+host did: `requested` (`no-payment`, a 402 with the price), `fast`
+(`at-or-below-threshold`, `mined`), `hold` (`above-threshold`,
+`payer-limit`, `total-limit`, `payer-flagged`, `no-broadcast-leg`,
+`broadcast-unconfirmed`, `no-network-verdict`, `double-spend-attempted`,
+`spend-view-unknown`, `watch-limit`, ...) and `refuse` (`malformed`,
+`wrong-script`, `spv-failed`, `not-final`, `outputs-exceed-inputs`,
+`network-refused`, `double-spent`, `replayed`, `conflict`);
+`bsecret_payment_events_total{kind}` counts fast payments the watch
+resolved (`confirmed`, `double-spent`, `refused`, `unmined`; all but the
+first flag the payer); `bsecret_payments_unmined` is the fast payments being
+watched.
 
 ## Joining a crypt
 
@@ -341,6 +359,53 @@ tree, which no host keeps: the publisher's home supplies it, or a chain
 source while it still serves the tree. Tokens, carriers and
 sweeps may be replayed in any order: a token ahead of its predecessor is
 `pending` until the predecessor arrives.
+
+
+## Payment acceptance
+
+A paid question is answered only after the payment is held to bcommon's
+acceptance rule (package `acceptance`, the same rule for every layer):
+
+1. the route's own checks (prefix, output 0 pays the derived key, SPV
+   against the host's headers, a txid and coins never used before);
+2. finality (lock time 0, or every input final) and conservation (every
+   input carries its source, and the outputs do not exceed the inputs);
+3. the value: at or below `BSECRET_ACCEPT_THRESHOLD_SATS`, and within the
+   payer's and the total limits, it is fast; otherwise it is held;
+4. the host broadcasts it through `BSECRET_ARCADE_URL`, unmined ancestors first,
+   held or fast: this is how the payee collects;
+5. on the fast path the host answers only once arcade reports the network
+   took it (`SEEN_ON_NETWORK`, `ACCEPTED_BY_NETWORK`, ...), with no
+   `DOUBLE_SPEND_ATTEMPTED` and no competing transaction, and the node shows
+   every input unspent or spent by this payment.
+
+A refusal (arcade `REJECTED`, a definitive HTTP refusal, an input spent by
+another transaction, a payment that is not final or spends more than it
+holds) is answered 400 `ERR_PAYMENT_REFUSED`. Anything else that is not
+fast (above the threshold, a limit reached, a conflict reported, no
+verdict within 10 s, a spend view that cannot say) is answered 402
+`ERR_PAYMENT_HELD` with the reason and no BRC-105 headers, so a client
+does not pay again. The held payment is recorded in `payments.jsonl` with
+`"decision":"hold"`, keeps its coins, and the same payment sent again is
+answered once the node serves its proof and that proof verifies against the
+host's headers. A host with no arcade or no node holds every payment (with
+arcade alone it still broadcasts, and with the node alone it answers a
+payment the node shows mined). At most 100,000 fast payments are watched at
+once; past that a payment is held (`watch-limit`).
+
+Every fast payment is watched on the host's background tick (every 30 s,
+the 500 least recently checked each time) until it mines. One whose input
+another transaction spent, that arcade refuses, or that has not mined
+within a day, is written to `unsettleable.jsonl` in the state directory,
+logged, and counted; its payer is then held for confirmation on every
+later payment. Flags outlive a restart: the host reads `unsettleable.jsonl`
+when it starts, so an operator unflags a payer by removing its lines and
+restarting. Nothing is clawed back: the answer was given. A restart
+watches the fast lines of the last day again, and counts those of the last
+window against the limits.
+
+The ledger line carries `decision` (`fast`, `hold` or `mined`) and
+`reason`; `bsecret payee settle` reads it as before.
 
 ## Metrics
 

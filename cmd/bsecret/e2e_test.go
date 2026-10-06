@@ -172,6 +172,8 @@ func refHosts(t *testing.T, chainURL, hall, crypt, payeeKey string, names ...str
 			"BSECRET_PRICES=history=5,history-after=5,audit=20,audit-after=20",
 			"BSECRET_PAYEE_KEY=" + payeeKey,
 			"BSECRET_SESSIONS=64",
+			"BSECRET_ARCADE_URL=" + chainURL + "/arcade",
+			"BSECRET_ASSET_URL=" + chainURL,
 		}
 		rh.start()
 		t.Cleanup(rh.stop)

@@ -240,7 +240,7 @@ history-after  5 sat a question
 audit          20 sat a question
 audit-after    20 sat a question
 $ bs auditor audit
-paid 20 sat to 0268…a450 in 9ade…7f2e for audit, recorded by the host for its payee to settle
+paid 20 sat to 0268…a450 in 9ade…7f2e for audit, broadcast by the host for its payee to settle
 vault   7b1e…04aa ops
 owner   02c6…9a1e
 ...

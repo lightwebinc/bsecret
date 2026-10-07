@@ -10,33 +10,46 @@ lines are abbreviated with `…`. The concepts are in
 
 | For | You need |
 | --- | --- |
-| reading a secret as a member | a home around your identity key, the crypt's hosts (and the hall's), a header source, and a node's asset API |
-| auditing a vault | a header source and the hosts; no home and no coin with `audit -free` |
-| owning vaults | a borg organization with a group and `borg org signer` run once, about 20,000 sat in a wallet you control, a broadcast service |
+| reading a secret as a member | a home around your identity key and the crypt's hosts (and the hall's) |
+| auditing a vault | the hosts; no home and no coin with `audit -free` |
+| owning vaults | a borg organization with a group and `borg org signer` run once, and about 20,000 sat in a wallet you control |
 | hosts | borg's host image with the bsecret module added, or the module on a reference overlay host ([host.md](host.md)) |
+
+No node is needed. On mainnet and testnet bsecret reads headers,
+transactions, proofs and spends from WhatsOnChain and broadcasts through
+GorillaPool's public arcade, each checked as
+[configuration.md](configuration.md#no-node-needed) describes; a node of
+your own (`chain = asset:<URL>`) is the better option where you have one.
 
 There is no coinbase on mainnet or testnet for you to mine: a home is
 funded by a payment you send from your own wallet. `bsecret fund` without
-`-txid` is for a regtest chain you run (coinbase: only on a regtest chain
-you run, for development and tests).
+`-txid` or `-beef` is for a regtest chain you run (coinbase: only on a
+regtest chain you run, for development and tests).
 
 ## 2. Check the network from your machine
 
 Reads only, needs no coin and no hosts:
 
 ```console
-$ bsecret -network main -header-url woc:main doctor
+$ bsecret -network main doctor
 home        /home/you/.bsecret
 network     main
+crypt       not configured
+chain       woc:main
 …
-headers     woc:main tip 970057
+headers     woc:main tip 970084
+fee         100/1000 sat/bytes, floor 250 sat (static)
+…
+settle      arcade:main
 ```
 
 On testnet:
 
 ```console
-$ bsecret -network test -header-url woc:test doctor | grep headers
-headers     woc:test tip 1761975
+$ bsecret -network test doctor | grep -E 'chain|headers|settle'
+chain       woc:test
+headers     woc:test tip 1761989
+settle      arcade:test
 ```
 
 ## 3. Configure the owner's home
@@ -44,18 +57,16 @@ headers     woc:test tip 1761975
 ```console
 $ mkdir -p ~/.bsecret && cat > ~/.bsecret/config <<'CONF'
 network    = main
-header_url = woc:main
-asset      = https://asset.example.com
-settle     = arcade:https://arc.example.com
 mode       = unicast
 hosts      = https://host-a.example.com,https://host-b.example.com
 hall       = example_qzxkvbmwtr
 CONF
 ```
 
-For testnet: `network = test`, `header_url = woc:test`, and a testnet node
-and broadcast service. When the hall's hosts are other hosts than the
-crypt's, add `hall_hosts`.
+For testnet: `network = test`. When the hall's hosts are other hosts than
+the crypt's, add `hall_hosts`. With a node and a broadcaster of your own:
+`chain = asset:<URL>` and `settle = arcade:<URL>` (or `arc:<URL>`,
+`rpc:<URL>`).
 
 ## 4. Create the home and fund it
 
@@ -71,19 +82,43 @@ fund address 1BnB…3xET (main)
 
 The fund address is bsecret's own: coin sent to the borg home does not
 count here. Send about 20,000 sat from your own wallet to it (on testnet
-the address starts with `m` or `n`). After one confirmation, import it:
+the address starts with `m` or `n`), then import the payment one of two
+ways.
+
+After one confirmation, by its txid:
 
 ```console
 $ bsecret fund -txid 9ade…7f2e
+imported 1 of 1 output(s) paying 1BnB…3xET, 20000 sat, mined at height 970090; pool 1 output(s), 20000 sat
 ```
 
-`fund -txid` reads the transaction and its proof from `asset` and checks
-the proof against `header_url`. On mainnet, `fund` without `-txid` is
-refused:
+`fund -txid` reads the transaction and its proof from the chain view
+(WhatsOnChain by default) and checks the proof against the header source.
+
+Or at once, from the BEEF your wallet handed over (a file, or `-` for
+standard input), with no lookup at all:
+
+```console
+$ bsecret fund -beef payment.beef
+imported 1 of 1 output(s) paying 1BnB…3xET, 20000 sat, from 9ade…7f2e, not mined yet: held back until it mines; pool 1 output(s), 20000 sat
+```
+
+A payment not mined yet is taken when every parent it spends is proven and
+it verifies against them; it is also sent to the broadcaster, in case your
+wallet did not, and spent only once it mines. `-refuse-unmined` (or
+`fund_unmined = refuse`) takes only a mined one. A payment that pays the
+fund address nothing is refused:
+
+```console
+$ bsecret fund -txid 3281…2d86
+bsecret: the payment pays nothing to the fund address 1BnB…3xET
+```
+
+On mainnet, `fund` without `-txid` or `-beef` is refused:
 
 ```console
 $ bsecret fund
-bsecret: fund without -txid mines coinbase, which only a chain you run does; on network main, import a payment with fund -txid
+bsecret: fund without -txid or -beef mines coinbase, which only a chain you run does; on network main, import a payment with fund -txid or fund -beef
 ```
 
 ## 5. Create a crypt and give it to your hosts
@@ -119,7 +154,7 @@ $ bsecret put api/token -file token.txt -label restricted -not-after 2027-01-01T
 ```
 
 A value is read from standard input or `-file`, never from an argument.
-Each `put` takes about a block and a minute and costs about 900 sat.
+Each `put` takes about a block and a minute and costs about 260 sat.
 
 ## 7. As a member: read a secret
 
@@ -132,8 +167,6 @@ crypt      = example_hmqzvtkwrx
 org        = 02c6…9a1e
 vault      = ops
 hosts      = https://host-a.example.com,https://host-b.example.com
-header_url = woc:main
-asset      = https://asset.example.com
 ```
 
 ```console
@@ -204,7 +237,7 @@ Anyone can run it; it needs no coin and signs nothing.
 
 ```console
 $ bsecret init -from identity.json    # the organization's key, carried by hand
-$ bsecret fund -txid <a payment you sent to this home's fund address>
+$ bsecret fund -txid <a payment you sent to this home's fund address>   # or fund -beef FILE
 $ bsecret sync
 ```
 
@@ -226,7 +259,7 @@ $ bsecret kill -confirm KILL -yes     # retracts every version the home publishe
 
 ```console
 $ docker run --rm -v bsecret-home:/home/nonroot/.bsecret \
-    -e BSECRET_NETWORK=main -e BSECRET_HEADER_URL=woc:main \
+    -e BSECRET_NETWORK=main \
     ghcr.io/lightwebinc/bsecret doctor
 ```
 

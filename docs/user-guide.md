@@ -126,8 +126,9 @@ it needs it, and keeps none on disk.
 
 ```console
 $ bsecret init -borg ~/.borg          # a bsecret home around the same identity; prints the fund address
-$ # send about 20,000 sat from your own wallet to that address; wait one block
-$ bsecret fund -txid <txid>           # import that payment into the home's pool
+$ # send about 20,000 sat from your own wallet to that address
+$ bsecret fund -txid <txid>           # import that payment once mined; or:
+$ bsecret fund -beef payment.beef     # import it at once, from the BEEF your wallet handed over
 $ bsecret crypt new ops               # or use a crypt your hosts already carry
 $ bsecret vault create engineering -name ops
 ```
@@ -135,9 +136,19 @@ $ bsecret vault create engineering -name ops
 `init -borg` copies the identity file and nothing else. The two homes keep
 separate coin, state and locks, and bsecret never writes into the borg
 home. Put the addresses in `~/.bsecret/config`
-([configuration.md](configuration.md) has examples): the crypt's hosts, the hall's hosts when they are others, a
-header source, a node, a settlement leg, and on a multicast plane the
-facade.
+([configuration.md](configuration.md) has examples): the crypt's hosts, the
+hall's hosts when they are others, and on a multicast plane the facade.
+
+No node is needed. On mainnet and testnet the header source, the chain
+view and the broadcaster default to public services: headers and the
+chain view (transactions, proofs, and which outputs are spent) from
+WhatsOnChain, and broadcasts through GorillaPool's public arcade. Every
+proof is checked against the headers, and every header against its proof
+of work; what cannot be checked is the chain view's word that an output is
+unspent. A node of your own (`chain = asset:<URL>`) removes that trust and
+is the better option where you have one
+([configuration.md](configuration.md#no-node-needed)). Below, "the node"
+means the chain view, whichever it is.
 
 ```text
 # ~/.bsecret/config, a member on mainnet
@@ -146,15 +157,13 @@ crypt      = example_crypt_hmqzvtkwrx
 org        = 02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
 vault      = ops
 hosts      = https://host-a.example.com,https://host-b.example.com
-header_url = woc:main
-asset      = https://asset.example.com
 ```
 
-On testnet, `network = test` and `header_url = woc:test`, with a testnet
-node's asset API.
+On testnet, `network = test`; the defaults follow it.
 
-No address has a default: a default would send an organization's records,
-or a member's questions, to a server nobody chose.
+The overlay addresses have no default: a default would send an
+organization's records, or a member's questions, to a server nobody
+chose.
 
 A vault's label set (`-labels`) and anchor mode (`-anchor`) are fixed when
 it is created. A label is a classification the owner writes down
@@ -202,7 +211,8 @@ one block each; different vaults move in the same block.
 
 What it costs: a version is one carrier, which is never mined and rides a
 funding output of one satoshi, and one mined token of about 850 bytes, so
-about 900 satoshis at 1 satoshi a byte with its share of the funding tree.
+about 260 satoshis at the default fees (the 250-satoshi floor) with its
+share of the funding tree.
 Reading costs nothing. [limits.md](limits.md) has the measured table.
 
 If a command stops part way (a host down, the network slow, the machine
@@ -448,7 +458,7 @@ every endpoint answers.
 | `borg org signer` | the organization's signer key is not a member of the group | run `borg org signer` in the organization's borg home |
 | `outbox` in `doctor` | something was built and not confirmed at every host | run any writing command: it publishes it first |
 | `tree ... signed for coin ... and not recorded as minted` in `doctor` | a command stopped while minting a funding tree | run any writing command: it asks the node and says what it found |
-| `fee input: ... no spendable output` (exit 2) | the home has no coin | send a payment to its fund address and `bsecret fund -txid <txid>`. If it says coins are change not yet mined, or that a funding tree minted ahead still holds the coin, run the command again after a block |
+| `fee input: ... no spendable output` (exit 2) | the home has no coin | send a payment to its fund address and `bsecret fund -txid <txid>` or `bsecret fund -beef FILE`. If it says coins are change not yet mined, or that a funding tree minted ahead still holds the coin, run the command again after a block |
 | `the only transitions built are the acknowledgement ...` on a write | the vault is behind its group or in debt: nothing else is built | `bsecret rotate`, with a choice for every secret |
 
 ## 17. The kill switch

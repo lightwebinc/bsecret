@@ -13,22 +13,23 @@ You need:
 - A borg organization with a group, and `borg org signer` run once in its
   borg home ([borg's quickstart](https://github.com/lightwebinc/borg/blob/main/QUICKSTART.md)).
 - BSV in a wallet you control (testnet coin on testnet). About 20,000 sat
-  covers a vault and about twenty versions; a version costs about 900 sat
+  covers a vault and about seventy versions; a version costs about 260 sat
   ([limits.md](docs/limits.md)). The borg home is funded separately.
 - Overlay hosts that carry the crypt (and the group's hall): borg's host
   image with the bsecret module added, or the module on any reference
   overlay host ([host.md](docs/host.md)).
-- A node's asset API (`asset`, a Teranode node you run or may use), a
-  broadcast service (`settle`: `arcade:<url>` for any ARC-compatible API,
-  `rpc:<url>` or `tcp:<host:port>`), and a header source (`woc:main`,
-  `woc:test`, or your own).
+
+No node is needed. bsecret reads headers, transactions, proofs and spends
+from WhatsOnChain and broadcasts through GorillaPool's public arcade by
+default, checking every proof against the headers
+([configuration.md](docs/configuration.md#no-node-needed)). A node of your
+own (`chain = asset:<URL>`), your own header service (`header_url =
+bhs:<URL>`) and your own broadcaster (`settle = arcade:<URL>`) are the
+better options where you have them.
 
 ```console
 $ mkdir -p ~/.bsecret && cat > ~/.bsecret/config <<'CONF'
 network    = main
-header_url = woc:main
-asset      = https://asset.example.com
-settle     = arcade:https://arc.example.com
 mode       = unicast
 hosts      = https://host-a.example.com,https://host-b.example.com
 hall       = example_qzxkvbmwtr
@@ -40,11 +41,11 @@ fund address 1Ab... (main)
 ```
 
 The fund address is bsecret's own, not the borg home's. Send about 20,000
-sat from your own wallet to it. When the payment has one confirmation,
-import it by its txid:
+sat from your own wallet to it, then import the payment: by its txid once
+it has one confirmation, or at once from the BEEF your wallet handed over:
 
 ```console
-$ bsecret fund -txid <txid>
+$ bsecret fund -txid <txid>          # or: bsecret fund -beef payment.beef
 $ bsecret crypt new example          # give the printed BSECRET_CRYPTS line to your hosts
 $ echo 'crypt = example_<suffix>' >> ~/.bsecret/config
 $ bsecret doctor                     # every endpoint answers?
@@ -53,16 +54,15 @@ $ bsecret put db/password < new-password.txt
 ```
 
 Each member makes a home around its own borg home (`bsecret init -borg
-~/.borg`, no coin needed) and, with `crypt`, `org`, `vault`, `hosts`,
-`header_url` and `asset` in its config, reads:
+~/.borg`, no coin needed) and, with `crypt`, `org`, `vault` and `hosts` in
+its config, reads:
 
 ```console
 $ bsecret get db/password
 ```
 
-For testnet use `network = test` and `header_url = woc:test` with a
-testnet node and broadcast service; the fund address then starts with `m`
-or `n`. Every command after that is the same. The whole walk, with a
+For testnet use `network = test`; the headers, chain view and broadcaster
+follow it, and the fund address then starts with `m` or `n`. Every command after that is the same. The whole walk, with a
 revoke, an audit and a second home, is [docs/examples.md](docs/examples.md).
 
 ## Local development sandbox (no coin needed, a private regtest chain)
@@ -144,7 +144,8 @@ members of one of the organization's groups, so each bsecret home is made
 nothing else shared. The two homes keep separate coin: `bs org fund` (no
 `-txid`) mines coinbase to bsecret's own fund address on the sandbox chain
 (coinbase: only on a regtest chain you run, for development and tests; on
-mainnet or testnet you import a payment with `fund -txid` instead). The
+mainnet or testnet you import a payment with `fund -txid` or `fund -beef`
+instead). The
 members need no coin. The payee is host-a's, and the auditor is anyone at all: it is funded only to pay for
 the priced audit later.
 

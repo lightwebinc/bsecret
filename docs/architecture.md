@@ -26,7 +26,7 @@ flowchart LR
   A["auditor: bsecret audit"] -->|"vault tokens"| CH
   A -->|"group tokens"| HH
   BS -->|"settle"| BSV[("BSV blockchain")]
-  BS -->|"asset"| N["node asset API"]
+  BS -->|"chain"| N["chain view<br/>woc:main (default) or a node"]
   M & A & BS -->|headers| HS["header source"]
 ```
 
@@ -37,7 +37,7 @@ flowchart LR
 | borg | the organization, its groups and their epoch keys | [borg](https://github.com/lightwebinc/borg) |
 | host module | the topic manager `tm_bsecret_<crypt>` and the lookup service `ls_bsecret`, loaded by a reference overlay host beside borg's module | `host/` (TypeScript), [host.md](host.md) |
 | content store | optional: where a ciphertext over the inline bound is kept, a directory or an HTTP base URL | `content` |
-| header source, node asset API, settlement leg | as for borg | `header_url`, `asset`, `settle` |
+| header source, chain view, settlement leg | as for borg: WhatsOnChain and GorillaPool's public arcade by default on mainnet and testnet, or your own | `header_url`, `chain`, `settle` |
 | `devchain` | a local regtest chain for the sandbox and tests; nothing it mines is money | `cmd/devchain` |
 
 ## What lives on chain and what lives at the hosts
@@ -98,10 +98,11 @@ from block headers alone.
 
 The owner's bsecret home holds its own coin, separate from the borg home's.
 On mainnet and testnet the owner sends a payment from their own wallet to
-the fund address `init` prints and imports it with `bsecret fund -txid`.
-Fees are 1 sat a byte with a 250-sat floor; a version costs about 900 sat
-([limits.md](limits.md)). Members and free audits need no coin. `fund`
-without `-txid` mines coinbase (coinbase: only on a regtest chain you run,
+the fund address `init` prints and imports it with `bsecret fund -txid`, or
+hands over the BEEF its wallet made with `bsecret fund -beef`. No node is
+needed. Fees are the network's 100 sat per 1000 bytes with a 250-sat floor;
+a version costs about 260 sat ([limits.md](limits.md)). Members and free
+audits need no coin. `fund` without `-txid` or `-beef` mines coinbase (coinbase: only on a regtest chain you run,
 for development and tests).
 
 ## Trust
@@ -109,7 +110,8 @@ for development and tests).
 | You trust | For | Not for |
 | --- | --- | --- |
 | the header source | which blocks exist | anything a host says |
-| the node (`asset`) | whether a token is still the latest | the content of a record |
+| the chain view (`chain`: WhatsOnChain by default, or your node) | whether a token is still the latest | the content of a record, a transaction or a proof: each is checked |
+| the broadcaster (`settle`) | taking a transaction to the miners | whether it is valid: its "accepted" is held to the chain view's spends |
 | the hosts | availability | integrity or confidentiality: every answer is verified, and hosts hold no key |
 | the group's members | keeping what they read | anything after they are removed and the vault re-keys |
 

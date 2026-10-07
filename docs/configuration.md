@@ -22,27 +22,44 @@ one `key = value` per line, `#` comments, blank lines ignored. A key it
 does not define, a key given twice, or a line without `=` is an error,
 never ignored.
 
-The addresses (`hosts`, `hall_hosts`, `facade`, `header_url`, `asset`,
-`settle`, `rpc`, `paid_host`, `content`) have no default on purpose: a
-default would send an organization's records, or a member's questions, to a
-server nobody configured. A command that needs one and finds none exits 2
-naming the key.
+The overlay and content addresses (`hosts`, `hall_hosts`, `facade`,
+`paid_host`, `content`) have no default on purpose: a default would send an
+organization's records, or a member's questions, to a server nobody
+configured. A command that needs one and finds none exits 2 naming the key.
+
+The chain services do have defaults on `main` and `test`, so that a home
+needs no node of its own ([no node needed](#no-node-needed)): `chain` and
+`header_url` default to `woc:<network>` (WhatsOnChain) and `settle` to
+`arcade:<network>` (GorillaPool's public arcade). Each is a setting, and a
+node of your own is the better option for each. `regtest` has no public
+services and no defaults.
 
 ## Keys
 
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `arcade_key` | none | bearer token for an arcade installation named in `settle` |
-| `asset` | none | a Teranode node's asset HTTP API base URL (`/api/v1/...`): proofs, the chain tip, raw transactions, and the node's view of which outputs are spent (a writer's evidence, and a reader's that a token is the latest) |
+| `asset` | none | a Teranode node's asset HTTP API base URL (`/api/v1/...`). The older spelling of `chain = asset:<URL>`, and still read as that; set one of the two, not both. Also the node coinbase is mined through on a regtest chain |
+| `chain` | `woc:<network>` on `main` and `test`; none on `regtest` | the chain view: where raw transactions, proofs and spends are read ([chain views](#chain-views)). Its spend answers are a writer's evidence, and a reader's that a token is the latest |
 | `chain_tree_count` | `8` | outputs of a new chain tree, 1 to 32: a vault's first token carries its chain tree whole |
 | `content` | none | where a ciphertext over the inline bound is kept, comma separated: a directory (a writer stores into the first one; a reader reads from each) or an `http(s)` base URL a reader fetches `<base>/<hash>` from. A file is named by the lowercase hex of its SHA-256 |
 | `crypt` | none | the crypt identifier a command uses; an owner whose vaults are all in one crypt uses it |
 | `delay` | `60s` | the propagation delay: a mined token or sweep is published this long after its block is in this home's headers, so the hosts' headers have it too (spec section 8.3); `0s` to `10m` |
 | `facade` | none | mode `plane`: the overlay host a publisher submits to, from which the plane delivers to every subscribed host. Refused in mode `unicast` |
+| `fee_dust` | `250` | the least change kept as an output, in satoshis; less goes to the fee |
+| `fee_floor` | `250` | the least fee one transaction pays, in satoshis |
+| `fee_max_rate` | none; `1/1` with `fee_source = arc` | the most the fee rate may be, `SATS/BYTES`; a rate above it, a live policy's included, is lowered to it |
+| `fee_max_tx` | none | the most fee one transaction may pay, in satoshis; a build above it is refused, not paid |
+| `fee_min_rate` | `100/1000` | with `fee_source = arc`, the least a live policy's rate is taken as |
+| `fee_policy_urls` | the `settle` arcade or ARC | with `fee_source = arc`, the broadcasters whose `GET /policy` is read, comma separated; the highest rate of those that answer is used |
+| `fee_rate` | `100/1000` | the miner fee rate, `SATS/BYTES` (100 satoshis per 1000 bytes is the network's rate); a bare number is satoshis a byte |
+| `fee_source` | `static` | `static` (the rates above) or `arc`: the policy the broadcaster publishes, fetched at most every 5 minutes, held to `fee_min_rate` and `fee_max_rate`, and the static rate when it cannot be read |
 | `freshness` | `60s` | how old a writer's evidence that the vault's and the group's latest tokens are unspent may be when it publishes a version (spec section 7.1); at most `600s`. Every token retakes the evidence as it is built |
+| `fund_unmined` | `accept` | `accept` or `refuse`: whether `fund -beef` takes a payment that has not mined yet, when every parent it spends is proven |
 | `hall` | none | the borg hall a new vault's group lives in (`vault create`); a vault names its own afterwards |
 | `hall_hosts` | `hosts` | the overlay hosts asked about the group's hall, comma separated, at most 16 |
-| `header_url` | none | the header source every proof is checked against ([header sources](#header-sources)): `woc:main`, `woc:test`, `chaintracks:URL`, or an overlay bridge's base URL |
+| `header_token` | none | a bearer token sent to the header source (block-headers-service requires one unless its operator turned authentication off) |
+| `header_url` | `woc:<network>` on `main` and `test`; none on `regtest` | the header source every proof is checked against ([header sources](#header-sources)): `woc:main`, `woc:test`, `bhs:URL`, `arcade:URL`, `chaintracks:URL`, or an overlay bridge's base URL |
 | `home` | `~/.bsecret` | the identity's home |
 | `hosts` | none | the crypt's overlay hosts, comma separated, at most 16: every host a reader asks and compares; in mode `unicast` every host a publisher submits to; in mode `plane` the hosts every mined object is also sent to directly |
 | `max_fetch` | `16777216` | the most ciphertext a reader fetches by hash, in bytes; at most 134217728 |
@@ -53,36 +70,88 @@ naming the key.
 | `originator` | `bsecret` | the BRC-100 originator presented to the wallet |
 | `paid_host` | none | the base URL of `ls_bsecret` on the host the priced questions are asked of (`audit`, `history`, `terms`): the host's terms route (spec section 10.3). An origin, with no path |
 | `quorum` | `all` | how many of `hosts` must hold a carrier for it to count as published: `all`, `majority`, `one`, or a number up to the host count. In mode `unicast` they are the hosts that took it; in mode `plane`, the hosts that answer it by lookup once the facade took it. A token or a sweep always needs every host |
-| `rpc` | none | the node's JSON-RPC URL: `fund` without `-txid` (coinbase: only on a regtest chain you run, for development and tests) and `settle = rpc:` |
+| `rpc` | none | the node's JSON-RPC URL: `fund` without `-txid` or `-beef` (coinbase: only on a regtest chain you run, for development and tests) |
 | `rpc_pass`, `rpc_user` | `bitcoin` | the node's basic auth, also for `settle = rpc:` |
-| `settle` | none | the settlement leg for what is mined (funding trees, tokens, sweeps, a payment a payee takes): `arcade:<url>` (any ARC-compatible API, with `arcade_key`), `rpc:<url>` (a node's JSON-RPC, with `rpc_user` and `rpc_pass`) or `tcp:<host:port>` (raw transactions to an ingress, no acknowledgement) |
+| `settle` | `arcade:<network>` on `main` and `test`; none on `regtest` | the broadcaster for what is mined (funding trees, tokens, sweeps, a payment a payee takes): `arcade:main`, `arcade:test` (GorillaPool's public arcade), `arcade:<url>` (an arcade installation, your own included), `arc:<url>` (an ARC installation; with `arcade_key` where it needs a token), `rpc:<url>` (a node's JSON-RPC, with `rpc_user` and `rpc_pass`) or `tcp:<host:port>` (raw transactions to an ingress, no acknowledgement). An arcade's "accepted" is held to the chain view's spends |
 | `timeout` | `15s` | bounds each request; `1s` to `5m` |
 | `tree_count` | `32` | outputs of a new secret tree, 1 to 1000 |
 | `vault` | none | the vault a command uses: its identifier, or its display name when that names one vault |
+| `woc_key` | none | a WhatsOnChain API key, for a `woc:` chain view |
+| `woc_rate` | `3` | the WhatsOnChain requests a second the chain view paces itself to: 3 is the free tier; raise it to a key's plan |
 
 Every cap, with its reason, is in [limits.md](limits.md). A value out of
 range exits 2 naming the key and the limit.
 
 ## What each role needs
 
+On `main` and `test`, `chain`, `header_url` and `settle` take their
+defaults when unset, so a role needs only what is left.
+
 | Role | Keys |
 | --- | --- |
-| A member reading (`get`, `list`, `vault show`, `due`) | `hosts`, `header_url`, `crypt`, `org`, `vault`; `hall_hosts` when the hall's hosts are others; `asset` to know that what it read is the latest; `content` for a secret over the inline bound |
-| An auditor (`audit -free`) | the reader's, with no home; `paid_host`, `asset`, `settle` and coin to pay for the priced class instead |
-| The owner (every command that publishes) | the reader's, `hall` (for `vault create`), `asset`, `settle`, and `facade` in mode `plane` |
-| Funding a home on mainnet or testnet (`fund -txid`) | `asset`, `header_url` |
-| A host's payee (`payee settle`) | `header_url`, `asset`, `settle` |
-| A local regtest chain only (`fund` without `-txid`) | `rpc`, `asset`; coinbase: only on a regtest chain you run (development and tests) |
+| A member reading (`get`, `list`, `vault show`, `due`) | `hosts`, `header_url`, `crypt`, `org`, `vault`; `hall_hosts` when the hall's hosts are others; `chain` to know that what it read is the latest; `content` for a secret over the inline bound |
+| An auditor (`audit -free`) | the reader's, with no home; `paid_host`, `chain`, `settle` and coin to pay for the priced class instead |
+| The owner (every command that publishes) | the reader's, `hall` (for `vault create`), `chain`, `settle`, and `facade` in mode `plane` |
+| Funding a home on mainnet or testnet (`fund -txid`, `fund -beef`) | `header_url`; `chain` for `-txid` |
+| A host's payee (`payee settle`) | `header_url`, `chain`, `settle` |
+| A local regtest chain only (`fund` without `-txid` or `-beef`) | `rpc`, `chain = asset:<URL>`; coinbase: only on a regtest chain you run (development and tests) |
+
+## No node needed
+
+On `main` and `test` a home runs with no infrastructure of its own:
+
+| Role | Default | What it is |
+| --- | --- | --- |
+| Headers (`header_url`) | `woc:<network>` | WhatsOnChain's headers, each hashed and held to its proof of work |
+| Chain view (`chain`) | `woc:<network>` | WhatsOnChain: transactions, proofs and spends |
+| Broadcast (`settle`) | `arcade:<network>` | GorillaPool's public arcade |
+| Miner fee | `fee_rate = 100/1000` | the network's rate, static |
+
+What is checked and what is trusted:
+
+- **Transactions and proofs** are checked: a transaction must hash to its
+  txid, and every proof must verify against your header source.
+- **Headers** come from a third party, but each one must carry the proof of
+  work its bits claim (on mainnet at least the network's floor), so a lie
+  costs a mined block.
+- **"Unspent", "not known" and "not mined"** cannot be checked and are
+  WhatsOnChain's word. bsecret acts on "unspent" only where WhatsOnChain
+  tells an unspent output from an unknown one. A node of your own
+  (`chain = asset:<URL>`, or `chain = woc:main,spend=asset:<URL>` for its
+  spend answers alone) removes that trust.
+- **Broadcast** is arcade's policy and verdict. An arcade can answer
+  "accepted" for a transaction whose input another transaction already
+  spent, so its verdict is held to the chain view's spends.
+
+WhatsOnChain's free tier allows 3 requests a second, and the chain view
+paces itself to that. A home that publishes a lot needs `woc_key` (with
+`woc_rate` raised to the plan's rate) or a node.
+
+## Chain views
+
+| `chain` | Reads |
+| --- | --- |
+| `woc:main`, `woc:test` | WhatsOnChain: transactions, proofs and spends; no node |
+| `asset:https://node:8090` | a Teranode node's asset API for everything |
+| `asset:https://node:8090,woc:main` | a node, and WhatsOnChain for transactions and proofs the node lacks |
+| `woc:test,spend=asset:https://node:8090` | WhatsOnChain, with a node's answers on spends |
+
+A list is comma separated, and an entry may name the one method it serves
+(`tx=`, `proof=`, `spend=`, `known=`). Transactions and proofs are asked of
+each entry in turn, since each answer is checked; spends come from one
+entry only, the first that serves them, so an absence answer never falls
+through to another source.
 
 ## Networks
 
 | `network` | Fund address | Header source | Coinbase funding |
 | --- | --- | --- | --- |
-| `main` (default) | starts with `1` | `woc:main`, or your own chaintracks or bridge | refused |
-| `test` | starts with `m` or `n` | `woc:test`, or your own | not answered by a public testnet node; use `fund -txid` |
+| `main` (default) | starts with `1` | `woc:main` (default), or your own block-headers-service, arcade, chaintracks or bridge | refused |
+| `test` | starts with `m` or `n` | `woc:test` (default), or your own | not answered by a public testnet node; use `fund -txid` or `fund -beef` |
 | `regtest` | starts with `m` or `n` | the regtest chain's own (the sandbox's `devchain`) | `fund` mines it (coinbase: only on a regtest chain you run, for development and tests) |
 
-A `woc:` source must name the configured network, or the command exits 2.
+A `woc:` header source or chain view, and `arcade:main` or `arcade:test`,
+must name the configured network, or the command exits 2.
 bsecret's fund address is derived under its own protocol: coin paid to a
 borg home made around the same identity is not bsecret's.
 
@@ -90,13 +159,15 @@ borg home made around the same identity is not bsecret's.
 
 | `header_url` | Source |
 | --- | --- |
-| `woc:main`, `woc:test` | the public WhatsOnChain API: each header is hashed here and must carry the work its bits claim |
+| `woc:main`, `woc:test` | the public WhatsOnChain API (the default): each header is hashed here and must carry the work its bits claim |
+| `bhs:https://host:8080` | a [block-headers-service](https://github.com/bsv-blockchain/block-headers-service) you run, checked the same way; `header_token` is its bearer token |
+| `arcade:https://host` | the header server an [arcade](https://github.com/bsv-blockchain/arcade) installation embeds, checked the same way |
 | `chaintracks:https://host/v2` | a chaintracks v2 service, public or your own, checked the same way |
 | `https://host:port` | an overlay bridge's header read API (`GET /v1/tip`, `GET /v1/root/<height>`). It serves roots, not headers, so run it yourself |
 
 ```console
-$ bsecret -network main -header-url woc:main doctor | grep headers
-headers     woc:main tip 970057
+$ bsecret -network main doctor | grep headers
+headers     woc:main tip 970084
 ```
 
 ## Global flags
@@ -110,7 +181,14 @@ headers     woc:main tip 970057
 | `-vault VAULT` | `vault` | the vault: its identifier, or its display name |
 | `-hosts URLS` | `hosts` | the crypt's overlay hosts, comma separated |
 | `-hall-hosts URLS` | `hall_hosts` | the hosts of the group's hall |
+| `-chain SPEC` | `chain` | the chain view |
 | `-header-url SOURCE` | `header_url` | the header source |
+| `-settle SPEC` | `settle` | the broadcaster |
+| `-fee-rate R` | `fee_rate` | the miner fee rate, `SATS/BYTES` |
+| `-fee-source S` | `fee_source` | `static` or `arc` |
+| `-fee-floor N` | `fee_floor` | the least fee one transaction pays |
+| `-fee-max-rate R` | `fee_max_rate` | the most the rate may be |
+| `-fee-max-tx N` | `fee_max_tx` | the most fee one transaction may pay |
 | `-mode MODE` | `mode` | `plane` or `unicast` |
 | `-network NET` | `network` | `main`, `test` or `regtest` |
 | `-quorum Q` | `quorum` | `all`, `majority`, `one` or N |
@@ -126,7 +204,9 @@ headers     woc:main tip 970057
 | --- | --- | --- | --- |
 | `init` | `-borg DIR` | none | make the home around a borg home's identity key |
 | `init` | `-from FILE` | none | make the home around an `identity.json` carried by hand |
-| `fund` | `-txid TXID` | none | import this mined payment you sent to the fund address (mainnet, testnet) |
+| `fund` | `-txid TXID` | none | import this mined payment you sent to the fund address, read from the chain view (mainnet, testnet) |
+| `fund` | `-beef FILE` | none | import that payment as the BEEF your wallet handed over; `-` reads standard input (mainnet, testnet) |
+| `fund` | `-refuse-unmined` | `fund_unmined` | with `-beef`, take only a mined payment |
 | `fund` | `-blocks N` | `101` | coinbase: only on a regtest chain you run (development and tests); blocks to mine, or with `-rescan` to re-read |
 | `fund` | `-batch N` | `30` | coinbase: only on a regtest chain you run (development and tests); blocks per `generatetoaddress` call |
 | `fund` | `-rescan` | off | coinbase: only on a regtest chain you run (development and tests); re-read recent blocks for coinbase the pool lacks |
@@ -180,23 +260,30 @@ Building from source outside `make`: `GOPROXY`, `GONOPROXY` and
 
 ## Example files
 
-An owner on mainnet, publishing to two hosts in unicast:
+An owner on mainnet with no node, publishing to two hosts in unicast
+(headers, chain view and broadcaster are the defaults):
 
 ```text
 # ~/.bsecret/config
 network      = main
 crypt        = example_crypt_hmqzvtkwrx
 hall         = example_hall_vkqzmtrwxp
-header_url   = woc:main
-asset        = https://asset.example.com
-settle       = arcade:https://arc.example.com
-arcade_key   = <your ARC token, if the service needs one>
 mode         = unicast
 hosts        = https://host-a.example.com,https://host-b.example.com
 content      = /srv/bsecret/content
 ```
 
 On a multicast plane, `mode = plane` and `facade = https://host-a.example.com`.
+With a node and an arcade of your own, and the broadcaster's live fee
+policy, add:
+
+```text
+chain        = asset:https://asset.example.com
+header_url   = bhs:https://headers.example.com
+header_token = <your block-headers-service token>
+settle       = arcade:https://arcade.example.com
+fee_source   = arc
+```
 
 A member on testnet:
 
@@ -206,8 +293,6 @@ crypt        = example_crypt_hmqzvtkwrx
 org          = 02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
 vault        = ops
 hosts        = https://host-a.example.com,https://host-b.example.com
-header_url   = woc:test
-asset        = https://asset-test.example.com
 content      = https://content.example.com
 paid_host    = https://terms.host-a.example.com
 ```
@@ -222,7 +307,7 @@ at `/var/lib/bsecret-content`. Licenses are in `/usr/share/doc/bsecret/`.
 
 ```console
 $ docker run --rm -v bsecret-home:/home/nonroot/.bsecret \
-    -e BSECRET_NETWORK=main -e BSECRET_HEADER_URL=woc:main \
+    -e BSECRET_NETWORK=main \
     ghcr.io/lightwebinc/bsecret doctor
 ```
 

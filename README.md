@@ -57,15 +57,18 @@ image `ghcr.io/lightwebinc/bsecret` (`make docker-build`).
 
 The owner is a borg organization with a group (see
 [borg](https://github.com/lightwebinc/borg)), and has run `borg org signer`
-once. Nothing is mined for you: the bsecret home is funded with a payment
-you send from your own wallet.
+once. No node is needed: headers, transactions, proofs and spends come
+from WhatsOnChain and broadcasts go through GorillaPool's public arcade by
+default, every proof checked against the headers; a node of your own is the
+better option where you have one. Nothing is mined for you: the bsecret
+home is funded with a payment you send from your own wallet.
 
 ```console
 $ bsecret -network main init -borg ~/.borg      # a home around the organization's identity
 identity     02c6…9a1e
 fund address 1EUY…zipY (main)
-$ # send about 20,000 sat from your own wallet to the fund address, wait one block
-$ bsecret fund -txid <txid of that payment>
+$ # send about 20,000 sat from your own wallet to the fund address
+$ bsecret fund -txid <txid of that payment>     # once mined; or fund -beef FILE at once
 $ bsecret crypt new example                     # give the printed BSECRET_CRYPTS line to your hosts
 $ bsecret vault create engineering -name ops    # a vault on a borg group
 $ bsecret put db/password < new-password.txt    # a version, listed in a mined token

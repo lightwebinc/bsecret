@@ -103,8 +103,9 @@ both the hall and the crypt.
 | Command | Needs a home | Needs | What it does |
 | --- | --- | --- | --- |
 | `init [-borg DIR \| -from FILE]` | creates it | nothing | identity key and empty coin pool; prints the identity and the fund address. `-borg` makes the home around a borg home's identity, `-from` around an identity file |
-| `fund -txid TXID` | yes | `asset`, `header_url` | imports a mined payment you sent from your own wallet to the fund address, once its proof checks. How a home is funded on mainnet and testnet |
-| `fund [-blocks N]` | yes | `rpc`, `asset` | coinbase: only on a regtest chain you run (development and tests). Mines coinbase to the fund address through `generatetoaddress`. Refused on network `main`. `-batch N` blocks a call; `-rescan` re-reads the last `-blocks` blocks for coinbase the pool lacks and mines nothing |
+| `fund -txid TXID` | yes | `chain`, `header_url` (defaults on main and test) | imports a mined payment you sent from your own wallet to the fund address, read from the chain view, once its proof checks. How a home is funded on mainnet and testnet |
+| `fund -beef FILE\|- [-refuse-unmined]` | yes | `header_url` | imports that payment from the BEEF your wallet handed over, with no lookup: a mined one once its proof checks, an unmined one (unless `-refuse-unmined` or `fund_unmined = refuse`) once its parents' proofs check and it verifies against them, held back until it mines and sent to `settle` in case the wallet did not |
+| `fund [-blocks N]` | yes | `rpc`, `chain = asset:<URL>` | coinbase: only on a regtest chain you run (development and tests). Mines coinbase to the fund address through `generatetoaddress`. Refused on network `main`. `-batch N` blocks a call; `-rescan` re-reads the last `-blocks` blocks for coinbase the pool lacks and mines nothing |
 | `crypt new <name>` | optional | nothing | draws the 10-letter random suffix; prints the crypt, its topic, and the host's `BSECRET_CRYPTS` line |
 | `crypt list` | yes | nothing | the crypts this home created |
 | `vault create <group> -name N` | yes, the owner's, funded | `crypt`, `hall`, a publisher's settings (below) | a vault keyed to a group of the organization (its id, or its name in the hall): a chain tree, and the vault's first token naming the group's current epoch. `-anchor version` (default) or `interval`; `-labels a,b,c`. The name is one line of plain text |
@@ -119,21 +120,24 @@ both the hall and the crypt.
 | `get <name>` | yes (the key that reads) | a reader's settings; `content` for a large secret | reads a secret's value, every check in the signed order; the value raw on standard output, only when it is not a terminal or with `-show`. `-version N` reads history; `-strict` refuses an exposed or possibly stale value |
 | `list` | yes (the key that reads) | a reader's settings | the vault's secrets by name, each host's answer compared with the set's root; no value is printed |
 | `due` | optional | a reader's settings | what the vault owes: an acknowledgement, re-keyings, and for the owner the rotations it scheduled and the values whose `-not-after` falls within `-within` (720h). Exit 3 when anything is due |
-| `audit` | no; one with coin to pay | a reader's settings; `paid_host`, `asset`, `settle` to pay | verifies the vault's trail from headers and prints the exposure window of every epoch the group began. Paid through the 402 when a paid host is named, at most `-max-sats` a page and `-budget` in all; `-free` walks the free class. `-json` prints the report alone on standard output, and a payment made on standard error |
-| `history <name>` | yes, funded | a reader's settings, `paid_host`, `asset`, `settle` | the priced question: pays the host's 402 and prints every version of a secret the host holds, 16 a page; `-after VERSION` asks for the next page |
+| `audit` | no; one with coin to pay | a reader's settings; `paid_host`, `chain`, `settle` to pay | verifies the vault's trail from headers and prints the exposure window of every epoch the group began. Paid through the 402 when a paid host is named, at most `-max-sats` a page and `-budget` in all; `-free` walks the free class. `-json` prints the report alone on standard output, and a payment made on standard error |
+| `history <name>` | yes, funded | a reader's settings, `paid_host`, `chain`, `settle` | the priced question: pays the host's 402 and prints every version of a secret the host holds, 16 a page; `-after VERSION` asks for the next page |
 | `terms [URL]` | no | `paid_host` or URL | prints a host's terms document |
-| `fill` | optional | a reader's settings, `asset` | replays to each host what another host answered and it lacks: the vault's chain, its set's carriers, and sweeps; signs nothing |
+| `fill` | optional | a reader's settings, `chain` | replays to each host what another host answered and it lacks: the vault's chain, its set's carriers, and sweeps; signs nothing |
 | `payee key -out FILE` | yes | nothing | writes `BSECRET_PAYEE_KEY` for this home's identity to a new file, mode 0600 |
-| `payee settle <payments.jsonl>...` | yes, the payee's | `header_url`, `asset`, `settle` | internalizes every payment in a host's ledger this home has not: all broadcast, then awaited together (`-in-flight`) |
-| `doctor` | optional | nothing | the home's state (trees, a tree signed and not yet recorded as minted, vaults, a transition in flight, the outbox, versions published and not listed, commitments recorded, unmined payments) and whether the node, headers, hosts and priced host answer; reads only |
+| `payee settle <payments.jsonl>...` | yes, the payee's | `header_url`, `chain`, `settle` | internalizes every payment in a host's ledger this home has not: all broadcast, then awaited together (`-in-flight`) |
+| `doctor` | optional | nothing | the home's state (trees, a tree signed and not yet recorded as minted, vaults, a transition in flight, the outbox, versions published and not listed, commitments recorded, unmined payments), the chain view, broadcaster and fee policy in use, and whether the headers, hosts and priced host answer; reads only |
 | `version` | no | nothing | prints the version |
 
 A reader's settings are `hosts`, `header_url`, `crypt`, `org` (the owner's
 identity key; a home that owns a vault reads its own by default), the
 vault (`vault`, by identifier or display name; the owner's only vault by
 default) and, when the hall's hosts are other hosts, `hall_hosts`. A
-publisher's settings are those, and `asset`, `settle`, and `facade` in mode
-`plane`. An identity key is 66 lowercase hex digits; a vault identifier 64;
+publisher's settings are those, and `chain`, `settle`, and `facade` in mode
+`plane`. On `main` and `test`, `header_url`, `chain` and `settle` default
+to WhatsOnChain and GorillaPool's public arcade, so no node is needed
+([configuration.md](configuration.md#no-node-needed)). Below, "the node"
+means the chain view (`chain`), whichever it is. An identity key is 66 lowercase hex digits; a vault identifier 64;
 a group identifier 32. A crypt and a hall are always the full identifier
 `<name>_<suffix>`. A txid is 64 lowercase hex digits, in display order.
 `bsecret <command> -h` prints a command's flags.
@@ -241,14 +245,16 @@ Every change is one or more carriers plus a mined token (spec section 8).
 **Evidence first.** Before it builds anything a writing command holds
 positive evidence (spec section 7.1): the vault's latest token, as the home
 holds it, verifies against `header_url` and its output is unspent per
-`asset`; and the group's latest token, read from the hall's hosts, is
+`chain`; and the group's latest token, read from the hall's hosts, is
 unspent too. The evidence is taken again as each token is built. Without
 it nothing is written (exit 1): a vault's tip spent by something this home
 does not know means another home moved the vault (`bsecret sync`), or the
-vault is terminated. Only the node's status `OK` is unspent: a node that
-answers any other status (`NOT_FOUND`, which a node also answers for an
+vault is terminated. Only a positive "unspent" counts: a node's status
+`OK`, or WhatsOnChain's "known output, no spend" (404). A source that
+answers anything else (a node's `NOT_FOUND`, which it also answers for an
 output it pruned or could not read, `IMMATURE`, `FROZEN`, a `SPENT` naming
-no spender) or cannot be read is no evidence either, and the message says
+no spender; WhatsOnChain's "unknown output" (400)) or cannot be read is no
+evidence either, and the message says
 `the node could not say whether ... is spent`; run the command again once
 the node answers.
 
@@ -439,16 +445,16 @@ every time. A host that answers an older latest token than the home
 verified is named; when every host does, the answer is refused (exit 1,
 `rollback`), and when only some do the vault is read from the others (exit
 3). A remembered token whose kept proof no longer verifies is looked up at
-`asset`: its current proof replaces the old one, and only the node's word
+`chain`: its current proof replaces the old one, and only the node's word
 that the transaction is not mined (a reorganization displaced it) makes
 the home forget it. A header source or a node that fails proves nothing,
 and nothing is forgotten on its account. Whether the
-token read is the latest is settled by `asset`: its output is unspent, or
+token read is the latest is settled by `chain`: its output is unspent, or
 spent by the vault's next token (exit 3: a later token exists that no host
 answers), or by something else (the vault is terminated, exit 1). Without
-`asset` the answer is said to be possibly stale, and a version is never
+`chain` the answer is said to be possibly stale, and a version is never
 reported current. `get` holds the group's latest token, as the hall's
-hosts answer it, to `asset` in the same way: when it is spent, or the node
+hosts answer it, to `chain` in the same way: when it is spent, or the node
 cannot say, the group may have removed a member since, and the value is
 not reported current (`-strict`: exit 3). The evidence is taken at the
 read: a value kept afterwards keeps its age.
@@ -527,8 +533,8 @@ can run it; it needs no coin.
 
 The chain tree at `seq` 0 is the one part no host keeps. Run in the
 owner's home, `fill` takes it from the home's own record of its funding
-trees, which keeps every tree it minted with its proof, and asks `asset`
-only when the home holds no record of it. Elsewhere it asks `asset`, which
+trees, which keeps every tree it minted with its proof, and asks `chain`
+only when the home holds no record of it. Elsewhere it asks `chain`, which
 may have dropped the tree: a node can prune a transaction whose outputs are
 all spent, and each chain tree output is spent by a vault's first token. A
 tree taken from the home is checked as the node's answer would be: its txid

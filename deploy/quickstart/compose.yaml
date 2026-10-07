@@ -127,7 +127,7 @@ services:
       # default of 60s.
       BSECRET_DELAY: 0s
       BSECRET_HEADER_URL: http://chain:8080
-      BSECRET_ASSET: http://chain:8080
+      BSECRET_CHAIN: asset:http://chain:8080
       BSECRET_RPC: http://chain:8080/rpc
       BSECRET_SETTLE: rpc:http://chain:8080/rpc
     volumes:

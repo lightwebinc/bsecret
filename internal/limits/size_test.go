@@ -70,7 +70,7 @@ func carrierBEEF(t *testing.T, rec []byte, count int) int {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tree, err := mint.FundingTree(lock, count, 1000, mint.Input{Tx: c, Vout: 0, Unlocker: payer}, payTo, mint.DefaultFees)
+	tree, err := mint.FundingTree(lock, count, 1000, mint.Input{Tx: c, Vout: 0, Unlocker: payer}, payTo, mint.LegacyFees)
 	if err != nil {
 		t.Fatal(err)
 	}

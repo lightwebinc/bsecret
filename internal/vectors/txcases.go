@@ -342,7 +342,7 @@ func (e *txEnv) cases() ([]txCase, error) {
 	}
 	onChange, err := mint.Transition(o.lock(secrec.VaultDerivation, true, secrec.TagVault, raw5), 1,
 		&mint.Input{Tx: e.tree, Vout: 5, Unlocker: o.unlocker(secrec.ChainDerivation)},
-		mint.Input{Tx: e.tree, Vout: uint32(len(e.tree.Outputs) - 1), Unlocker: o.feeUnlocker()}, o.feeLock, mint.DefaultFees) //nolint:gosec // a few outputs
+		mint.Input{Tx: e.tree, Vout: uint32(len(e.tree.Outputs) - 1), Unlocker: o.feeUnlocker()}, o.feeLock, mint.LegacyFees) //nolint:gosec // a few outputs
 	if err != nil {
 		return nil, err
 	}
@@ -516,7 +516,7 @@ func (e *txEnv) tokenCases(add func(txCase)) error {
 		return err
 	}
 	refuse("token-seq-skips", "a token at seq 2 spending seq 0", rowToken, sk, t0, "token-input")
-	ch, err := mint.Transition(t1.Outputs[0].LockingScript, 1, &mint.Input{Tx: t0, Vout: 1, Unlocker: o.feeUnlocker()}, e.nextFee(), o.feeLock, mint.DefaultFees)
+	ch, err := mint.Transition(t1.Outputs[0].LockingScript, 1, &mint.Input{Tx: t0, Vout: 1, Unlocker: o.feeUnlocker()}, e.nextFee(), o.feeLock, mint.LegacyFees)
 	if err != nil {
 		return err
 	}

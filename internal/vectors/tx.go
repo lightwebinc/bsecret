@@ -246,7 +246,7 @@ func (e *txEnv) fundingTree(d pushdrop.Derivation, n int) (*transaction.Transact
 	if !bytes.Equal(*lock, secrec.FundingScript(e.o.key(d))) {
 		return nil, fmt.Errorf("bcommon's funding lock is not the funding script")
 	}
-	t, err := mint.FundingTree(lock, n, 1000, e.nextFee(), e.o.feeLock, mint.DefaultFees)
+	t, err := mint.FundingTree(lock, n, 1000, e.nextFee(), e.o.feeLock, mint.LegacyFees)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +262,7 @@ func (e *txEnv) token(record []byte, prev *transaction.Transaction, vout uint32)
 // mintRaw builds a token transaction with an arbitrary lock and value,
 // spending prev:vout (signed for what it is) and a fee coin.
 func mintRaw(e *txEnv, lock *script.Script, sats uint64, prev *transaction.Transaction, vout uint32) (*transaction.Transaction, error) {
-	return mint.Transition(lock, sats, &mint.Input{Tx: prev, Vout: vout, Unlocker: e.prevUnlocker(prev, vout)}, e.nextFee(), e.o.feeLock, mint.DefaultFees)
+	return mint.Transition(lock, sats, &mint.Input{Tx: prev, Vout: vout, Unlocker: e.prevUnlocker(prev, vout)}, e.nextFee(), e.o.feeLock, mint.LegacyFees)
 }
 
 // prevUnlocker signs for an output of prev: a token under vault, a funding
@@ -448,7 +448,7 @@ func (e *txEnv) build(s *Scenario) error {
 	if err != nil {
 		return err
 	}
-	if e.loose, err = mint.Transition(e.o.lock(secrec.VaultDerivation, true, secrec.TagVault, lraw), 1, nil, e.nextFee(), e.o.feeLock, mint.DefaultFees); err != nil {
+	if e.loose, err = mint.Transition(e.o.lock(secrec.VaultDerivation, true, secrec.TagVault, lraw), 1, nil, e.nextFee(), e.o.feeLock, mint.LegacyFees); err != nil {
 		return err
 	}
 	e.c.mine(e.loose)

@@ -44,15 +44,24 @@ func cmdDoctor(ctx context.Context, g *global, args []string) error {
 		fmt.Fprintln(out, "crypt       not configured")
 	}
 	var tip uint32
-	if g.cfg.Asset != "" {
-		if h, err := (&nodeapi.Asset{Base: g.cfg.Asset}).BestHeader(ctx); err != nil {
-			fmt.Fprintf(out, "node        %s: %v\n", g.cfg.Asset, firstLine(err.Error()))
+	if g.cfg.Chain == "" {
+		fmt.Fprintln(out, "chain       not configured (chain): no spend source, so no writer evidence, and a reader cannot say a token is the latest")
+	} else if _, err := g.chainView(); err != nil {
+		fmt.Fprintf(out, "chain       %s: %v\n", g.cfg.Chain, firstLine(err.Error()))
+	} else {
+		fmt.Fprintf(out, "chain       %s\n", g.cfg.Chain)
+	}
+	if u := g.cfg.AssetURL(); u != "" {
+		if h, err := (&nodeapi.Asset{Base: u, Client: httpClient}).BestHeader(ctx); err != nil {
+			fmt.Fprintf(out, "node        %s: %v\n", u, firstLine(err.Error()))
 		} else {
 			tip = h.Height
-			fmt.Fprintf(out, "node        %s tip %d\n", g.cfg.Asset, h.Height)
+			fmt.Fprintf(out, "node        %s tip %d\n", u, h.Height)
 		}
-	} else {
-		fmt.Fprintln(out, "node        not configured (asset): no spend source, so no writer evidence, and a reader cannot say a token is the latest")
+	} else if hc, err := g.headerClient(); err == nil {
+		if n, err := hc.CurrentHeight(ctx); err == nil {
+			tip = n
+		}
 	}
 	if e, err := g.openWallet(); err != nil {
 		fmt.Fprintf(out, "identity    absent (%v)\n", err)
@@ -89,6 +98,12 @@ func cmdDoctor(ctx context.Context, g *global, args []string) error {
 		} else {
 			fmt.Fprintf(out, "headers     %s tip %d\n", g.cfg.HeaderURL, n)
 		}
+	}
+	_, arcade, _ := g.settler()
+	if f, from, err := g.feesFrom(ctx, arcade); err == nil {
+		fmt.Fprintf(out, "fee         %s, floor %d sat (%s)\n", feeRate(f), f.Floor, from)
+	} else if g.cfg.Fee.Source != "" {
+		fmt.Fprintf(out, "fee         %s policy: %v\n", g.cfg.Fee.Source, firstLine(err.Error()))
 	}
 	switch {
 	case g.cfg.Mode == config.ModeUnicast:

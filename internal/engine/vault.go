@@ -167,7 +167,7 @@ func (e *Engine) Ready(ctx context.Context, v *state.Vault) (*Writer, error) {
 	if _, err := e.tokenTx(ctx, last); err != nil {
 		return nil, fmt.Errorf("%w: the vault's latest token: %v", ErrStale, err)
 	}
-	by, err := e.Legs.Asset.Spender(ctx, last.Txid, last.Vout)
+	by, err := e.Legs.Chain.Spender(ctx, last.Txid, last.Vout)
 	err = reader.QuietSpend(err)
 	if err != nil {
 		return nil, fmt.Errorf("%w: the node could not say whether %s.%d is spent: %v", ErrStale, last.Txid, last.Vout, err)
@@ -180,7 +180,7 @@ func (e *Engine) Ready(ctx context.Context, v *state.Vault) (*Writer, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := vread.GroupFresh(ctx, e.Legs.Asset, e.Legs.Asset.TxRaw, g, e.Now()); err != nil {
+	if err := vread.GroupFresh(ctx, e.Legs.Chain, e.Legs.Chain.TxRaw, g, e.Now()); err != nil {
 		return nil, fmt.Errorf("%w: the group: %v", ErrStale, err)
 	}
 	w.Group, w.Stand = g, g.Stand(w.Pred)
@@ -194,7 +194,7 @@ func (e *Engine) Ready(ctx context.Context, v *state.Vault) (*Writer, error) {
 // latest tokens, as the writer holds them, are unspent. A vault or a group
 // that moved since Ready is no evidence: fail closed.
 func (e *Engine) refresh(ctx context.Context, w *Writer) error {
-	by, err := e.Legs.Asset.Spender(ctx, w.Last.Txid, w.Last.Vout)
+	by, err := e.Legs.Chain.Spender(ctx, w.Last.Txid, w.Last.Vout)
 	err = reader.QuietSpend(err)
 	if err != nil {
 		return fmt.Errorf("%w: the node could not say whether %s.%d is spent: %v", ErrStale, w.Last.Txid, w.Last.Vout, err)
@@ -202,7 +202,7 @@ func (e *Engine) refresh(ctx context.Context, w *Writer) error {
 	if by != "" {
 		return fmt.Errorf("%w: the vault's latest token %s is spent by %s; run `bsecret sync`", ErrStale, Short(w.Last.Txid), Short(by))
 	}
-	if err := vread.GroupFresh(ctx, e.Legs.Asset, e.Legs.Asset.TxRaw, w.Group, e.Now()); err != nil {
+	if err := vread.GroupFresh(ctx, e.Legs.Chain, e.Legs.Chain.TxRaw, w.Group, e.Now()); err != nil {
 		return fmt.Errorf("%w: the group: %v", ErrStale, err)
 	}
 	w.At = e.Now()
@@ -304,7 +304,7 @@ func (e *Engine) CreateVault(ctx context.Context, crypt, name, hall string, grou
 	if err != nil {
 		return nil, err
 	}
-	if err := vread.GroupFresh(ctx, e.Legs.Asset, e.Legs.Asset.TxRaw, g, e.Now()); err != nil {
+	if err := vread.GroupFresh(ctx, e.Legs.Chain, e.Legs.Chain.TxRaw, g, e.Now()); err != nil {
 		return nil, fmt.Errorf("%w: the group: %v", ErrStale, err)
 	}
 	cur := g.Current()
@@ -703,7 +703,7 @@ func (e *Engine) finish(ctx context.Context, v *state.Vault) error {
 		}
 	}
 	payer := e.NewPayer()
-	if mp, h, err := e.Legs.Asset.Proof(ctx, tr.Txid); err == nil {
+	if mp, h, err := e.Legs.Chain.Proof(ctx, tr.Txid); err == nil {
 		tx.MerklePath = mp
 		return e.adopt(ctx, v, tr, tx, mp, h, payer)
 	}
@@ -738,7 +738,7 @@ func (e *Engine) finish(ctx context.Context, v *state.Vault) error {
 // the same record is this transition re-encoded and is adopted; anything
 // else won, and this one is discarded.
 func (e *Engine) lostOrCopy(ctx context.Context, v *state.Vault, tr *state.Transition, why string, payer *producer.Payer) error {
-	by, err := e.Legs.Asset.Spender(ctx, tr.Parent, tr.ParentVout)
+	by, err := e.Legs.Chain.Spender(ctx, tr.Parent, tr.ParentVout)
 	err = reader.QuietSpend(err)
 	if err != nil {
 		return fmt.Errorf("%s: the node could not say what spends its predecessor, so it is kept and the next command looks again; refused (%s): %w", tr.What, why, err)
@@ -747,7 +747,7 @@ func (e *Engine) lostOrCopy(ctx context.Context, v *state.Vault, tr *state.Trans
 		// Another transaction spends the predecessor. Whether it won, or is
 		// this transition re-encoded, is settled only by reading it: a node
 		// that cannot show it settles nothing, and the transition is kept.
-		raw, err := e.Legs.Asset.TxRaw(ctx, by)
+		raw, err := e.Legs.Chain.TxRaw(ctx, by)
 		if err != nil {
 			return fmt.Errorf("%s: its predecessor is spent by %s, which the node could not show (%v): whether that is this transition under another txid is not known yet; it is kept, and the next command looks again", tr.What, Short(by), err)
 		}
@@ -756,7 +756,7 @@ func (e *Engine) lostOrCopy(ctx context.Context, v *state.Vault, tr *state.Trans
 			return fmt.Errorf("%s: its predecessor is spent by %s, and the node answered other bytes for it; it is kept, and the next command looks again", tr.What, Short(by))
 		}
 		if t, err := secrec.ReadToken(other); err == nil && hex.EncodeToString(t.Record) == tr.Record {
-			mp, h, perr := e.Legs.Asset.Proof(ctx, by)
+			mp, h, perr := e.Legs.Chain.Proof(ctx, by)
 			if perr != nil {
 				return fmt.Errorf("%s: a copy of it, %s, spends its predecessor and has not mined yet (the next command looks again)", tr.What, Short(by))
 			}
@@ -780,7 +780,7 @@ func (e *Engine) lostOrCopy(ctx context.Context, v *state.Vault, tr *state.Trans
 		if f == nil {
 			return kept
 		}
-		spent, err := e.Legs.Asset.Spender(ctx, f.TxID, f.Vout)
+		spent, err := e.Legs.Chain.Spender(ctx, f.TxID, f.Vout)
 		if err != nil || spent == "" || spent == tr.Txid {
 			return kept
 		}
@@ -788,7 +788,7 @@ func (e *Engine) lostOrCopy(ctx context.Context, v *state.Vault, tr *state.Trans
 	}
 	v.Pending = nil
 	if f := tr.Fee; f != nil {
-		if spent, err := e.Legs.Asset.Spender(ctx, f.TxID, f.Vout); err == nil && spent == "" {
+		if spent, err := e.Legs.Chain.Spender(ctx, f.TxID, f.Vout); err == nil && spent == "" {
 			_ = e.Pool.Return(*f)
 		}
 	}

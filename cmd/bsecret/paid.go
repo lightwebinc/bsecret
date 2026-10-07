@@ -23,7 +23,6 @@ import (
 	"github.com/lightwebinc/bcommon/bwallet"
 	"github.com/lightwebinc/bcommon/funding"
 	"github.com/lightwebinc/bcommon/lookup"
-	"github.com/lightwebinc/bcommon/mint"
 	"github.com/lightwebinc/bcommon/producer"
 	"github.com/lightwebinc/bcommon/purse"
 	"github.com/lightwebinc/bcommon/termsafe"
@@ -39,19 +38,23 @@ import (
 // the header source: what a priced question and payee settle pay and take
 // through.
 func (g *global) purse(ctx context.Context, h *home, hc chaintracker.ChainTracker, maxPay uint64) (*purse.Purse, error) {
-	_, asset, err := g.node(false)
+	chain, err := g.chainView()
 	if err != nil {
 		return nil, err
 	}
-	settler, _, err := g.settler()
+	settler, arcade, err := g.settler()
 	if err != nil {
 		return nil, err
 	}
-	tip, err := asset.BestHeader(ctx)
+	fees, err := g.fees(ctx, arcade)
 	if err != nil {
-		return nil, fmt.Errorf("node tip: %w", err)
+		return nil, err
 	}
-	engine.CollectChange(ctx, h.e.Pool, asset)
+	tip, err := hc.CurrentHeight(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("chain tip: %w", err)
+	}
+	engine.CollectChange(ctx, h.e.Pool, chain)
 	if h.st.KeepPayments(h.e.Pool.UnprovenTxids()) {
 		if err := h.st.Save(); err != nil {
 			return nil, err
@@ -79,11 +82,11 @@ func (g *global) purse(ctx context.Context, h *home, hc chaintracker.ChainTracke
 		return ids
 	}
 	newPayer := func() *producer.Payer {
-		return &producer.Payer{Pool: h.e.Pool, Tip: tip.Height, Keys: map[string]*bwallet.Signer{s.IdentityHex(): s},
-			Kept: kept, Allow: allow, Settler: settler, Asset: asset, Fees: mint.DefaultFees, Poll: poll, Note: g.say}
+		return &producer.Payer{Pool: h.e.Pool, Tip: tip, Keys: map[string]*bwallet.Signer{s.IdentityHex(): s},
+			Kept: kept, Allow: allow, Settler: settler, Chain: chain, Fees: fees, Poll: poll, Note: g.say}
 	}
-	return &purse.Purse{Embedded: h.e, NewPayer: newPayer, Fees: mint.DefaultFees, MaxPay: maxPay,
-		Settler: settler, Asset: asset, Headers: hc, Wait: 10 * time.Minute, Poll: poll}, nil
+	return &purse.Purse{Embedded: h.e, NewPayer: newPayer, Fees: fees, MaxPay: maxPay,
+		Settler: settler, Chain: chain, Headers: hc, Wait: 10 * time.Minute, Poll: poll}, nil
 }
 
 // recordPayment records a payment this home made, so the next payment can
@@ -153,7 +156,7 @@ func (g *global) askWithin(ctx context.Context, h *home, hc chaintracker.ChainTr
 	}
 	// The pool is recorded before a coin is taken from it, and a coin a
 	// run that stopped took and never recorded goes back (engine.Journal).
-	engine.Journal(h.st, h.e.Pool, engine.Reconcile(ctx, h.st, h.e.Pool, p.Asset, g.say))
+	engine.Journal(h.st, h.e.Pool, engine.Reconcile(ctx, h.st, h.e.Pool, p.Chain, g.say))
 	if err := h.st.Save(); err != nil {
 		return nil, 0, err
 	}
@@ -297,7 +300,7 @@ func payWords(err error, maxSats uint64, bound string) error {
 	case errors.Is(err, purse.ErrOverMaxPay):
 		return fmt.Errorf("%w: more than the %d this command may pay (%s)", err, maxSats, bound)
 	case errors.Is(err, purse.ErrNoNode):
-		return fmt.Errorf("%w (config key asset)", err)
+		return fmt.Errorf("%w (config key chain)", err)
 	case errors.Is(err, purse.ErrNoSettler):
 		return fmt.Errorf("%w (config key settle)", err)
 	case errors.Is(err, purse.ErrNotMined):

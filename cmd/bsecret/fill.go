@@ -26,8 +26,8 @@ vault: its chain, the carriers of its set, and the sweeps of those
 carriers' funding outputs. Each token is replayed in the BEEF a host
 admits, assembled here from the token and its parent (the token at seq - 1,
 or at seq 0 the chain tree: from this home when it is the vault owner's
-home that keeps the tree, else from the node, config key asset, which
-drops a fully spent transaction; the tree is checked either way); each
+home that keeps the tree, else from the chain view, config key chain (a
+node drops a fully spent transaction); the tree is checked either way); each
 carrier and sweep is submitted as another host answered it, once it
 verifies here. Everything is checked against this home's headers before it
 is sent, and each fill is confirmed by a lookup at the host it was sent to.
@@ -179,7 +179,7 @@ func (f *filler) tokenBEEF(ctx context.Context, v *vread.ChainView, s uint64) ([
 // the node, with its proof.
 func (f *filler) nodeTree(ctx context.Context, v *vread.ChainView, tok *transaction.Transaction, id string) ([]byte, error) {
 	if f.asset == nil {
-		return nil, errors.New("no node is configured (config key asset)")
+		return nil, errors.New("no chain view is configured (config key chain)")
 	}
 	raw, err := f.asset.TxRaw(ctx, id)
 	if err != nil {
@@ -220,7 +220,7 @@ func (f *filler) homeTree(ctx context.Context, id string, rec *funding.Tree) (*t
 		}
 	}
 	if f.asset == nil {
-		return nil, errors.New("its kept proof does not verify against the header source (a reorganisation, or no proof kept), and no node is configured (config key asset) to give a current one")
+		return nil, errors.New("its kept proof does not verify against the header source (a reorganisation, or no proof kept), and no chain view is configured (config key chain) to give a current one")
 	}
 	mp, err := f.asset.MerkleProof(ctx, id)
 	if err != nil {

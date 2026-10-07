@@ -150,7 +150,7 @@ func (g *global) noChain(t *target, v *vread.ChainView, err error) error {
 			g.say("host %s: REFUSED token %s (%s): %v", r.Host, termsafe.Abbrev(r.Txid), r.Reason, r.Err)
 		}
 		if n := len(v.Refused); n > 0 {
-			return incomplete("vault %s: the hosts answered %d token(s) and none verifies against the header source %s: nothing is established. A header source that does not answer fails every answer the same way (bsecret doctor), and a proof a reorganisation displaced is replaced only from a node (config key asset)", vread.Short(t.vaultHex()), n, g.cfg.HeaderURL)
+			return incomplete("vault %s: the hosts answered %d token(s) and none verifies against the header source %s: nothing is established. A header source that does not answer fails every answer the same way (bsecret doctor), and a proof a reorganisation displaced is replaced only from the chain view (config key chain)", vread.Short(t.vaultHex()), n, g.cfg.HeaderURL)
 		}
 	}
 	return incomplete("vault %s: %v: an empty answer proves nothing", vread.Short(t.vaultHex()), err)
@@ -406,7 +406,7 @@ func (g *global) latest(ctx context.Context, o *opened) (string, bool, error) {
 	head := o.chain.Latest()
 	sp := g.spends()
 	if sp == nil {
-		return fmt.Sprintf("seq %d is the highest any host asked answers; no spend source says it is the latest (config key asset), so this may be stale", head.Seq()), false, nil
+		return fmt.Sprintf("seq %d is the highest any host asked answers; no spend source says it is the latest (config key chain), so this may be stale", head.Seq()), false, nil
 	}
 	by, err := sp.Spender(ctx, head.Txid, head.Token.Vout)
 	if err != nil {

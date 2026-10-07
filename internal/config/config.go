@@ -2,12 +2,17 @@
 // BSECRET_* in the environment, then the config file, then the built-in
 // default.
 //
-// The deployment addresses have no default: the overlay hosts of the crypt
-// and of the hall, the facade, the header source, the settlement leg, the
-// node, where large ciphertexts are kept, and the host a priced question
-// goes to. A default there would quietly send an organisation's records, or
-// a member's questions, to somebody else's server, so a command that needs
-// one and finds none is a usage error.
+// The overlay addresses have no default: the overlay hosts of the crypt and
+// of the hall, the facade, where large ciphertexts are kept, and the host a
+// priced question goes to. A default there would quietly send an
+// organisation's records, or a member's questions, to somebody else's
+// server, so a command that needs one and finds none is a usage error.
+//
+// The chain services do, on mainnet and testnet, so that a home needs no
+// node of its own (Resolve): headers and the chain view from WhatsOnChain
+// (woc:main, woc:test), checked against their proof of work and the
+// headers, and GorillaPool's public arcade to broadcast (arcade:main,
+// arcade:test). A regtest chain has no public services and no defaults.
 package config
 
 import (
@@ -22,6 +27,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lightwebinc/bcommon/feepolicy"
+	"github.com/lightwebinc/bcommon/mint"
+	"github.com/lightwebinc/bcommon/publish"
+
 	"github.com/lightwebinc/borg/borgrec"
 
 	"github.com/lightwebinc/bsecret/internal/limits"
@@ -32,9 +41,13 @@ import (
 type Config struct {
 	// ArcadeKey is the bearer token for an arcade installation in Settle.
 	ArcadeKey string
-	// Asset is the node's asset API base URL: proofs, the chain tip, raw
-	// transactions and the node's view of which outputs are spent.
+	// Asset is the node's asset API base URL. It is the older spelling of
+	// Chain = asset:<URL>, and the node coinbase is mined through (regtest).
 	Asset string
+	// Chain is the chain view: where transactions, proofs and spends are
+	// read (nodeapi.ParseChain): woc:main, woc:test, asset:<URL>, or a
+	// list. Resolve defaults it to woc:<network> on main and test.
+	Chain string
 	// ChainTreeCount is how many outputs a new chain tree has.
 	ChainTreeCount int
 	// Content is where a ciphertext too large to be carried is kept: a
@@ -51,19 +64,29 @@ type Config struct {
 	Delay time.Duration
 	// Facade is the overlay host a publisher submits to in mode plane.
 	Facade string
+	// Fee is the miner fee policy (feepolicy.Config), from the fee_* keys.
+	// Unset keys keep mint.DefaultFees.
+	Fee feepolicy.Config
 	// Freshness bounds how old a writer's evidence that the vault's and the
 	// group's latest tokens are unspent may be when it publishes a version
 	// (spec section 7.1). Every transition retakes the evidence as it is
 	// built, whatever this says.
 	Freshness time.Duration
+	// FundUnmined is whether fund -beef takes a payment not yet mined
+	// whose parents are proven: "accept" (the default) or "refuse".
+	FundUnmined string
 	// Hall is the borg hall a new vault's group lives in.
 	Hall string
 	// HallHosts are the overlay hosts asked about the group's hall; unset,
 	// Hosts are asked.
 	HallHosts []string
-	// HeaderURL is the header source every proof is checked against: a
-	// bridge's /v1 base URL, woc:main, woc:test or chaintracks:URL. No
-	// default, ever.
+	// HeaderToken is the bearer token a header source is sent (a
+	// block-headers-service requires one).
+	HeaderToken string
+	// HeaderURL is the header source every proof is checked against:
+	// woc:main, woc:test, bhs:URL, arcade:URL, chaintracks:URL or a
+	// bridge's /v1 base URL. Resolve defaults it to woc:<network> on main
+	// and test.
 	HeaderURL string
 	// Home is the identity's directory: key, coin pool and state.
 	Home string
@@ -96,8 +119,10 @@ type Config struct {
 	RPC     string
 	RPCPass string
 	RPCUser string
-	// Settle is the settlement leg mined transactions go to: tcp:<host:port>,
-	// rpc:<url> or arcade:<url>.
+	// Settle is the settlement leg transactions are broadcast through
+	// (publish.ParseSettler): arcade:main, arcade:test, arcade:<url>,
+	// arc:<url>, rpc:<url> or tcp:<host:port>. Resolve defaults it to
+	// arcade:<network> on main and test.
 	Settle string
 	// Timeout bounds each request to a host, node or header source.
 	Timeout time.Duration
@@ -106,6 +131,10 @@ type Config struct {
 	// Vault is the vault a command uses when it names none: its
 	// identifier, 64 lowercase hex digits, or its display name.
 	Vault string
+	// WoCKey is a WhatsOnChain API key, and WoCRate the requests a second
+	// its plan allows (zero is the free rate, 3).
+	WoCKey  string
+	WoCRate float64
 }
 
 // The modes and the named quorums.
@@ -155,6 +184,7 @@ func Defaults() Config {
 		ChainTreeCount: limits.DefaultChainTreeCount,
 		Delay:          limits.DefaultDelay,
 		Freshness:      limits.DefaultFreshness,
+		FundUnmined:    "accept",
 		Home:           DefaultHome(),
 		MaxFetch:       limits.DefaultMaxFetch,
 		Mode:           ModePlane,
@@ -172,9 +202,11 @@ func Defaults() Config {
 // Keys is the file grammar's key list, in lexicographic order. A key not in
 // it is an error: a misspelt key that was silently ignored would leave a
 // setting at its default with no sign that the file was ever read.
-var Keys = []string{"arcade_key", "asset", "chain_tree_count", "content", "crypt", "delay", "facade", "freshness", "hall",
-	"hall_hosts", "header_url", "home", "hosts", "max_fetch", "mode", "network", "object_bound", "org", "originator",
-	"paid_host", "quorum", "rpc", "rpc_pass", "rpc_user", "settle", "timeout", "tree_count", "vault"}
+var Keys = []string{"arcade_key", "asset", "chain", "chain_tree_count", "content", "crypt", "delay", "facade", "fee_dust",
+	"fee_floor", "fee_max_rate", "fee_max_tx", "fee_min_rate", "fee_policy_urls", "fee_rate", "fee_source", "freshness",
+	"fund_unmined", "hall", "hall_hosts", "header_token", "header_url", "home", "hosts", "max_fetch", "mode", "network",
+	"object_bound", "org", "originator", "paid_host", "quorum", "rpc", "rpc_pass", "rpc_user", "settle", "timeout",
+	"tree_count", "vault", "woc_key", "woc_rate"}
 
 // ErrUnknownKey reports a key the grammar does not define.
 var ErrUnknownKey = errors.New("config: unknown key")
@@ -306,6 +338,8 @@ func (c Config) Apply(vals map[string]string) (Config, error) {
 			c.ArcadeKey = v
 		case "asset":
 			c.Asset = v
+		case "chain":
+			c.Chain = v
 		case "chain_tree_count":
 			c.ChainTreeCount, err = positiveInt(k, v, 1, limits.MaxChainTreeCount, "a vault's first token carries its chain tree whole")
 		case "content":
@@ -323,12 +357,50 @@ func (c Config) Apply(vals map[string]string) (Config, error) {
 			c.Delay = d
 		case "facade":
 			c.Facade = v
+		case "fee_dust", "fee_floor", "fee_max_tx":
+			n, perr := strconv.ParseUint(v, 10, 64)
+			if perr != nil {
+				return c, fmt.Errorf("config: %s %q is not a whole number of satoshis", k, v)
+			}
+			switch k {
+			case "fee_dust":
+				c.Fee.Dust = &n
+			case "fee_floor":
+				c.Fee.Floor = &n
+			default:
+				c.Fee.MaxTx = n
+			}
+		case "fee_max_rate", "fee_min_rate", "fee_rate":
+			rate, perr := mint.ParseRate(v)
+			if perr != nil || rate.Sats == 0 {
+				return c, fmt.Errorf("config: %s %q is not a rate SATS/BYTES such as 100/1000 (satoshis per bytes)", k, v)
+			}
+			switch k {
+			case "fee_max_rate":
+				c.Fee.MaxRate = &rate
+			case "fee_min_rate":
+				c.Fee.MinRate = &rate
+			default:
+				c.Fee.Rate = &rate
+			}
+		case "fee_policy_urls":
+			c.Fee.PolicyURLs = list(v)
+		case "fee_source":
+			if v != feepolicy.SourceStatic && v != feepolicy.SourceARC {
+				return c, fmt.Errorf("config: fee_source must be static or arc, got %q", v)
+			}
+			c.Fee.Source = v
 		case "freshness":
 			d, perr := time.ParseDuration(v)
 			if perr != nil || d <= 0 || d > limits.MaxFreshness {
 				return c, fmt.Errorf("config: freshness %q is not a duration above 0s and at most %s (spec section 7.1)", v, limits.MaxFreshness)
 			}
 			c.Freshness = d
+		case "fund_unmined":
+			if v != "accept" && v != "refuse" {
+				return c, fmt.Errorf("config: fund_unmined must be accept or refuse, got %q", v)
+			}
+			c.FundUnmined = v
 		case "hall":
 			if v != "" && borgrec.CheckHall(v) != nil {
 				return c, fmt.Errorf("config: hall %q is not a hall identifier <name>_<suffix> (borg hall new prints one)", v)
@@ -339,6 +411,8 @@ func (c Config) Apply(vals map[string]string) (Config, error) {
 			if len(c.HallHosts) > limits.MaxHosts {
 				return c, fmt.Errorf("config: hall_hosts names %d hosts, over the limit of %d (docs/limits.md)", len(c.HallHosts), limits.MaxHosts)
 			}
+		case "header_token":
+			c.HeaderToken = v
 		case "header_url":
 			c.HeaderURL = v
 		case "home":
@@ -397,6 +471,14 @@ func (c Config) Apply(vals map[string]string) (Config, error) {
 			c.TreeCount, err = positiveInt(k, v, 1, limits.MaxTreeCount, "every carrier's BEEF carries its whole funding tree")
 		case "vault":
 			c.Vault = v
+		case "woc_key":
+			c.WoCKey = v
+		case "woc_rate":
+			rate, perr := strconv.ParseFloat(v, 64)
+			if perr != nil || rate <= 0 || rate > 1000 {
+				return c, fmt.Errorf("config: woc_rate %q is not a number of requests a second above 0 and at most 1000", v)
+			}
+			c.WoCRate = rate
 		}
 		if err != nil {
 			return c, err
@@ -416,4 +498,72 @@ func (c Config) GroupHosts() []string {
 		return c.HallHosts
 	}
 	return c.Hosts
+}
+
+// Resolve fills what a network has a default for and is not configured:
+// on main and test, the chain view woc:<network>, the header source
+// woc:<network> and the settlement leg arcade:<network>. The older key
+// asset becomes the chain view asset:<URL>; asset and chain both set is
+// refused, since which one is meant cannot be told. A regtest chain has no
+// public services, so nothing is filled for it.
+func (c Config) Resolve() (Config, error) {
+	if c.Asset != "" {
+		if c.Chain != "" {
+			return c, fmt.Errorf("config: chain and asset are both set; asset is the older spelling of chain = asset:%s, so keep one", c.Asset)
+		}
+		c.Chain = "asset:" + c.Asset
+	}
+	if c.Network != "main" && c.Network != "test" {
+		return c, nil
+	}
+	if c.Chain == "" {
+		c.Chain = "woc:" + c.Network
+	}
+	if c.HeaderURL == "" {
+		c.HeaderURL = "woc:" + c.Network
+	}
+	if c.Settle == "" {
+		s, err := publish.DefaultSettle(c.Network)
+		if err != nil {
+			return c, err
+		}
+		c.Settle = s
+	}
+	return c, nil
+}
+
+// AssetURL is the node's asset API base URL: asset, else the first
+// asset:<URL> backend the chain view names, else "".
+func (c Config) AssetURL() string {
+	if c.Asset != "" {
+		return c.Asset
+	}
+	for _, item := range strings.Split(c.Chain, ",") {
+		item = strings.TrimSpace(item)
+		if m, rest, ok := strings.Cut(item, "="); ok && !strings.Contains(m, ":") {
+			item = rest
+		}
+		if u, ok := strings.CutPrefix(item, "asset:"); ok && u != "" {
+			return u
+		}
+	}
+	return ""
+}
+
+// CheckNetwork refuses a WhatsOnChain chain view or a public arcade named
+// for another network than the configured one.
+func (c Config) CheckNetwork() error {
+	for _, item := range strings.Split(c.Chain, ",") {
+		item = strings.TrimSpace(item)
+		if m, rest, ok := strings.Cut(item, "="); ok && !strings.Contains(m, ":") {
+			item = rest
+		}
+		if n, ok := strings.CutPrefix(item, "woc:"); ok && n != c.Network {
+			return fmt.Errorf("config: chain %s is the %s network but network is %s", item, n, c.Network)
+		}
+	}
+	if n, ok := strings.CutPrefix(strings.TrimSpace(c.Settle), "arcade:"); ok && (n == "main" || n == "test") && n != c.Network {
+		return fmt.Errorf("config: settle %s is the %s network but network is %s", c.Settle, n, c.Network)
+	}
+	return nil
 }

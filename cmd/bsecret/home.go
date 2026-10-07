@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -20,8 +21,10 @@ import (
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	base58 "github.com/bsv-blockchain/go-sdk/compat/base58"
 	ec "github.com/bsv-blockchain/go-sdk/primitives/ec"
+	"github.com/bsv-blockchain/go-sdk/transaction"
 
 	"github.com/lightwebinc/bcommon/bwallet"
+	"github.com/lightwebinc/bcommon/feepolicy"
 	"github.com/lightwebinc/bcommon/guard"
 	"github.com/lightwebinc/bcommon/mint"
 	"github.com/lightwebinc/bcommon/nodeapi"
@@ -145,62 +148,142 @@ func (g *global) identityKey() (*ec.PrivateKey, error) {
 	return payee.HomeKey(g.cfg.Home, "bsecret")
 }
 
-// node is the configured node: its JSON-RPC and asset API.
+// node is the configured node, for coinbase on a regtest chain you run:
+// its JSON-RPC and asset API.
 func (g *global) node(needRPC bool) (*nodeapi.RPC, *nodeapi.Asset, error) {
-	if g.cfg.Asset == "" || (needRPC && g.cfg.RPC == "") {
+	asset := g.cfg.AssetURL()
+	if asset == "" || (needRPC && g.cfg.RPC == "") {
 		if needRPC {
-			return nil, nil, usage("rpc and asset must be configured (config keys rpc, asset)")
+			return nil, nil, usage("rpc and a node must be configured (config keys rpc, and chain = asset:<URL>)")
 		}
-		return nil, nil, usage("asset must be configured (config key asset): proofs and spends are read from the node")
+		return nil, nil, usage("a node must be configured (config key chain = asset:<URL>)")
 	}
 	var rpc *nodeapi.RPC
 	if g.cfg.RPC != "" {
 		rpc = &nodeapi.RPC{URL: g.cfg.RPC, User: g.cfg.RPCUser, Pass: g.cfg.RPCPass, ID: "bsecret"}
 	}
-	return rpc, &nodeapi.Asset{Base: g.cfg.Asset}, nil
+	return rpc, &nodeapi.Asset{Base: asset, Client: httpClient}, nil
 }
 
-// spendSource is the node's view of which outputs are spent, held to its
-// form: a spender is a transaction id, 64 lowercase hex digits, or the
-// answer is refused. What a node names is printed, compared and asked for
-// again, and a node is somebody else's server.
-type spendSource struct{ *nodeapi.Asset }
+// chainView is the configured chain view (config key chain): where
+// transactions, proofs and spends are read, every proof checked against
+// the header source. Without one it is a usage error naming the key.
+func (g *global) chainView() (*nodeapi.Sources, error) {
+	if g.cfg.Chain == "" {
+		return nil, usage("no chain view: set chain (or -chain), such as woc:main or asset:<URL>; transactions, proofs and spends are read from it")
+	}
+	hc, err := g.headerClient()
+	if err != nil {
+		return nil, err
+	}
+	c, err := nodeapi.ParseChain(g.cfg.Chain, nodeapi.ChainOptions{WoCKey: g.cfg.WoCKey, WoCRate: g.cfg.WoCRate, Client: httpClient, Headers: hc})
+	if err != nil {
+		return nil, usage("chain %s: %v", g.cfg.Chain, err)
+	}
+	return c, nil
+}
 
-// Spender is the node's answer, refused unless it is a transaction id.
+// spendSource is the chain view as the readers take it: which outputs are
+// spent, with what the source named left out of an error's text and a
+// spender held to a transaction id in lower case (what a source names is
+// printed, compared and asked for again, and a source is somebody else's
+// server), and a transaction's bytes and current proof.
+type spendSource struct{ nodeapi.Chain }
+
+// Spender is the source's answer, refused unless it is a transaction id.
 func (s spendSource) Spender(ctx context.Context, txid string, vout uint32) (string, error) {
-	by, err := s.Asset.Spender(ctx, txid, vout)
+	by, err := s.Chain.Spender(ctx, txid, vout)
 	if err != nil {
 		return "", reader.QuietSpend(err)
 	}
 	by = strings.ToLower(by)
 	if by != "" && !config.IsHex32(by) {
-		return "", fmt.Errorf("the node names a spender of %s.%d that is not a transaction id", txid, vout)
+		return "", fmt.Errorf("the chain view names a spender of %s.%d that is not a transaction id", txid, vout)
 	}
 	return by, nil
 }
 
-// spends is the configured spend source, or nil: the node's view of which
-// outputs are spent.
-func (g *global) spends() *spendSource {
-	if g.cfg.Asset == "" {
-		return nil
-	}
-	return &spendSource{&nodeapi.Asset{Base: g.cfg.Asset}}
+// MerkleProof is the source's current proof of txid.
+func (s spendSource) MerkleProof(ctx context.Context, txid string) (*transaction.MerklePath, error) {
+	mp, _, err := s.Proof(ctx, txid)
+	return mp, err
 }
 
-// settler is the configured settlement leg.
-func (g *global) settler() (publish.Settler, *publish.Arcade, error) {
-	kind, addr, _ := strings.Cut(g.cfg.Settle, ":")
-	switch kind {
-	case "tcp":
-		return &publish.TCPIngress{Addr: addr}, nil, nil
-	case "rpc":
-		return &publish.RPCSettler{RPC: &nodeapi.RPC{URL: addr, User: g.cfg.RPCUser, Pass: g.cfg.RPCPass, ID: "bsecret"}}, nil, nil
-	case "arcade":
-		a := &publish.Arcade{Base: addr, Key: g.cfg.ArcadeKey}
-		return a, a, nil
+// spends is the configured chain view as a spend source, or nil when none
+// is configured.
+func (g *global) spends() *spendSource {
+	c, err := g.chainView()
+	if err != nil {
+		return nil
 	}
-	return nil, nil, usage("settle must be tcp:<host:port>, rpc:<url> or arcade:<url> (config key settle)")
+	return &spendSource{c}
+}
+
+// settler is the configured settlement leg (config key settle), with an
+// arcade's verdict held to the chain view's spends.
+func (g *global) settler() (publish.Settler, *publish.Arcade, error) {
+	if g.cfg.Settle == "" {
+		return nil, nil, usage("no settlement leg: set settle to arcade:<URL>, arc:<URL>, rpc:<URL> or tcp:<host:port> (a regtest chain has no default)")
+	}
+	opt := publish.SettleOptions{Key: g.cfg.ArcadeKey, RPCUser: g.cfg.RPCUser, RPCPass: g.cfg.RPCPass, RPCID: "bsecret", Note: g.say}
+	if sp := g.spends(); sp != nil {
+		opt.Spends = sp
+	}
+	s, a, err := publish.ParseSettler(g.cfg.Settle, opt)
+	if err != nil {
+		return nil, nil, usage("settle %s: %v (config key settle)", g.cfg.Settle, err)
+	}
+	return s, a, nil
+}
+
+// fees is the miner fee policy (the fee_* keys) over mint.DefaultFees. A
+// live policy (fee_source = arc) is asked of fee_policy_urls, else of the
+// settlement leg when it is an arcade or ARC.
+func (g *global) fees(ctx context.Context, arcade *publish.Arcade) (mint.Fees, error) {
+	f, _, err := g.feesFrom(ctx, arcade)
+	return f, err
+}
+
+// feesFrom is fees, and where they came from: static, or what a live
+// policy source used (arc, cache or static) and why.
+func (g *global) feesFrom(ctx context.Context, arcade *publish.Arcade) (mint.Fees, string, error) {
+	fc := g.cfg.Fee
+	if fc.Source == feepolicy.SourceARC && len(fc.PolicyURLs) == 0 {
+		if arcade == nil {
+			return mint.Fees{}, "", usage("fee_source arc reads a broadcaster's policy: set fee_policy_urls, or settle through an arcade or ARC")
+		}
+		fc.PolicyURLs = []string{arcade.Base}
+	}
+	src, err := fc.Build(mint.DefaultFees)
+	if err != nil {
+		return mint.Fees{}, "", usage("%v (config keys fee_*)", err)
+	}
+	a, live := src.(*feepolicy.ARC)
+	if live {
+		a.Key, a.Note = g.cfg.ArcadeKey, g.say
+	}
+	f, err := src.Fees(ctx)
+	if err != nil {
+		return mint.Fees{}, "", usage("%v (config keys fee_*)", err)
+	}
+	from := feepolicy.SourceStatic
+	if live {
+		st := a.Status()
+		from = "policy of " + strings.Join(fc.PolicyURLs, ", ") + ": " + st.Source
+		if st.Err != nil {
+			from += " (" + st.Err.Error() + ")"
+		}
+	}
+	return f, from, nil
+}
+
+// feeRate is a fee policy's rate as SATS/BYTES.
+func feeRate(f mint.Fees) string {
+	r := f.Rate
+	if r.IsZero() {
+		r = mint.Rate{Sats: f.SatPerByte, Bytes: 1}
+	}
+	return fmt.Sprintf("%d/%d sat/bytes", r.Sats, r.Bytes)
 }
 
 // reader is a reader over the crypt's hosts and the header source.
@@ -265,11 +348,11 @@ func parseKey(what, s string) ([]byte, error) {
 // has a default.
 func (g *global) legs() (engine.Legs, error) {
 	var l engine.Legs
-	_, asset, err := g.node(false)
+	chain, err := g.chainView()
 	if err != nil {
 		return l, err
 	}
-	l.Asset = asset
+	l.Chain = chain
 	if l.Settler, l.Arcade, err = g.settler(); err != nil {
 		return l, err
 	}
@@ -377,8 +460,13 @@ func (g *global) openWriterFor(ctx context.Context, lenient bool) (*writer, erro
 	for _, x := range warnings {
 		g.say("warning: %s", x)
 	}
+	fees, err := g.fees(ctx, legs.Arcade)
+	if err != nil {
+		h.close()
+		return nil, err
+	}
 	o := engine.Options{TreeCount: g.cfg.TreeCount, ChainTreeCount: g.cfg.ChainTreeCount, TreeSats: limits.DefaultTreeSats,
-		Ahead: limits.DefaultAhead, Fees: mint.DefaultFees, ObjectBound: g.cfg.ObjectBound, Poll: poll, Wait: 10 * time.Minute,
+		Ahead: limits.DefaultAhead, Fees: fees, ObjectBound: g.cfg.ObjectBound, Poll: poll, Wait: 10 * time.Minute,
 		Delay: g.cfg.Delay, Freshness: g.cfg.Freshness, PlaneNeed: need}
 	if uint32(o.TreeCount) <= o.Ahead { //nolint:gosec // bounded by the limits
 		o.Ahead = uint32(o.TreeCount / 2) //nolint:gosec // bounded by the limits
@@ -529,20 +617,30 @@ func cmdInit(_ context.Context, g *global, args []string) error {
 }
 
 const fundHelp = `usage: bsecret fund -txid TXID
+       bsecret fund -beef FILE|- [-refuse-unmined]
        bsecret fund [-blocks N] [-batch N] [-rescan]
 
-With -txid, import a payment: read the mined transaction TXID with its
-proof from the node (asset), check the proof against the header source,
-and add every output it pays to the home's fund address to the pool. This
-is how a home on mainnet or testnet is funded: send BSV from your own
-wallet to the fund address init printed, wait for one confirmation, and
-import it.
+Fund the home's pool from a payment you sent to the fund address init
+printed, from a wallet of your own. This is how a home on mainnet or
+testnet is funded, and it needs no node:
 
-Without -txid (coinbase: only on a regtest chain you run, for development
-and tests): mine coinbase to the fund address through the node's
-generatetoaddress. Coinbase can be spent 100 blocks after it is mined, so
-the first fund mines 101 or more. -rescan re-reads recent blocks for
-coinbase the pool lacks. Refused on network main.
+-txid imports a mined payment: it is read with its proof from the chain
+view (config key chain; WhatsOnChain by default), the proof is checked
+against the header source, and every output paying the fund address is
+added to the pool. Wait for one confirmation first.
+
+-beef imports the payment as the BEEF your wallet hands over (a file, or -
+for standard input), with no lookup at all. A mined payment's proof is
+checked against the header source. One not mined yet is taken when every
+parent it spends is proven and it verifies against them; its outputs are
+held back until it mines, and spent only after that. -refuse-unmined (or
+config key fund_unmined = refuse) takes only a mined one.
+
+Without -txid or -beef (coinbase: only on a regtest chain you run, for
+development and tests): mine coinbase to the fund address through the
+node's generatetoaddress. Coinbase can be spent 100 blocks after it is
+mined, so the first fund mines 101 or more. -rescan re-reads recent
+blocks for coinbase the pool lacks. Refused on network main.
 
 The fund address is bsecret's own, under its own protocol: a borg home's
 coin is not this home's, even when both are made around one identity key.`
@@ -581,22 +679,27 @@ func cmdFund(ctx context.Context, g *global, args []string) error {
 	batch := fs.Int("batch", bwallet.DefaultFundBatch, "coinbase: only on a regtest chain you run (development and tests); blocks per generatetoaddress call")
 	rescan := fs.Bool("rescan", false, "coinbase: only on a regtest chain you run (development and tests); re-read the last -blocks blocks for coinbase the pool lacks instead of mining")
 	txid := fs.String("txid", "", "import this mined payment you sent to the fund address (mainnet, testnet)")
+	beef := fs.String("beef", "", "import the payment your wallet handed over as BEEF: a file, or - for standard input")
+	refuseUnmined := fs.Bool("refuse-unmined", g.cfg.FundUnmined == "refuse", "with -beef, take only a mined payment (config key fund_unmined)")
 	if pos, err := parse(fs, args); err != nil {
 		return err
 	} else if len(pos) > 0 {
 		return usage("fund takes no arguments")
 	}
-	if *txid != "" {
+	if *txid != "" || *beef != "" {
 		if *rescan {
-			return usage("-txid and -rescan are exclusive")
+			return usage("-txid and -beef do not take -rescan")
 		}
-		return g.importPayment(ctx, *txid)
+		if *txid != "" && *beef != "" {
+			return usage("-txid and -beef are exclusive")
+		}
+		return g.importPayment(ctx, *txid, *beef, *refuseUnmined)
 	}
 	if *blocks < 1 {
 		return usage("-blocks must be at least 1")
 	}
 	if g.cfg.Network == "main" {
-		return usage("fund without -txid mines coinbase, which only a chain you run does; on network main, import a payment with fund -txid")
+		return usage("fund without -txid or -beef mines coinbase, which only a chain you run does; on network main, import a payment with fund -txid or fund -beef")
 	}
 	e, unlock, err := g.lockedWallet()
 	if err != nil {
@@ -641,11 +744,48 @@ func cmdFund(ctx context.Context, g *global, args []string) error {
 	return nil
 }
 
-// importPayment adds the outputs a mined payment pays to the fund address
-// to the pool, once its proof holds against the header source.
-func (g *global) importPayment(ctx context.Context, txid string) error {
-	if h, err := chainhash.NewHashFromHex(txid); err != nil || h.String() != txid {
-		return usage("-txid %q is not a transaction id (64 lowercase hex characters)", termsafe.Abbrev(txid))
+// readBEEF reads a BEEF from a file, or from standard input for "-": hex
+// or binary, at most the guard's bound.
+func (g *global) readBEEF(path string) ([]byte, error) {
+	var r io.Reader
+	if path == "-" {
+		r = g.stdin
+	} else {
+		f, err := os.Open(path) //nolint:gosec // the operator's own path
+		if err != nil {
+			return nil, usage("-beef %s: %v", path, err)
+		}
+		defer f.Close()
+		r = f
+	}
+	b, err := io.ReadAll(io.LimitReader(r, 2*int64(guard.DefaultBound)+2))
+	if err != nil {
+		return nil, err
+	}
+	if t := bytes.TrimSpace(b); len(t) > 0 && len(t)%2 == 0 {
+		if raw, herr := hex.DecodeString(string(t)); herr == nil {
+			return raw, nil
+		}
+	}
+	return b, nil
+}
+
+// importPayment adds the outputs a payment pays to the fund address to
+// the pool: by txid, mined, from the chain view; or from the BEEF the
+// user's wallet handed over. Every proof is checked against the header
+// source. An unmined payment's outputs are held back until it mines.
+func (g *global) importPayment(ctx context.Context, txid, beefPath string, refuseUnmined bool) error {
+	if txid != "" {
+		if h, err := chainhash.NewHashFromHex(txid); err != nil || h.String() != txid {
+			return usage("-txid %q is not a transaction id (64 lowercase hex characters)", termsafe.Abbrev(txid))
+		}
+	}
+	var beef []byte
+	if beefPath != "" {
+		var err error
+		if beef, err = g.readBEEF(beefPath); err != nil {
+			return err
+		}
 	}
 	e, unlock, err := g.lockedWallet()
 	if err != nil {
@@ -656,59 +796,73 @@ func (g *global) importPayment(ctx context.Context, txid string) error {
 	if err != nil {
 		return err
 	}
-	_, asset, err := g.node(false)
-	if err != nil {
-		return usage("fund -txid reads the payment from the node: %v", err)
-	}
-	raw, err := asset.TxRaw(ctx, txid)
-	if err != nil {
-		return fmt.Errorf("payment %s: %w", txid, err)
-	}
-	tx, err := guard.ParseTransaction(raw, guard.DefaultBound)
-	if err != nil || tx.TxID().String() != txid {
-		return refused("payment %s: the node answered other bytes", txid)
-	}
-	mp, _, err := asset.Proof(ctx, txid)
-	if err != nil {
-		return fmt.Errorf("payment %s: its proof: %w (wait for it to mine)", txid, err)
-	}
-	tx.MerklePath = mp
-	ok, err := mp.Verify(ctx, tx.TxID(), hc)
-	if err != nil {
-		return fmt.Errorf("payment %s: checking its proof against %s: %w", txid, g.cfg.HeaderURL, err)
-	}
-	if !ok {
-		return refused("payment %s: its proof does not hold against the header source %s", txid, g.cfg.HeaderURL)
-	}
 	fund, err := e.Signer().FundScript()
 	if err != nil {
 		return err
 	}
-	var outs []bwallet.Output
-	var sats uint64
-	for i, o := range tx.Outputs {
-		if o.LockingScript == nil || !bytes.Equal(*o.LockingScript, *fund) {
-			continue
-		}
-		outs = append(outs, bwallet.Output{TxID: txid, Vout: uint32(i), Satoshis: o.Satoshis, //nolint:gosec // an output index
-			LockingScript: o.LockingScript.String(), Height: mp.BlockHeight, Coinbase: tx.IsCoinbase(),
-			Raw: tx.Hex(), Bump: mp.Hex()})
-		sats += o.Satoshis
-	}
 	addr, _ := e.FundAddress(e.Mainnet)
-	if len(outs) == 0 {
-		return usage("payment %s pays nothing to the fund address %s", txid, addr)
+	var im *bwallet.Import
+	if txid != "" {
+		chain, cerr := g.chainView()
+		if cerr != nil {
+			return usage("fund -txid reads the payment from the chain view: %v", cerr)
+		}
+		im, err = bwallet.ImportTxid(ctx, txid, fund, chain, hc)
+	} else {
+		im, err = bwallet.ImportBEEF(ctx, beef, fund, hc, bwallet.ImportOptions{RefuseUnmined: refuseUnmined})
 	}
-	added, err := e.Pool.Add(outs...)
+	switch {
+	case errors.Is(err, bwallet.ErrPaysNothing):
+		return usage("the payment pays nothing to the fund address %s", addr)
+	case txid != "" && nodeapi.IsNotFound(err):
+		return incomplete("payment %s is not known to the chain view %s yet: run fund -txid again once it has one confirmation, or hand over your wallet's BEEF with fund -beef", txid, g.cfg.Chain)
+	case errors.Is(err, bwallet.ErrUnmined) && txid != "":
+		return incomplete("payment %s has not mined yet: run fund -txid again once it has one confirmation, or hand over your wallet's BEEF with fund -beef", txid)
+	case errors.Is(err, bwallet.ErrUnmined):
+		return refused("the payment has not mined yet, and unmined payments are refused (-refuse-unmined, config key fund_unmined); import it once it has, or allow it")
+	case errors.Is(err, nodeapi.ErrProofRefused):
+		return refused("%v: its proof does not hold against the header source %s", err, g.cfg.HeaderURL)
+	case err != nil:
+		return err
+	}
+	added, err := e.Pool.Add(im.Outputs...)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(g.stdout, "imported %d of %d output(s) paying %s, %d sat, mined at height %d; pool %d output(s), %d sat\n",
-		added, len(outs), addr, sats, mp.BlockHeight, e.Pool.Count(), e.Pool.Balance())
-	if added < len(outs) {
-		g.say("note: %d output(s) were in the pool already", len(outs)-added)
+	if im.Mined {
+		// An earlier import of the same payment, before it mined, is
+		// held back; its proof is this one.
+		if _, err := e.Pool.Prove(im.Txid, im.Outputs[0].Bump, im.Height); err != nil {
+			return err
+		}
+		fmt.Fprintf(g.stdout, "imported %d of %d output(s) paying %s, %d sat, mined at height %d; pool %d output(s), %d sat\n",
+			added, len(im.Outputs), addr, im.Sats, im.Height, e.Pool.Count(), e.Pool.Balance())
+	} else {
+		fmt.Fprintf(g.stdout, "imported %d of %d output(s) paying %s, %d sat, from %s, not mined yet: held back until it mines; pool %d output(s), %d sat\n",
+			added, len(im.Outputs), addr, im.Sats, im.Txid, e.Pool.Count(), e.Pool.Balance())
+		g.broadcastImport(ctx, im)
+	}
+	if added < len(im.Outputs) {
+		g.say("note: %d output(s) were in the pool already", len(im.Outputs)-added)
 	}
 	return nil
+}
+
+// broadcastImport sends an unmined payment to the settlement leg, in case
+// the wallet that made it did not. A leg that refuses it, or none, is a
+// note: the wallet may have sent it already, and a later command collects
+// its proof once it mines either way.
+func (g *global) broadcastImport(ctx context.Context, im *bwallet.Import) {
+	s, _, err := g.settler()
+	if err != nil {
+		g.say("payment %s: not broadcast here (%v); it is spent once it mines", im.Txid, err)
+		return
+	}
+	if err := s.Submit(ctx, im.Tx); err != nil {
+		g.say("payment %s: the settlement leg answered %v; if your wallet broadcast it, that is expected", im.Txid, err)
+		return
+	}
+	g.say("payment %s: broadcast through %s", im.Txid, s.Name())
 }
 
 const cryptHelp = `usage: bsecret crypt new <name>

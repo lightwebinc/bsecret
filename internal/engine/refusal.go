@@ -52,10 +52,10 @@ func (e *SweepRefusedError) Error() string {
 // again.
 func (e *Engine) refusal(ctx context.Context, tx *transaction.Transaction, err error) string {
 	txid := tx.TxID().String()
-	if _, _, perr := e.Legs.Asset.Proof(ctx, txid); perr == nil {
+	if _, _, perr := e.Legs.Chain.Proof(ctx, txid); perr == nil {
 		return ""
 	}
-	spent := chainview.SpentElsewhere(ctx, e.Legs.Asset, tx)
+	spent := chainview.SpentElsewhereIn(ctx, e.Legs.Chain, tx)
 	if spent == "" {
 		return ""
 	}
@@ -77,8 +77,8 @@ func (e *Engine) failSweep(ctx context.Context, sw *state.Sweep, why string) err
 	coin := "its fee coin was not recorded (a sweep built by an earlier version); `bsecret doctor` shows the pool"
 	if f := sw.Fee; f != nil {
 		by, err := "", errors.New("no node is configured")
-		if e.Legs.Asset != nil {
-			by, err = e.Legs.Asset.Spender(ctx, f.TxID, f.Vout)
+		if e.Legs.Chain != nil {
+			by, err = e.Legs.Chain.Spender(ctx, f.TxID, f.Vout)
 			err = reader.QuietSpend(err)
 		}
 		switch {

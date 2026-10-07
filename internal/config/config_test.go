@@ -109,3 +109,58 @@ func TestPathAndKeys(t *testing.T) {
 		t.Error("IsHex32")
 	}
 }
+
+// On main and test a home needs no node: the chain view, the header
+// source and the settlement leg have defaults. regtest has none.
+func TestResolveTheNoNodeDefaults(t *testing.T) {
+	for _, n := range []string{"main", "test"} {
+		c, err := Defaults().Apply(map[string]string{"network": n})
+		if err == nil {
+			c, err = c.Resolve()
+		}
+		if err != nil || c.Chain != "woc:"+n || c.HeaderURL != "woc:"+n || c.Settle != "arcade:"+n || c.CheckNetwork() != nil {
+			t.Fatalf("%s: %v %+v", n, err, c)
+		}
+	}
+	c, err := Defaults().Apply(map[string]string{"network": "regtest"})
+	if c, err = c.Resolve(); err != nil || c.Chain != "" || c.HeaderURL != "" || c.Settle != "" {
+		t.Fatalf("regtest: %v %+v", err, c)
+	}
+	// The older key asset is the chain view asset:<URL>.
+	c, _ = Defaults().Apply(map[string]string{"asset": "http://192.0.2.1:8090"})
+	if c, err = c.Resolve(); err != nil || c.Chain != "asset:http://192.0.2.1:8090" || c.AssetURL() != "http://192.0.2.1:8090" {
+		t.Fatalf("asset: %v %+v", err, c)
+	}
+	c, _ = Defaults().Apply(map[string]string{"asset": "http://192.0.2.1:8090", "chain": "woc:main"})
+	if _, err := c.Resolve(); err == nil {
+		t.Fatal("asset and chain both set resolved")
+	}
+	c, _ = Defaults().Apply(map[string]string{"chain": "woc:test,spend=asset:http://192.0.2.1:8090"})
+	if c.AssetURL() != "http://192.0.2.1:8090" {
+		t.Fatal(c.AssetURL())
+	}
+	for _, bad := range []map[string]string{{"network": "main", "chain": "woc:test"}, {"network": "test", "settle": "arcade:main"}} {
+		c, _ := Defaults().Apply(bad)
+		if c, _ = c.Resolve(); c.CheckNetwork() == nil {
+			t.Errorf("%v passed", bad)
+		}
+	}
+}
+
+func TestFeeKeys(t *testing.T) {
+	c, err := Defaults().Apply(map[string]string{"fee_rate": "50/1000", "fee_floor": "1", "fee_dust": "1", "fee_max_rate": "1/1",
+		"fee_max_tx": "100000", "fee_min_rate": "1/1000", "fee_source": "arc", "fee_policy_urls": "https://a.example, https://b.example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := c.Fee
+	if f.Rate.Sats != 50 || f.Rate.Bytes != 1000 || *f.Floor != 1 || *f.Dust != 1 || f.MaxRate.Sats != 1 || f.MaxTx != 100000 ||
+		f.MinRate.Bytes != 1000 || f.Source != "arc" || len(f.PolicyURLs) != 2 {
+		t.Fatalf("%+v", f)
+	}
+	for k, v := range map[string]string{"fee_rate": "0/1000", "fee_floor": "-1", "fee_source": "live", "fee_max_rate": "x", "fund_unmined": "maybe", "woc_rate": "0"} {
+		if _, err := Defaults().Apply(map[string]string{k: v}); err == nil {
+			t.Errorf("%s = %s applied", k, v)
+		}
+	}
+}

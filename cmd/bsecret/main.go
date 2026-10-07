@@ -51,6 +51,7 @@ identity (a home):
   init [-from FILE | -borg DIR] create the home: identity key and coin pool;
                                 -borg: around the identity of a borg home
   fund -txid TXID               import a mined payment you sent to the fund address
+  fund -beef FILE|-             import that payment as the BEEF your wallet handed over
   fund [-blocks N] [-rescan]    coinbase: only on a regtest chain you run
                                 (development and tests)
   crypt new <name>              create a crypt: <name>_<random suffix>, its topic,
@@ -107,8 +108,20 @@ global flags:
                       a reader asks, and in mode unicast every host a
                       publisher submits to
   -hall-hosts URLS    the hosts of the group's hall (default: hosts)
-  -header-url SOURCE  header source: a bridge URL, woc:main, woc:test or
-                      chaintracks:URL; required to verify, no default
+  -chain SPEC         chain view: transactions, proofs and spends; woc:main,
+                      woc:test, asset:URL (a node) or a list (default
+                      woc:<network> on main and test)
+  -header-url SOURCE  header source: woc:main, woc:test, bhs:URL, arcade:URL,
+                      chaintracks:URL or a bridge URL (default woc:<network>
+                      on main and test)
+  -settle SPEC        broadcast: arcade:main, arcade:test, arcade:URL, arc:URL,
+                      rpc:URL or tcp:host:port (default arcade:<network> on
+                      main and test)
+  -fee-rate R         miner fee rate SATS/BYTES (default 100/1000)
+  -fee-source S       static (default) or arc: the broadcaster's live policy
+  -fee-floor N        the least fee a transaction pays, in satoshis
+  -fee-max-rate R     the most a rate may be, SATS/BYTES
+  -fee-max-tx N       the most fee one transaction may pay; above it, refused
   -mode MODE          plane (submit once to the facade; the default) or
                       unicast (submit to each of hosts)
   -network NET        main, test or regtest (default main)
@@ -257,6 +270,13 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		hosts     = fs.String("hosts", "", "")
 		hallHosts = fs.String("hall-hosts", "", "")
 		headerURL = fs.String("header-url", "", "")
+		chain     = fs.String("chain", "", "")
+		settle    = fs.String("settle", "", "")
+		feeRate   = fs.String("fee-rate", "", "")
+		feeSource = fs.String("fee-source", "", "")
+		feeFloor  = fs.String("fee-floor", "", "")
+		feeMax    = fs.String("fee-max-rate", "", "")
+		feeMaxTx  = fs.String("fee-max-tx", "", "")
 		mode      = fs.String("mode", "", "")
 		network   = fs.String("network", "", "")
 		quorum    = fs.String("quorum", "", "")
@@ -300,13 +320,22 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	}
 	over := map[string]string{}
 	for k, v := range map[string]string{"home": *home, "crypt": *crypt, "org": *org, "vault": *vault, "hosts": *hosts,
-		"hall_hosts": *hallHosts, "header_url": *headerURL, "mode": *mode, "network": *network, "quorum": *quorum, "timeout": *timeout} {
+		"hall_hosts": *hallHosts, "header_url": *headerURL, "chain": *chain, "settle": *settle, "fee_rate": *feeRate,
+		"fee_source": *feeSource, "fee_floor": *feeFloor, "fee_max_rate": *feeMax, "fee_max_tx": *feeMaxTx, "mode": *mode,
+		"network": *network, "quorum": *quorum, "timeout": *timeout} {
 		if v != "" {
 			over[k] = v
 		}
 	}
 	if cfg, err = cfg.Apply(over); err != nil {
 		fmt.Fprintln(stderr, "bsecret:", termsafe.Text(err.Error()))
+		return exitUsage
+	}
+	if cfg, err = cfg.Resolve(); err == nil {
+		err = cfg.CheckNetwork()
+	}
+	if err != nil {
+		fmt.Fprintln(stderr, "bsecret:", err)
 		return exitUsage
 	}
 	if err := checkHeaderSource(cfg.HeaderURL, cfg.Network); err != nil {
@@ -362,7 +391,7 @@ func (g *global) headerClient() (*headers.Client, error) {
 	if c.Kind != headers.Native {
 		c.Network = g.cfg.Network
 	}
-	c.Timeout = g.cfg.Timeout
+	c.Timeout, c.Token = g.cfg.Timeout, g.cfg.HeaderToken
 	return c, nil
 }
 

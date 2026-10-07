@@ -261,7 +261,7 @@ func TestARecordTheNodeCannotSettleIsKept(t *testing.T) {
 	home, tree := r.stop(false)
 	b := home.build(0, nil)
 	p := one(t, b)
-	b.payer.Asset = &nodeapi.Asset{Base: "http://127.0.0.1:1"}
+	b.payer.Chain = &nodeapi.Asset{Base: "http://127.0.0.1:1"}
 	if err := b.RecoverTrees(context.Background()); err != nil {
 		t.Fatal(err)
 	}

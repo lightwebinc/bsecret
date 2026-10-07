@@ -239,7 +239,7 @@ func (e *Engine) adoptCarrier(ctx context.Context, x *state.SecretVersion, car *
 // this record (spec section 11.6). Nothing is spent from it. A node that
 // does not answer leaves the home as it was.
 func (e *Engine) keepChainTree(ctx context.Context, tokens []state.Token) {
-	if len(tokens) == 0 || e.Legs.Asset == nil || e.Legs.Headers == nil {
+	if len(tokens) == 0 || e.Legs.Chain == nil || e.Legs.Headers == nil {
 		return
 	}
 	tok, err := funding.Rebuild(tokens[0].RawHex, tokens[0].BumpHex, "")
@@ -254,7 +254,7 @@ func (e *Engine) keepChainTree(ctx context.Context, tokens []state.Token) {
 	if _, _, ok := e.St.TreeOf(id); ok {
 		return
 	}
-	raw, err := e.Legs.Asset.TxRaw(ctx, id)
+	raw, err := e.Legs.Chain.TxRaw(ctx, id)
 	if err != nil {
 		return
 	}
@@ -262,7 +262,7 @@ func (e *Engine) keepChainTree(ctx context.Context, tokens []state.Token) {
 	if err != nil || tree.TxID().String() != id {
 		return
 	}
-	mp, err := e.Legs.Asset.MerkleProof(ctx, id)
+	mp, _, err := e.Legs.Chain.Proof(ctx, id)
 	if err != nil {
 		return
 	}

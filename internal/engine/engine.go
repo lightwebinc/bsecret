@@ -137,7 +137,9 @@ type Options struct {
 // them. Content is where a ciphertext too large to carry is written.
 type Legs struct {
 	Settler publish.Settler
-	Asset   *nodeapi.Asset
+	// Chain is the chain view: transactions, proofs and spends
+	// (nodeapi.ParseChain over a node or WhatsOnChain).
+	Chain   nodeapi.Chain
 	Arcade  *publish.Arcade
 	Facade  *publish.Facade
 	Hosts   *unicast.Set
@@ -180,8 +182,8 @@ func New(st *state.State, signer *bwallet.Signer, pool *bwallet.Pool, legs Legs,
 	if st.Identity != signer.IdentityHex() {
 		return nil, fmt.Errorf("the state belongs to identity %s, not this home's %s", st.Identity, signer.IdentityHex())
 	}
-	if legs.Settler == nil || legs.Asset == nil {
-		return nil, errors.New("a publisher needs a settlement leg and a node (config keys settle and asset)")
+	if legs.Settler == nil || legs.Chain == nil {
+		return nil, errors.New("a publisher needs a settlement leg and a chain view (config keys settle and chain)")
 	}
 	if (legs.Facade == nil) == (legs.Hosts == nil) {
 		return nil, errors.New("a publisher needs either a facade (mode plane) or hosts (mode unicast)")
@@ -236,7 +238,7 @@ func sleep(ctx context.Context, d time.Duration) error {
 func (e *Engine) NewPayer() *producer.Payer {
 	p := &producer.Payer{
 		Pool: e.Pool, Keys: map[string]*bwallet.Signer{e.Signer.IdentityHex(): e.Signer},
-		Kept: e.kept, Settler: e.Legs.Settler, Asset: e.Legs.Asset, Fees: e.Opts.Fees,
+		Kept: e.kept, Settler: e.Legs.Settler, Chain: e.Legs.Chain, Fees: e.Opts.Fees,
 		Timeout: e.Opts.Wait, Poll: e.Opts.Poll, Note: e.libraryNote,
 	}
 	if e.payer != nil {
@@ -319,15 +321,15 @@ func FeeError(err error) error {
 // The first failure is returned, a *LostError only when nothing else
 // failed; the others are noted.
 func (e *Engine) Start(ctx context.Context) error {
-	h, err := e.Legs.Asset.BestHeader(ctx)
+	h, err := e.Legs.Headers.CurrentHeight(ctx)
 	if err != nil {
-		return fmt.Errorf("node tip: %w", err)
+		return fmt.Errorf("chain tip: %w", err)
 	}
-	e.payer.Tip = h.Height
-	CollectChange(ctx, e.Pool, e.Legs.Asset)
+	e.payer.Tip = h
+	CollectChange(ctx, e.Pool, e.Legs.Chain)
 	// What a run that stopped took from the pool and never recorded goes
 	// back; from here every save records the pool before a coin is taken.
-	Journal(e.St, e.Pool, Reconcile(ctx, e.St, e.Pool, e.Legs.Asset, e.note))
+	Journal(e.St, e.Pool, Reconcile(ctx, e.St, e.Pool, e.Legs.Chain, e.note))
 	if err := e.St.Save(); err != nil {
 		return err
 	}
@@ -371,7 +373,7 @@ func (e *Engine) Start(ctx context.Context) error {
 
 // CollectChange gives every unproven coin in the pool its proof, once its
 // transaction has mined.
-func CollectChange(ctx context.Context, pool *bwallet.Pool, asset *nodeapi.Asset) int {
+func CollectChange(ctx context.Context, pool *bwallet.Pool, asset nodeapi.ProofSource) int {
 	n := 0
 	for _, id := range pool.UnprovenTxids() {
 		mp, h, err := asset.Proof(ctx, id)
@@ -527,7 +529,7 @@ func (e *Engine) promoteAhead(kind string) error {
 // tree and carries it with its proof (spec section 12.4).
 func (e *Engine) prove(ctx context.Context, kind string, tree *transaction.Transaction) error {
 	id := tree.TxID().String()
-	mp, height, err := producer.Proofs{Arcade: e.Legs.Arcade, Asset: e.Legs.Asset}.Of(ctx, id)
+	mp, height, err := producer.Proofs{Arcade: e.Legs.Arcade, Source: e.Legs.Chain, Spends: e.Legs.Chain}.Of(ctx, id)
 	if err != nil {
 		e.note("%s funding tree %s: waiting for it to mine", kind, id)
 		if mp, height, err = e.NewPayer().Await(ctx, kind+" funding tree", tree); err != nil {
@@ -536,7 +538,7 @@ func (e *Engine) prove(ctx context.Context, kind string, tree *transaction.Trans
 	}
 	tree.MerklePath = mp
 	e.kept.Prove(id, mp)
-	CollectChange(ctx, e.Pool, e.Legs.Asset)
+	CollectChange(ctx, e.Pool, e.Legs.Chain)
 	if t, _, ok := e.St.TreeOf(id); ok {
 		t.BumpHex, t.Height, t.BeefHex = mp.Hex(), height, ""
 	}

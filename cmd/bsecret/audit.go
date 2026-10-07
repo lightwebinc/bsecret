@@ -236,7 +236,7 @@ func cmdAudit(ctx context.Context, g *global, args []string) error {
 		out.Events = append(out.Events, ae)
 	}
 	if sp := g.spends(); sp == nil {
-		out.Latest = "no spend source says whether the trail's last token is the vault's latest (config key asset)"
+		out.Latest = "no spend source says whether the trail's last token is the vault's latest (config key chain)"
 	} else if by, serr := sp.Spender(ctx, cv.Latest().Txid, cv.Latest().Token.Vout); serr != nil {
 		out.Latest = "the node could not say whether the trail's last token is the vault's latest"
 	} else if by == "" {

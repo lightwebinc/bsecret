@@ -74,7 +74,7 @@ func (r *rig) build(ahead uint32, edit func(*state.State)) *Engine {
 	if edit != nil {
 		edit(st)
 	}
-	e, err := New(st, w.Signer(), w.Pool, Legs{Settler: &publish.RPCSettler{RPC: r.rpc}, Asset: r.asset,
+	e, err := New(st, w.Signer(), w.Pool, Legs{Settler: &publish.RPCSettler{RPC: r.rpc}, Chain: r.asset,
 		Hosts: &unicast.Set{Hosts: []string{"http://host.invalid"}}, Headers: r.chain},
 		Options{TreeCount: 4, ChainTreeCount: 4, TreeSats: limits.DefaultTreeSats, Ahead: ahead, Fees: mint.DefaultFees,
 			Poll: 5 * time.Millisecond, Wait: 20 * time.Second})

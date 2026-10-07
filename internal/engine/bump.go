@@ -34,7 +34,7 @@ func (e *Engine) current(ctx context.Context, tx *transaction.Transaction) (bool
 			return false, nil
 		}
 	}
-	mp, _, err := e.Legs.Asset.Proof(ctx, id.String())
+	mp, _, err := e.Legs.Chain.Proof(ctx, id.String())
 	if err != nil {
 		return false, fmt.Errorf("the kept proof of %s does not verify against the header source, and the node gave no current one: %w", Short(id.String()), err)
 	}

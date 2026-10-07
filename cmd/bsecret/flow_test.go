@@ -1382,7 +1382,7 @@ func TestStaleProofsAreReplaced(t *testing.T) {
 	delete(h.env, "BSECRET_ASSET")
 	r := h.run("bob", "", "get", "db/password")
 	h.want(r, exitIncomplete, "none verifies against the header source")
-	if !strings.Contains(r.stderr, "host "+h.aS.URL+": REFUSED token") || !strings.Contains(r.stderr, "replaced only from a node (config key asset)") {
+	if !strings.Contains(r.stderr, "host "+h.aS.URL+": REFUSED token") || !strings.Contains(r.stderr, "replaced only from the chain view (config key chain)") {
 		t.Fatalf("stale proofs and no chain source:\n%s", r.stderr)
 	}
 	h.env["BSECRET_ASSET"] = h.chainS.URL

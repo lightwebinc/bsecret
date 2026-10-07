@@ -24,7 +24,7 @@ import (
 )
 
 // Retraction (spec section 12.5): a sweep spends funding-tree outputs,
-// used or not, with bcommon carrier.Sweep, whose output 0 is a
+// used or not, with bcommon carrier.SweepAt at the fee policy, whose output 0 is a
 // funding-shaped tombstone, so a host admits it. Once it mines, every
 // carrier that spent one of those outputs is a double spend, and every
 // conforming host retracts it. A sweep is persisted before it is settled,
@@ -95,8 +95,8 @@ func (e *Engine) Retract(ctx context.Context, crypt, txid string, vouts []uint32
 		payer.GiveBack()
 		return nil, err
 	}
-	tx, err := carrier.Sweep(ctx, e.Signer, e.Signer.Originator, Params(kind), tree, vouts, fee.Tx, fee.Vout, fee.Unlocker, change,
-		e.Opts.Fees.SatPerByte, e.Opts.Fees.Floor)
+	tx, err := carrier.SweepAt(ctx, e.Signer, e.Signer.Originator, Params(kind), tree, vouts, fee.Tx, fee.Vout, fee.Unlocker, change,
+		e.Opts.Fees)
 	if err != nil {
 		payer.GiveBack()
 		return nil, err

@@ -1611,11 +1611,12 @@ token carries it whole. bcommon `producer` runs a tree's lifecycle.
 ### 12.5 Retraction
 
 A **sweep** is a mined transaction spending funding outputs, used and unused
-(bcommon `carrier.Sweep`, whose output 0 is a funding-shaped tombstone). Once
-it is mined, every carrier that spent one of those outputs is a double spend
-and can never be valid again: hosts retract it. A sweep is published once,
-after it mines, to the plane and directly to every host the publisher names.
-Hosts learn of spends only from sweeps; only a mined spend retracts.
+(bcommon `carrier.SweepAt` at the fee policy, whose output 0 is a
+funding-shaped tombstone). Once it is mined, every carrier that spent one of
+those outputs is a double spend and can never be valid again: hosts retract
+it. A sweep is published once, after it mines, to the plane and directly to
+every host the publisher names. Hosts learn of spends only from sweeps; only
+a mined spend retracts.
 **A sweep is published in every crypt that holds a version it retracts.** A
 funding tree is the owner's, not a crypt's, and one tree may fund versions
 of vaults in several crypts; a host learns of a spend only from a sweep
@@ -1944,8 +1945,8 @@ the code that reads them is borg's own: its public Go packages `borgrec`
 and the wrap that releases an epoch's key to a member) and `reader`, at the
 tag `go.mod` pins. Nothing of them is copied or restated here. This
 contract's vectors are bound to borg's group by borg's golden vectors, kept
-unchanged under `internal/borgread/testdata`. bsecret pins bcommon v0.14.0
-and borg v0.3.2.
+unchanged under `internal/borgread/testdata`. bsecret pins bcommon v0.14.1
+and borg v0.4.0.
 
 ## 17. Size and rate bounds
 

@@ -1,21 +1,92 @@
 # Quickstart
 
+Two ways in. **On mainnet or testnet** you fund the owner's home with a
+small payment from your own wallet and use overlay hosts that carry the
+borg and bsecret modules. **In the local development sandbox** a private
+regtest chain stands in for the network, so no coin is needed; it is for
+trying bsecret and for development, not for real use.
+
+## On mainnet or testnet
+
+You need:
+
+- A borg organization with a group, and `borg org signer` run once in its
+  borg home ([borg's quickstart](https://github.com/lightwebinc/borg/blob/main/QUICKSTART.md)).
+- BSV in a wallet you control (testnet coin on testnet). About 20,000 sat
+  covers a vault and about twenty versions; a version costs about 900 sat
+  ([limits.md](docs/limits.md)). The borg home is funded separately.
+- Overlay hosts that carry the crypt (and the group's hall): borg's host
+  image with the bsecret module added, or the module on any reference
+  overlay host ([host.md](docs/host.md)).
+- A node's asset API (`asset`, a Teranode node you run or may use), a
+  broadcast service (`settle`: `arcade:<url>` for any ARC-compatible API,
+  `rpc:<url>` or `tcp:<host:port>`), and a header source (`woc:main`,
+  `woc:test`, or your own).
+
+```console
+$ mkdir -p ~/.bsecret && cat > ~/.bsecret/config <<'CONF'
+network    = main
+header_url = woc:main
+asset      = https://asset.example.com
+settle     = arcade:https://arc.example.com
+mode       = unicast
+hosts      = https://host-a.example.com,https://host-b.example.com
+hall       = example_qzxkvbmwtr
+CONF
+$ bsecret init -borg ~/.borg
+created /home/you/.bsecret around the identity in /home/you/.borg/identity.json
+identity     02c6...
+fund address 1Ab... (main)
+```
+
+The fund address is bsecret's own, not the borg home's. Send about 20,000
+sat from your own wallet to it. When the payment has one confirmation,
+import it by its txid:
+
+```console
+$ bsecret fund -txid <txid>
+$ bsecret crypt new example          # give the printed BSECRET_CRYPTS line to your hosts
+$ echo 'crypt = example_<suffix>' >> ~/.bsecret/config
+$ bsecret doctor                     # every endpoint answers?
+$ bsecret vault create engineering -name ops
+$ bsecret put db/password < new-password.txt
+```
+
+Each member makes a home around its own borg home (`bsecret init -borg
+~/.borg`, no coin needed) and, with `crypt`, `org`, `vault`, `hosts`,
+`header_url` and `asset` in its config, reads:
+
+```console
+$ bsecret get db/password
+```
+
+For testnet use `network = test` and `header_url = woc:test` with a
+testnet node and broadcast service; the fund address then starts with `m`
+or `n`. Every command after that is the same. The whole walk, with a
+revoke, an audit and a second home, is [docs/examples.md](docs/examples.md).
+
+## Local development sandbox (no coin needed, a private regtest chain)
+
 In about ten minutes, on one machine: run two overlay hosts that carry a
-borg hall and a bsecret crypt, create an organisation with three members
+borg hall and a bsecret crypt, create an organization with three members
 and a group (borg), create a vault on the group, put three secrets that
 every member reads, remove one member and watch the vault fall behind,
 acknowledge the new epoch and re-key so that the removed member reads none
 of the new versions, retire a secret, pay a host's 402 for the audit and
 read the exposure window from block headers, and check that the two hosts
-hold the same. No coin is needed, because a local chain stands in for the
-network; the last section says what changes on the real one.
+hold the same. A local regtest chain stands in for the network and mines
+coinbase to each home that needs coin (coinbase: only on a regtest chain
+you run, for development and tests); nothing it mines is money.
 
 You need [Docker](https://docs.docker.com/get-docker/) with Compose, and
-this repository (or just its `deploy/quickstart/compose.yaml`).
+this repository. Build the images first (`make docker-build` here and
+`make docker-build-host BORG_HOST_IMAGE=<borg's host image>`, and borg's
+command image from the borg repository), or set `BSECRET_IMAGE`,
+`BSECRET_HOST_IMAGE`, `DEVCHAIN_IMAGE` and `BORG_IMAGE` to published ones.
 
 ```mermaid
 flowchart LR
-  B["borg (the organisation)"] -->|"group tokens, wraps"| HA["host-a"]
+  B["borg (the organization)"] -->|"group tokens, wraps"| HA["host-a"]
   B --> HB["host-b"]
   O["bsecret (the owner)"] -->|"carriers, vault tokens"| HA
   O --> HB
@@ -30,7 +101,7 @@ flowchart LR
   HB -->|headers| C
 ```
 
-## 1. Start the local chain
+### 1. Start the local chain
 
 ```console
 $ cd deploy/quickstart
@@ -42,17 +113,14 @@ $ bs()   { who=$1; shift; docker compose run --rm -T -e BSECRET_HOME=/home/nonro
 `chain` is a stand-in for the network: it serves a node's API, mines every
 transaction it is sent at once, and is the header source the hosts and both
 commands check proofs against. Nothing it mines is money. `borg org ...`
-runs the borg command with the organisation's borg home, and `bs org ...`
-the bsecret command with the organisation's bsecret home; each identity has
+runs the borg command with the organization's borg home, and `bs org ...`
+the bsecret command with the organization's bsecret home; each identity has
 one of each.
 
 The images are `ghcr.io/lightwebinc/bsecret`, `bsecret-host` and
-`bsecret-devchain`, and borg's command image `ghcr.io/lightwebinc/borg`. To
-build this repository's from a checkout instead of pulling them: `make
-docker-build` and `make docker-build-host BORG_HOST_IMAGE=<borg's host
-image>`.
+`bsecret-devchain`, and borg's command image `ghcr.io/lightwebinc/borg`.
 
-## 2. An organisation and three members, and a home of each for bsecret
+### 2. An organization and three members, and a home of each for bsecret
 
 ```console
 $ borg org init | tee org.txt && borg org fund
@@ -69,16 +137,18 @@ $ bs payee init
 $ bs auditor init && bs auditor fund
 ```
 
-The organisation and its members are borg's: each is an identity key in a
-borg home. A vault's owner is the organisation, and its readers are the
-members of one of the organisation's groups, so each bsecret home is made
+The organization and its members are borg's: each is an identity key in a
+borg home. A vault's owner is the organization, and its readers are the
+members of one of the organization's groups, so each bsecret home is made
 **around the identity of a borg home** (`init -borg`): the same key, and
-nothing else shared. The two homes keep separate coin: `bs org fund` mines
-to bsecret's own fund address. The members need no coin. The payee is
-host-a's, and the auditor is anyone at all: it is funded only to pay for
+nothing else shared. The two homes keep separate coin: `bs org fund` (no
+`-txid`) mines coinbase to bsecret's own fund address on the sandbox chain
+(coinbase: only on a regtest chain you run, for development and tests; on
+mainnet or testnet you import a payment with `fund -txid` instead). The
+members need no coin. The payee is host-a's, and the auditor is anyone at all: it is funded only to pay for
 the priced audit later.
 
-## 3. A hall, a crypt, the payee key
+### 3. A hall, a crypt, the payee key
 
 ```console
 $ borg org hall new example | tee hall.txt
@@ -96,10 +166,10 @@ $ bs payee payee key -out - >> .env
 
 A hall is where borg's groups live and a crypt is where vaults live; each
 name gets a random suffix, so nobody else's shares its topic. `.env` hands
-both to the hosts and to the commands, the organisation's key to the
+both to the hosts and to the commands, the organization's key to the
 readers, and the payee key to host-a.
 
-## 4. Start two hosts
+### 4. Start two hosts
 
 ```console
 $ docker compose up -d
@@ -112,13 +182,13 @@ paid host   http://host-a:8090 serves terms (4 priced class(es))
 ```
 
 Each host loads the borg module and the bsecret module. The first start
-takes a few seconds while MySQL initialises; run `doctor` again until both
+takes a few seconds while MySQL initializes; run `doctor` again until both
 hosts answer.
 
-## 5. The organisation, a group, and the signer key
+### 5. The organization, a group, and the signer key
 
 ```console
-$ borg org org create 'Example Organisation' -member $ALICE -member $BOB -member $CAROL
+$ borg org org create 'Example Organization' -member $ALICE -member $BOB -member $CAROL
 $ borg org group create engineering -member $ALICE -member $BOB -member $CAROL
 group   5a0c4d…9d12
 name    engineering
@@ -128,12 +198,12 @@ signer  03d1…77c2
 ```
 
 borg issued each member a grant, created the group with a random epoch key,
-and wrapped the key to each member. `org signer` makes the organisation's
-own signer key a member of every group, so that the organisation's tooling
+and wrapped the key to each member. `org signer` makes the organization's
+own signer key a member of every group, so that the organization's tooling
 holds each epoch's key the way a member does: bsecret opens it from that
 wrap, and keeps no epoch key itself.
 
-## 6. A vault on the group, and three secrets
+### 6. A vault on the group, and three secrets
 
 ```console
 $ bs org vault create engineering -name ops | tee vault.txt
@@ -159,7 +229,7 @@ the owner's wallet and under the group's epoch 0 key, published the
 carrier to both hosts, and listed the version in the vault's next token. A
 value is read from standard input, never from an argument.
 
-## 7. Every member reads
+### 7. Every member reads
 
 ```console
 $ bs alice get db/password
@@ -183,7 +253,7 @@ its commitment, and only then decrypted. The value goes to standard output
 (it is a pipe here; on a terminal it is written only with `-show`), and
 everything else to standard error. Bob and carol read the same.
 
-## 8. Revoke bob
+### 8. Revoke bob
 
 ```console
 $ printf 'correct horse' | bs org rotate -check -set db/password=- -same-all
@@ -221,7 +291,7 @@ vault. From the acknowledgement on, every host refuses anything else on
 the vault's chain until nothing is stale. The old versions are swept, so
 the hosts stop answering what bob can still open; a copy he kept stays his.
 
-## 9. Retire a secret
+### 9. Retire a secret
 
 ```console
 $ bs org retire api/token
@@ -230,7 +300,7 @@ token   seq 5 77c0…1e3f mined at height 920: 2 secret(s), 0 stale, epoch 1
 swept   1 version(s): retracted at every honest host
 ```
 
-## 10. The audit, and the payee
+### 10. The audit, and the payee
 
 ```console
 $ bs auditor terms
@@ -267,7 +337,7 @@ reads the same tokens one at a time through the free class, with no home
 and no coin (`nobody` is a home that does not exist). `payee settle` took
 the payment into the payee's wallet: checked, broadcast, mined, pooled.
 
-## 11. Do the hosts agree?
+### 11. Do the hosts agree?
 
 ```console
 $ bs alice fill
@@ -283,31 +353,15 @@ the owner published, every reading command would say `DISAGREES`, and
 `fill` would replay each object to it from host-a's answers, verified
 first: anyone can run it, and it needs no coin.
 
-## 12. Clean up
+### 12. Clean up
 
 ```console
 $ docker compose --profile cli down -v
 ```
 
-## On a real network
+### Next
 
-- **The chain.** Point `asset`, `settle` and `header_url` at a node, a
-  settlement leg and a header source you trust, set `network`, leave
-  `delay` at its default of 60 seconds, and fund the owner's home with
-  `bsecret fund -txid` from a payment to its fund address (docs/usage.md).
-  Every vault token and sweep is then a mined transaction of a few hundred
-  bytes, and every secret rides a funding output.
-- **The plane.** With a multicast plane, set `mode = plane` and `facade`:
-  each carrier is submitted once and every subscribed host receives it;
-  tokens and sweeps also go to every host named.
-- **Hosts.** A host is the `bsecret-host` image, or the module on any
-  reference overlay host (docs/host.md). The hall's hosts may be other
-  hosts than the crypt's: name them in `hall_hosts`.
-- **Members.** A member's home needs `hosts`, `header_url`, `crypt`, `org`,
-  and `asset` to know that what it read is the latest; no coin.
-- **A second home.** A home made on another machine with `bsecret init
-  -from identity.json` rebuilds the owner's record from the hosts with
-  `bsecret sync`.
-- **Next.** [docs/user-guide.md](docs/user-guide.md) explains the concepts
-  and the day-to-day use; [docs/usage.md](docs/usage.md) every command and
-  setting; [docs/limits.md](docs/limits.md) every default and cap.
+[docs/examples.md](docs/examples.md) runs the same on mainnet or testnet;
+[docs/user-guide.md](docs/user-guide.md) explains the concepts and the
+day-to-day use; [docs/configuration.md](docs/configuration.md) every setting;
+[docs/limits.md](docs/limits.md) every default and cap.

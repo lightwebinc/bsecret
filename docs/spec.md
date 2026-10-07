@@ -1,6 +1,6 @@
 # bsecret: the secrets contract
 
-bsecret keeps an organisation's secrets on the BEEF object plane, with overlay
+bsecret keeps an organization's secrets on the BEEF object plane, with overlay
 hosts as replicas that hold ciphertext and never a key. A secret is a BRC-369
 keyed object: encrypted once under a random content key that is committed to
 before anyone holds it. The content key is wrapped twice: to the owner's own
@@ -23,10 +23,10 @@ RFC 2119. Every byte-level and name-level choice that cannot change once a
 record is on a public host is listed in [frozen.md](frozen.md). The golden
 vectors in `testdata/vectors` are part of the contract (section 19).
 
-bsecret is built on borg, the organisation and group contract: an
-organisation is an identity key, a group is a chain of mined tokens whose
+bsecret is built on borg, the organization and group contract: an
+organization is an identity key, a group is a chain of mined tokens whose
 every removal begins a new epoch, and each epoch's key is sampled at random,
-committed to, and wrapped by the organisation to each member. This document
+committed to, and wrapped by the organization to each member. This document
 calls those borg's and does not restate them. "Group", "epoch", "epoch id",
 "epoch key", "wrap", "hall", "grant" and "current member" mean what they mean
 there.
@@ -64,12 +64,12 @@ it.
 ```
 
 A **crypt** is the rendezvous: one topic, `tm_bsecret_<name>_<suffix>`, that
-a set of hosts carries and any number of organisations share (section 10.1).
+a set of hosts carries and any number of organizations share (section 10.1).
 Every record names its crypt, and a vault's chain and carriers all live in
 one crypt. The vault's group lives in a borg hall, which the vault names; the
 two topics are independent, and a host of one need not carry the other.
 
-**Only the organisation writes.** A vault's owner is its organisation's
+**Only the organization writes.** A vault's owner is its organization's
 identity key: the key that signs every token and every carrier, and the key
 that sampled every epoch key of the group. A member reads. This version has
 no delegated writer.
@@ -114,7 +114,7 @@ Magic `"sev"` `0x01`. The second field of a vault token.
 | --- | --- | --- | --- |
 | 0 | `magic` | bytes(4) | `73 65 76 01` (`"se"`, `'v'` for vault, version 1). Always the first key |
 | 1 | `crypt` | text; the crypt identifier grammar (section 10.1) | MUST equal the topic's crypt |
-| 2 | `org` | bytes; the key rule | the owner: the organisation's identity key. The token's lock is derived from it (section 12.3), so it is bound, not claimed |
+| 2 | `org` | bytes; the key rule | the owner: the organization's identity key. The token's lock is derived from it (section 12.3), so it is bound, not claimed |
 | 3 | `vault` | bytes(32) | the vault identifier (section 3.3), fixed for the vault's life |
 | 4 | `seq` | uint, 0 to 2^53 - 1 | 0 for the vault's first token, then one more per token |
 | 5 | `prev` | bytes(32) | the txid, hash byte order, of the mined transaction holding the token at `seq - 1`; all zero exactly when `seq = 0` |
@@ -250,7 +250,7 @@ The owner MUST acknowledge a new epoch of the group in the vault's next
 transition after that epoch's token is mined (section 7.1). A host cannot
 check this: whether the group has a later epoch is another record's state,
 and admission reads no other record (section 11.1). It is a reader's and an
-auditor's check (sections 14 and 9), and the organisation's tooling's
+auditor's check (sections 14 and 9), and the organization's tooling's
 obligation (section 8.2). Nothing makes an owner acknowledge, and section 18
 says so. Nor can a host check that the epoch a token names is one the group
 has begun: a reader checks the token's `epoch` and `epochId` against the
@@ -355,7 +355,7 @@ A vault's `anchor` is fixed at its first token:
   between two tokens are reached only through the `previous` links of the
   version that was listed. This is the mode for credentials machines rotate
   faster than blocks are mined. It weakens the audit (section 9.3) and the
-  rollback defence (section 14), and a vault says which mode it is in so
+  rollback defense (section 14), and a vault says which mode it is in so
   that a reader and an auditor know.
 
 In both modes a token lists at most one version per secret, and versions
@@ -397,7 +397,7 @@ author, `epoch` the epoch, `hash`, `length`, `salt` and `segment` the content
 block, `commitment` the digest-form key, `previous` the link to the
 preceding version, and `inline` the inline ciphertext. It has no `release`
 block: the condition is membership of the group's epoch, the releaser is the
-organisation, and the release of the epoch's key is borg's wrap. Section 16
+organization, and the release of the epoch's key is borg's wrap. Section 16
 lists every difference.
 
 ### 5.1 The content id
@@ -446,7 +446,7 @@ owner chooses otherwise it is `confidential`, `internal`, `public`,
 classifies the secret, and a reader refuses a record whose label is not one
 of the vault's (section 7.2). It does not decide who reads: every secret of a
 vault is keyed to the vault's one group, and the members of that group's
-epoch read it whatever its label. An organisation that wants different
+epoch read it whatever its label. An organization that wants different
 readers for different secrets keeps them in different vaults, each bound to
 its own group.
 
@@ -565,7 +565,7 @@ standard padded base64 of the content id, counterparty `self`. It is 80
 bytes. The owner's wallet `decrypt`s it with the same arguments.
 
 The self wrap is what makes the wallet the owner's only credential: any
-instance of the owner's tooling that holds the organisation's identity key
+instance of the owner's tooling that holds the organization's identity key
 opens every version of every secret it ever wrote, from the hosts alone, with
 no key file and no epoch key (section 8.5). Only BRC-42 derivation touches
 the identity key; the content key is random.
@@ -659,9 +659,9 @@ right order gets right. `keyed-v1.json` pins each failure, and
 A member reads the epoch's key from borg before check 2a. Borg's own checks
 apply to it, and a member that cannot verify the token that began the epoch
 does not use the key. borg asks a reader to authenticate an object's author
-as a member of the epoch it names; here the author is the organisation, which
+as a member of the epoch it names; here the author is the organization, which
 is never a member, so a reader instead checks that the vault's `org` is the
-organisation of the group the vault names: the group's tokens are locked to
+organization of the group the vault names: the group's tokens are locked to
 the same identity key.
 
 Beside these labels a reader reports `retracted` (a mined sweep spends the
@@ -710,7 +710,7 @@ reads again.
 
 ## 8. Changes and revoke
 
-Every change is one or more carriers plus a mined token. The organisation's
+Every change is one or more carriers plus a mined token. The organization's
 tooling builds, signs, waits for the proof, and publishes in the order of
 section 8.3.
 
@@ -728,7 +728,7 @@ section 8.3.
 - **Update a secret.** A new version with a new content key and salt,
   `previous` naming the version before; publish its carrier, then list it in
   `update`.
-- **Grant a reader.** The organisation adds the reader's key to the vault's
+- **Grant a reader.** The organization adds the reader's key to the vault's
   group (borg). Nothing changes in the vault: borg wraps the current epoch's
   key to the new member, who then opens every version keyed under that
   epoch, the ones written before it joined included. A group that sets
@@ -738,12 +738,12 @@ section 8.3.
 - **Grant a reader that was removed before.** borg requires the transition
   that re-adds a removed key to begin a new epoch, so that the returning key
   reads from that epoch on. A borg host cannot check it (borg's index
-  reports a token that does not as `rejoin-unrotated`); the organisation's
+  reports a token that does not as `rejoin-unrotated`); the organization's
   tooling MUST rotate. If it did not, the returning key holds the current
   epoch's key and opens everything keyed under it, what was written while it
   was away included.
 - **Revoke a reader.** Section 8.2.
-- **Rotate on a schedule, or after a suspected leak.** The organisation
+- **Rotate on a schedule, or after a suspected leak.** The organization
   rotates the group (borg), and the vault re-keys as after any new epoch.
   Rotation on removal gives forward exclusion, not recovery (BRC-369 section
   8.4): a vault whose epoch key has leaked stays exposed until the group
@@ -764,11 +764,11 @@ To **revoke** a reader is to remove its key from the vault's group and to
 re-key the vault. It has three parts, and it is complete only when all three
 are done:
 
-1. **The removal** (borg). The organisation mints a group token that removes
+1. **The removal** (borg). The organization mints a group token that removes
    the key. Every borg host refuses a removal that does not begin a new epoch
    with a new key commitment, and the new key is wrapped only to the members
-   who remain. The organisation also revokes the reader's grant when it
-   leaves the organisation.
+   who remain. The organization also revokes the reader's grant when it
+   leaves the organization.
 2. **The acknowledgement.** The vault's next token names the new epoch.
    Every secret the vault holds is then stale, and section 4.2 rule 3 holds
    the vault's chain to re-keying and retiring until none is.
@@ -787,7 +787,7 @@ document, a key that cannot be replaced) is re-keyed with the same value, so
 that later members and later versions are under the new epoch; the removed
 reader still knows it, and nothing makes it unknown.
 
-The organisation's tooling MUST NOT begin a revoke it cannot finish: before
+The organization's tooling MUST NOT begin a revoke it cannot finish: before
 it mints the removal it has, for every secret of every vault keyed to a group
 the key is removed from, a new value, an explicit choice to re-key the same
 value, or an explicit choice to retire. It MUST NOT build any other vault
@@ -803,7 +803,7 @@ The removal is borg's command, and nothing in bsecret can stop it. So the
 check that a revoke can be finished is a step of its own, made before the
 removal: `bsecret rotate -check`, given the choices, builds nothing and
 fails when any secret of the vault has none; it is run for each vault keyed
-to the group. It is the documented step before borg removes anyone. An organisation that removes
+to the group. It is the documented step before borg removes anyone. An organization that removes
 first has begun a revoke it may not be able to finish, and the trail shows
 how long it took (section 9.2).
 
@@ -851,9 +851,9 @@ Everything an instance of the owner's tooling needs to go on from another
 instance's change is at the hosts. An instance **catches up** by reading as
 any reader does (section 14): each vault's chain from `seq` 0 against its own
 headers, folded; every current secret's record; and each content key from its
-self wrap, which needs only the organisation's identity key. To write, it
+self wrap, which needs only the organization's identity key. To write, it
 needs the key of the group's latest epoch, which it has from borg's own
-catch-up (the wrap to the organisation's signer key). It does so after losing
+catch-up (the wrap to the organization's signer key). It does so after losing
 a concurrent change, whenever its spend source shows a vault's latest token
 spent, and once when it starts on a new machine.
 
@@ -1044,7 +1044,7 @@ root. When the answering token is below the vault's latest, the context's
 **Latest.** A vault's latest tokens are those at the highest `seq` among its
 rooted tokens. A host answers every candidate at that `seq` (up to 8),
 whether or not its stored proof still verifies against the host's headers:
-after a reorganisation a host cannot take a new proof for a token it holds
+after a reorganization a host cannot take a new proof for a token it holds
 (section 11.5), so leaving one out would hide the vault's tip for good. A
 reader always chooses among them itself, with its own headers (section 14).
 A token that is not rooted is answered only by `vault-seq`.
@@ -1083,7 +1083,7 @@ carries one.
 An empty answer means only that this host holds nothing that answers: a
 reader MUST NOT read it as proof that something does not exist. The engine
 hydrates each answered output as BEEF, so a reader verifies a token or a
-carrier with its own block headers; after a reorganisation a stored proof may
+carrier with its own block headers; after a reorganization a stored proof may
 name a block that is no longer in the best chain, and the reader then fetches
 the transaction's current proof from a chain source by its txid (section
 11.5).
@@ -1356,7 +1356,7 @@ A host bounds this by policy, applied before the topic manager runs and
 answered as an error, so that nothing is recorded and the same object is
 decided afresh when it is offered again: it MAY rate-limit submissions, MAY
 refuse a BEEF above a bound of its own that is at least the floor, MAY serve
-only the organisations it chooses, and owes no retention to a carrier of a vault
+only the organizations it chooses, and owes no retention to a carrier of a vault
 whose chain it does not hold (section 11.3).
 
 ### 11.2 The index
@@ -1380,7 +1380,7 @@ outpoint hash alone, as a reader does (section 14). Only rooted tokens are a
 vault's chain: only they are answered as latest, only their fold makes a set,
 and only they list a carrier.
 
-After a reorganisation two rooted tokens can share a `seq`, each spending the
+After a reorganization two rooted tokens can share a `seq`, each spending the
 same predecessor (section 11.5). Each is the tip of its own **branch**. The
 index folds each branch on its own: the set, the last version of each
 identifier and the commitments seen are those of the tokens on that branch
@@ -1468,7 +1468,7 @@ token met before its predecessor is `pending` until the fold reaches it. A
 proven token is stored as the token alone, so the service reads a
 predecessor from the token it holds at `seq - 1`, not from a BEEF.
 
-### 11.5 Reorganisations
+### 11.5 Reorganizations
 
 A host learns of a block only through its headers, and an application on the
 reference host is given no signal when a block leaves the best chain. So a
@@ -1484,7 +1484,7 @@ proven. Readers decide with their own headers (section 14): a token or a
 sweep whose proof does not verify against the reader's best chain is not
 mined for that reader, who fetches the transaction's current proof from a
 chain source by its txid. A content id hashes a record, not a txid, so a
-token mined again after a reorganisation lists the same versions.
+token mined again after a reorganization lists the same versions.
 
 ### 11.6 Joining a crypt
 
@@ -1507,14 +1507,14 @@ chain source for a token whose stored proof names an orphaned block.
 Tokens, carriers and sweeps are self-verifying and may be replayed in any
 order.
 
-A host MUST NOT enable an unordered synchronisation of unspent outputs for
+A host MUST NOT enable an unordered synchronization of unspent outputs for
 `tm_bsecret_` topics: one carries only unspent outputs, so it never carries a
 chain's spent tokens, and it drops what a topic manager refuses without
 retrying it.
 
 ## 12. Carriers, tokens, funding trees and derivations
 
-Everything here is bcommon's, parameterised by the values in section 12.1.
+Everything here is bcommon's, parameterized by the values in section 12.1.
 
 ### 12.1 Derivations and tags
 
@@ -1738,7 +1738,7 @@ is below it (`rollback`), and when it is given a higher one it checks that
 the new token descends from the one it held (`vault-seq` back to it, or the
 `audit` class). When the token it remembers no longer verifies against its
 own headers, the reader fetches that transaction's current proof from a chain
-source by its txid; if the transaction is no longer mined, a reorganisation
+source by its txid; if the transaction is no longer mined, a reorganization
 displaced it, and the reader forgets it and reads the chain again. A reader
 that starts with no memory (a container started
 fresh) has only the unspent evidence and the comparison of hosts; a
@@ -1797,7 +1797,7 @@ reported current.
 
 **The group's state, and exposure.** The reader reads the group's chain from
 borg, as borg says, and settles that its latest token is the latest in the
-same way. The vault's `org` MUST be the group's organisation. The vault's
+same way. The vault's `org` MUST be the group's organization. The vault's
 `epoch` and `epochId`, and each record's, MUST be those of an epoch the
 group's canonical chain began; a vault or a record that names another is
 refused (`listing`; the vault is **ahead**, section 7.3). This holds for a
@@ -1869,9 +1869,9 @@ begins epoch `e + 1`:
   the wrap does not open (`secret-v1.json`: the removed member opens every
   version keyed under epoch 0 and none keyed under epoch 1 or 2);
 - the self wrap of any version, which only the owner's wallet opens;
-- unless the organisation adds them to the group again. borg requires that
+- unless the organization adds them to the group again. borg requires that
   transition to begin a new epoch, so that they read from that epoch on; no
-  borg host can check it, and an organisation whose tooling did not rotate
+  borg host can check it, and an organization whose tooling did not rotate
   has handed them the current epoch's key and everything keyed under it
   (section 8.1);
 - unless the owner wraps a later version under a key they hold while naming
@@ -1879,7 +1879,7 @@ begins epoch `e + 1`:
 - unless a current member or the owner gives them a key or a value outside
   the protocol, which no protocol prevents.
 
-**They cannot write.** Every carrier and every token needs the organisation's
+**They cannot write.** Every carrier and every token needs the organization's
 key; a removed member's old epoch keys make nothing a reader accepts.
 
 So a removal protects **what is written after the vault re-keys**, and a
@@ -1894,10 +1894,10 @@ could read unknown to them.
 | The ciphertext is public, addressed by its hash, inline when small | BRC-369 section 3.1 | a record that does not carry its ciphertext carries no locator either, where BRC-369 section 3.1 rule 2 asks for at least one of the two: the locator is the `uhrp://` form of `hash`. Sections 3.2 and 3.3 are for publications and are not required (below) |
 | Content key never derived from an identity key, an epoch key or another version's | BRC-369 section 2.1 rules 1 and 2 ("MUST NOT be derived from the publisher's identity key, from the content, or from any other reusable secret") | none. BRC-42 derivation appears only in the self wrap and in borg's release of the epoch key, where BRC-369 section 2.1 rule 5 puts it |
 | Segmented AES-256-GCM, 4-byte salt, `salt \|\| index` IVs, a tag per segment | BRC-369 section 2.3 | the construction is BRC-369's, and `brc369-v1.json` reproduces its ciphertext through this codec. bsecret adds bounds BRC-369 leaves open: a segment of 16 to 1048576 bytes, a plaintext of 1 to 67108864 bytes (so a ciphertext of at most 2^27), and no length whose last segment is a tag alone |
-| The descriptor: author, epoch, content hash, length, salt, segment, commitment, `previous`, inline ciphertext | BRC-369 section 4.1 | canonical CBOR with integer keys, not JSON canonicalised by RFC 8785; signed by the carrier's field signature under the owner's derived key, not by the identity key (a BRC-100 wallet cannot sign with its identity key); the author is an identity key, not a handle; the record's magic takes the place of `metanetKeyedContent`, and the cipher is fixed by the record version where BRC-369 names it in `content.cipher`; no `release` block; `previous` links versions of one secret, where BRC-369's links epochs of one room |
+| The descriptor: author, epoch, content hash, length, salt, segment, commitment, `previous`, inline ciphertext | BRC-369 section 4.1 | canonical CBOR with integer keys, not JSON canonicalized by RFC 8785; signed by the carrier's field signature under the owner's derived key, not by the identity key (a BRC-100 wallet cannot sign with its identity key); the author is an identity key, not a handle; the record's magic takes the place of `metanetKeyedContent`, and the cipher is fixed by the record version where BRC-369 names it in `content.cipher`; no `release` block; `previous` links versions of one secret, where BRC-369's links epochs of one room |
 | Content id | BRC-369 section 4.2 rule 3 (SHA-256 of the canonical form without the signature) | SHA-256 of the canonical record without the wraps and the inline ciphertext, so that the wraps can be bound to it |
 | The three checks, in order, each naming its culprit; a failed third check is a proof | BRC-369 sections 5.3 and 5.4 | a listing check before them and a payload check after; the unwrap sits between checks 1 and 2 |
-| Readers are the members of a group's epoch; a removal begins a new epoch; the epoch's key is released linearly | BRC-369 section 8 (the gate profile); borg, which enforces rotation on removal at every host | the gate is a borg group; BRC-369's gate profile encrypts content under the epoch's key itself, where a secret has its own content key, so that one version's key opens one version (BRC-369 section 2.1 rule 2). borg recommends that an application wrap such a key under the epoch's symmetric key; bsecret wraps under a hash of that key and the content id instead, so that no two uses of one epoch key share a cipher key. borg asks a reader to authenticate an object's author as a member of its epoch; the author here is the organisation, never a member, and a reader checks that it is the group's organisation |
+| Readers are the members of a group's epoch; a removal begins a new epoch; the epoch's key is released linearly | BRC-369 section 8 (the gate profile); borg, which enforces rotation on removal at every host | the gate is a borg group; BRC-369's gate profile encrypts content under the epoch's key itself, where a secret has its own content key, so that one version's key opens one version (BRC-369 section 2.1 rule 2). borg recommends that an application wrap such a key under the epoch's symmetric key; bsecret wraps under a hash of that key and the content id instead, so that no two uses of one epoch key share a cipher key. borg asks a reader to authenticate an object's author as a member of its epoch; the author here is the organization, never a member, and a reader checks that it is the group's organization |
 | Encrypt once, wrap the key per reader set | BRC-52's keyring (a field revelation key encrypted to a verifier), which BRC-369 says section 5.2 borrows; the same shape as file-encryption tools that wrap one data key to several recipients | the wrap is to an epoch, not to an identity: one wrap serves every member, and the per-member cost is borg's |
 | The wrap's cipher form | BRC-2's symmetric form as both SDKs write it (AES-256-GCM, 32-byte IV, `IV \|\| ciphertext \|\| tag`) | the key is a hash of the epoch's symmetric key and the content id, not a BRC-42 child key: there is no counterparty to derive against |
 | The self wrap | BRC-2 through BRC-100 `encrypt` and `decrypt`, as the SDKs implement it (the symmetric key is the x-coordinate of the child keys' shared point; `derivation-v1.json` pins it); BRC-42 and BRC-43 with counterparty `self` | a protocol of its own, `[2, "bsecret self"]`, so that a wallet permits it apart from messaging (the reason BRC-369 section 5.2 rule 2 gives for its own protocol), and a key id derived from the content id, so that a wrap is bound to what it carries; no BRC-78 framing, since sender and recipient are one key and the key id is recomputed |
@@ -1912,7 +1912,7 @@ could read unknown to them.
 | Record magic: prefix, type letter, version | BRC-171 section 6 | in the order the library's registry fixes |
 | The set root and inclusion paths | RFC 6962 Merkle Tree Hash | none |
 | Topic and lookup names | BRC-87; BRC-22; BRC-24 with `output-list` answers | a random suffix per crypt |
-| Host discovery | BRC-88 SHIP | a chain is joined by replay, not by an unordered synchronisation |
+| Host discovery | BRC-88 SHIP | a chain is joined by replay, not by an unordered synchronization |
 | Priced questions | BRC-105 over BRC-103 and BRC-104; BRC-29; BRC-180 rule 2 | only the bulk history and audit classes are priceable; the payment's output index and script are fixed here; a handshake budget is required |
 | Carrier ancestry and proofs | BRC-62, BRC-96 and BRC-95 BEEF; BRC-74 BUMP | exactly what the object needs, so nobody can attach anything to it |
 | Objects on the plane | BRC-148 and BRC-149 | none |
@@ -1964,7 +1964,7 @@ and borg v0.3.1.
 | Unlisted versions a reader follows above a listed one | 64 | bounds a read in an interval vault by the records hosts hold in a row, never by a version a carrier claims |
 | Entries in a record map | 64 | bounds the work of one record |
 | Answers | 8 tokens, carriers or sweeps per question; 64 tokens or 16 secret carriers per page | bounds an answer; not a floor, a later version may raise it |
-| Tokens kept per `seq` | 8 | reorganisations |
+| Tokens kept per `seq` | 8 | reorganizations |
 | Superseded carriers kept per funding outpoint | 8 | evidence of equivocation; the rest are counted |
 | Spends of outpoints no carrier used, kept by a host | at least 65536, oldest dropped first | a sweep may arrive before the carriers it retracts |
 | Inclusion context | 2048 bytes, 32 steps, `size` 1 to 4096, `seq` at most 2^53 - 1 | a set of 4096 secrets needs 12 |
@@ -2017,11 +2017,11 @@ and a client MUST respect it.
    key, and the epoch's key reaches a member under BRC-2 from long-term
    identity keys (borg). Whoever later learns a member's identity key opens
    every epoch that member was in and every version keyed under them that any
-   host or copy still holds. Whoever learns the organisation's key opens
+   host or copy still holds. Whoever learns the organization's key opens
    everything, through the self wraps.
-9. **The organisation's key is everything.** It writes every vault, samples
-   every epoch key and opens every self wrap. A compromised organisation key
-   is a new organisation.
+9. **The organization's key is everything.** It writes every vault, samples
+   every epoch key and opens every self wrap. A compromised organization key
+   is a new organization.
 10. **Leaks name nobody.** Every member of an epoch holds the same keys.
 11. **Hosts can withhold.** They cannot forge, alter or decrypt. The root
    makes withholding from the set visible; a withheld newer token is visible
@@ -2100,7 +2100,7 @@ its secrets are `tx/api-token`, `tx/db-password`, `tx/tls-key` and
 The vectors' crypt is `example_crypt_hmqzvtkwrx` and their hall
 `example_hall_vkqzmtrwxp`; the suffixes are fixed examples so that the
 vectors are reproducible. The test identities' private keys are 32 bytes of
-one value (`0x51` the organisation, `0x52` to `0x54` the members, `0x56` a
+one value (`0x51` the organization, `0x52` to `0x54` the members, `0x56` a
 key that is never a member); they are public and never for real use, and they
 are the identities of borg's own vectors, whose group and epochs this
 scenario is keyed to. Every value a client draws at random (content keys,

@@ -1,9 +1,9 @@
 # The bsecret command
 
-`bsecret` keeps an organisation's secrets on overlay hosts
+`bsecret` keeps an organization's secrets on overlay hosts
 ([spec.md](spec.md)), and reads them as a member of the group a vault is
 keyed to, or audits a vault as anyone. The owner's home holds the
-organisation's identity key: it creates vaults on borg groups, writes each
+organization's identity key: it creates vaults on borg groups, writes each
 version of a secret under a content key of its own, wrapped to the group's
 current epoch, and, when the group removes a member, acknowledges the new
 epoch and re-keys everything the vault held. A member's home reads a
@@ -14,7 +14,7 @@ host's 402 for the priced questions, and a host's payee settles the
 payments the host recorded.
 
 ```text
-  borg home (the organisation)                           hosts of the hall (tm_borg_<hall>, ls_borg)
+  borg home (the organization)                           hosts of the hall (tm_borg_<hall>, ls_borg)
   ────────────────────────────                           ──────────────────────────────────────────
   borg org create, group create, org signer ───────────▶ the group's chain, the wraps of each epoch
   borg org remove <key> -group G  (a new epoch) ───────▶ a group token, wraps to the members who remain
@@ -43,25 +43,26 @@ payments the host recorded.
 [user-guide.md](user-guide.md) explains the concepts and the day-to-day
 use; this page is the reference.
 
-## Build
-
-Go 1.27.1 or later, or Docker.
+## Install
 
 ```console
-$ make bsecret            # bin/bsecret
+$ go install github.com/lightwebinc/bsecret/cmd/bsecret@latest
+$ make bsecret            # or from a checkout: bin/bsecret (Go 1.27.1 or later)
 $ make borg               # bin/borg, the borg command at the tag go.mod pins
 $ make docker-build       # ghcr.io/lightwebinc/bsecret and bsecret-devchain, locally
 ```
 
-In the image the home is `/home/nonroot/.bsecret`; mount a named volume
+Release tarballs for Linux and macOS (amd64, arm64) are on the
+[releases page](https://github.com/lightwebinc/bsecret/releases). In the
+image the home is `/home/nonroot/.bsecret`; mount a named volume
 there (`-v bsecret-home:/home/nonroot/.bsecret`) and pass settings as
 `BSECRET_<KEY>` variables.
 
 ## bsecret and a borg home
 
-A vault's owner is a borg organisation: the key that signs every vault
-token and every carrier is the organisation's identity key, and the vault's
-readers are the members of one of the organisation's groups. bsecret does
+A vault's owner is a borg organization: the key that signs every vault
+token and every carrier is the organization's identity key, and the vault's
+readers are the members of one of the organization's groups. bsecret does
 none of borg's work and keeps none of borg's state.
 
 - **The identity is shared, the homes are not.** `bsecret init -borg DIR`
@@ -80,11 +81,11 @@ none of borg's work and keeps none of borg's state.
   borg state file is read.
 - **Epoch keys come from borg's wraps.** A member opens the key of the
   epoch a record names from the wrap borg made to it. The owner opens it
-  from the wrap borg made to the organisation's **signer key**, the key
-  borg derives from the organisation's identity key and keeps a member of
+  from the wrap borg made to the organization's **signer key**, the key
+  borg derives from the organization's identity key and keeps a member of
   every group once `borg org signer` has run. So run `borg org signer`
-  once, in the organisation's borg home, before `bsecret vault create`:
-  without it the organisation holds no wrap, and bsecret refuses to create
+  once, in the organization's borg home, before `bsecret vault create`:
+  without it the organization holds no wrap, and bsecret refuses to create
   a vault it could not write to. bsecret keeps no epoch key on disk: it
   opens the wrap each time.
 - **The removal is borg's, the rotation is bsecret's.** A revoke is three
@@ -102,11 +103,11 @@ both the hall and the crypt.
 | Command | Needs a home | Needs | What it does |
 | --- | --- | --- | --- |
 | `init [-borg DIR \| -from FILE]` | creates it | nothing | identity key and empty coin pool; prints the identity and the fund address. `-borg` makes the home around a borg home's identity, `-from` around an identity file |
-| `fund -txid TXID` | yes | `asset`, `header_url` | imports a mined payment to the fund address, once its proof checks |
-| `fund [-blocks N]` | yes | `rpc`, `asset` | mines coinbase to the fund address through `generatetoaddress`: a chain you run. Refused on network `main`. `-batch N` blocks a call; `-rescan` re-reads the last `-blocks` blocks for coinbase the pool lacks and mines nothing |
+| `fund -txid TXID` | yes | `asset`, `header_url` | imports a mined payment you sent from your own wallet to the fund address, once its proof checks. How a home is funded on mainnet and testnet |
+| `fund [-blocks N]` | yes | `rpc`, `asset` | coinbase: only on a regtest chain you run (development and tests). Mines coinbase to the fund address through `generatetoaddress`. Refused on network `main`. `-batch N` blocks a call; `-rescan` re-reads the last `-blocks` blocks for coinbase the pool lacks and mines nothing |
 | `crypt new <name>` | optional | nothing | draws the 10-letter random suffix; prints the crypt, its topic, and the host's `BSECRET_CRYPTS` line |
 | `crypt list` | yes | nothing | the crypts this home created |
-| `vault create <group> -name N` | yes, the owner's, funded | `crypt`, `hall`, a publisher's settings (below) | a vault keyed to a group of the organisation (its id, or its name in the hall): a chain tree, and the vault's first token naming the group's current epoch. `-anchor version` (default) or `interval`; `-labels a,b,c`. The name is one line of plain text |
+| `vault create <group> -name N` | yes, the owner's, funded | `crypt`, `hall`, a publisher's settings (below) | a vault keyed to a group of the organization (its id, or its name in the hall): a chain tree, and the vault's first token naming the group's current epoch. `-anchor version` (default) or `interval`; `-labels a,b,c`. The name is one line of plain text |
 | `vault list` | optional | a reader's settings | the owner's vaults the hosts answer |
 | `vault show` | optional | a reader's settings | one vault's chain token by token as verified here, its standing against its group, whether its last token is the latest, and its set |
 | `put <name>` | yes, the owner's | a publisher's | the next version of a secret, its value from standard input or `-file`: sealed, wrapped, its carrier published, and listed in the vault's next token. `-label`, `-type`, `-not-after`, `-rotate-every`; `-defer` (interval vaults) |
@@ -139,84 +140,10 @@ a group identifier 32. A crypt and a hall are always the full identifier
 
 ## Configuration
 
-Settings come from, highest first: the global flags, `BSECRET_<KEY>` in the
-environment (the key in upper case), the config file, and the defaults. The
-config file is `-config PATH`, else `$BSECRET_HOME/config`, else
-`$XDG_CONFIG_HOME/bsecret/config`, else `~/.bsecret/config`. Its grammar is
-one `key = value` per line, `#` comments, blank lines ignored; a key it
-does not define, a key given twice, or a line without `=` is an error,
-never ignored.
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `arcade_key` | none | bearer token for an arcade installation named in `settle` |
-| `asset` | none | the node's asset API base URL: proofs, the chain tip, raw transactions, and the node's view of which outputs are spent (a writer's evidence, and a reader's that a token is the latest) |
-| `chain_tree_count` | `8` | outputs of a new chain tree, 1 to 32: a vault's first token carries its chain tree whole |
-| `content` | none | where a ciphertext over the inline bound is kept, comma separated: a directory (a writer stores into the first one; a reader reads from each) or an `http(s)` base URL a reader fetches `<base>/<hash>` from. A file is named by the lowercase hex of its SHA-256 |
-| `crypt` | none | the crypt identifier a command uses; an owner whose vaults are all in one crypt uses it |
-| `delay` | `60s` | the propagation delay: a mined token or sweep is published this long after its block is in this home's headers, so the hosts' headers have it too (spec section 8.3); `0s` to `10m` |
-| `facade` | none | mode `plane`: the overlay host a publisher submits to, from which the plane delivers to every subscribed host. Refused in mode `unicast` |
-| `freshness` | `60s` | how old a writer's evidence that the vault's and the group's latest tokens are unspent may be when it publishes a version (spec section 7.1); at most `600s`. Every token retakes the evidence as it is built |
-| `hall` | none | the borg hall a new vault's group lives in (`vault create`); a vault names its own afterwards |
-| `hall_hosts` | `hosts` | the overlay hosts asked about the group's hall, comma separated, at most 16 |
-| `header_url` | none | the header source every proof is checked against: an overlay bridge's base URL (native `/v1/root/<height>` and `/v1/tip`), `woc:main`, `woc:test` or `chaintracks:URL` |
-| `home` | `~/.bsecret` | the identity's home |
-| `hosts` | none | the crypt's overlay hosts, comma separated, at most 16: every host a reader asks and compares; in mode `unicast` every host a publisher submits to; in mode `plane` the hosts every mined object is also sent to directly |
-| `max_fetch` | `16777216` | the most ciphertext a reader fetches by hash, in bytes; at most 134217728 |
-| `mode` | `plane` | `plane` or `unicast`: how a publisher's objects reach the hosts (spec section 13) |
-| `network` | `main` | `main`, `test` or `regtest`: the fund address prefix and the header source's proof-of-work floor |
-| `object_bound` | `1048576` | the plane's object bound in bytes, at most 8388608; a carrier or token whose BEEF is larger is not published |
-| `org` | none | the owner a reader reads: the organisation's identity key |
-| `originator` | `bsecret` | the BRC-100 originator presented to the wallet |
-| `paid_host` | none | the base URL of `ls_bsecret` on the host the priced questions are asked of (`audit`, `history`, `terms`): the host's terms route (spec section 10.3). An origin, with no path |
-| `quorum` | `all` | how many of `hosts` must hold a carrier for it to count as published: `all`, `majority`, `one`, or a number up to the host count. In mode `unicast` they are the hosts that took it; in mode `plane`, the hosts that answer it by lookup once the facade took it. A token or a sweep always needs every host |
-| `rpc` | none | the node's JSON-RPC URL (`fund`) |
-| `rpc_pass`, `rpc_user` | `bitcoin` | the node's basic auth, also for `settle = rpc:` |
-| `settle` | none | the settlement leg for what is mined (funding trees, tokens, sweeps, a payment a payee takes): `tcp:<host:port>`, `rpc:<url>` or `arcade:<url>` |
-| `timeout` | `15s` | bounds each request; `1s` to `5m` |
-| `tree_count` | `32` | outputs of a new secret tree, 1 to 1000 |
-| `vault` | none | the vault a command uses: its identifier, or its display name when that names one vault |
-
-Global flags, before the command: `-config PATH`, `-home DIR`,
-`-crypt CRYPT`, `-org KEY`, `-vault VAULT`, `-hosts URLS`,
-`-hall-hosts URLS`, `-header-url SOURCE`, `-mode MODE`, `-network NET`,
-`-quorum Q`, `-timeout DUR`, `-v` (also accepted after the command),
-`-version`.
-
-Every limit, with its reason, is in [limits.md](limits.md). A cap is
-refused with exit 2 and a message naming the limit; a recommendation
-passed prints `warning: ...` and goes on. The addresses have no default on
-purpose: a default would send an organisation's records, or a member's
-questions, to a server nobody configured.
-
-An owner's config file, with documentation addresses:
-
-```text
-# ~/.bsecret/config
-network      = test
-crypt        = example_crypt_hmqzvtkwrx
-hall         = example_hall_vkqzmtrwxp
-asset        = http://192.0.2.10:8090
-settle       = rpc:http://192.0.2.10:9292
-facade       = https://host-a.example.com
-hosts        = https://host-a.example.com,https://host-b.example.com
-header_url   = https://headers.example.com
-content      = /srv/bsecret/content
-```
-
-A member's, without the plane:
-
-```text
-network      = test
-crypt        = example_crypt_hmqzvtkwrx
-org          = 02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
-vault        = ops
-hosts        = https://host-a.example.com,https://host-b.example.com
-header_url   = https://headers.example.com
-asset        = http://192.0.2.10:8090
-content      = https://content.example.com
-paid_host    = https://terms.host-a.example.com
-```
+Settings come from, highest first: the global flags, `BSECRET_<KEY>` in
+the environment, the config file, and the defaults. Every key, flag and
+environment variable, with its default, is in
+[configuration.md](configuration.md).
 
 ## Exit codes
 
@@ -303,7 +230,7 @@ the tree was adopted would leave a tree only that wallet knows.
 `crypt new <name>` draws the 10-letter suffix uniformly at random and
 prints the crypt `<name>_<suffix>`, its topic
 `tm_bsecret_<name>_<suffix>`, and the line a host takes
-(`BSECRET_CRYPTS=<crypt>`). Many organisations may share a crypt; a vault's
+(`BSECRET_CRYPTS=<crypt>`). Many organizations may share a crypt; a vault's
 chain and carriers all live in one. The suffix keeps unrelated crypts off
 each other's topic. It is not a secret and not an access control.
 
@@ -429,7 +356,7 @@ has elapsed or its `-not-after` has passed.
 
 ## Several homes of one owner
 
-Any home made around the organisation's key can own its vaults. What such
+Any home made around the organization's key can own its vaults. What such
 a home lacks is at the hosts, and `sync` reads it as a reader does (spec
 section 8.5): each vault's chain from its first token, verified and folded;
 every current secret's record and, through its self wrap, its name; in an
@@ -501,7 +428,7 @@ answered past it is not read, and the command is incomplete (exit 3). The walk i
 is asked for only once the one before it is on the chain, and an answer is
 read up to 16 MiB and the outputs a page of the contract holds. The group is read from the hall's hosts by borg's
 reader, and the vault is held to it: its owner is the group's
-organisation, and every epoch and epoch id a token or a record names is
+organization, and every epoch and epoch id a token or a record names is
 one the group's chain began.
 
 A home keeps the chain of each vault it verified (`chains/` in the home:
@@ -513,7 +440,7 @@ verified is named; when every host does, the answer is refused (exit 1,
 `rollback`), and when only some do the vault is read from the others (exit
 3). A remembered token whose kept proof no longer verifies is looked up at
 `asset`: its current proof replaces the old one, and only the node's word
-that the transaction is not mined (a reorganisation displaced it) makes
+that the transaction is not mined (a reorganization displaced it) makes
 the home forget it. A header source or a node that fails proves nothing,
 and nothing is forgotten on its account. Whether the
 token read is the latest is settled by `asset`: its output is unspent, or
@@ -606,7 +533,7 @@ may have dropped the tree: a node can prune a transaction whose outputs are
 all spent, and each chain tree output is spent by a vault's first token. A
 tree taken from the home is checked as the node's answer would be: its txid
 must be the one the token spends, its proof must verify against
-`header_url` (a proof a reorganisation left stale is replaced by the node's
+`header_url` (a proof a reorganization left stale is replaced by the node's
 current one when the node gives one), and the token's BEEF must pass the
 host's rules. A record whose bytes are another transaction is named
 (`REFUSED`) and not used. A second home records the vault's chain tree,

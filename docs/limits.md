@@ -55,7 +55,7 @@ this version chooses) or **the contract's** (a record bound).
 | Group a vault is keyed to | one, for good | one (the record) | Different readers for different secrets is different vaults on different groups | Same |
 | Members who read a vault | the group's | borg's: 1024 a group | A record does not grow with the group: see the next row. What grows with the members is borg's work at each removal, one wrap of the new epoch's key a remaining member | borg's own limits |
 | Wraps in a secret's record | two: the owner's own, and one under the epoch's key | two (the record) | Each is 80 bytes. The epoch's key reaches the members through borg's wraps, not through the record, so a version costs the same for 3 readers or 1000 | Same |
-| The organisation's signer key | a member of every group a vault is keyed to (`borg org signer`, once) | fixed | It is how the owner's tooling opens each epoch's key. Without it `vault create` refuses | Same |
+| The organization's signer key | a member of every group a vault is keyed to (`borg org signer`, once) | fixed | It is how the owner's tooling opens each epoch's key. Without it `vault create` refuses | Same |
 | Epochs a vault can be behind | any number: its next token acknowledges the group's latest | none | Everything keyed under any earlier epoch is then stale, and is re-keyed under the latest. A group that begins another epoch while a vault is re-keying makes `rotate` stop and ask for the choices again | Same |
 | Crypts an owner publishes in | as needed | none | A vault lives in one crypt; a sweep is published in every crypt that holds a version it retracts | Same |
 | Name of a crypt | `<name>_<suffix>` | 39 bytes: a name of at most 28 and a suffix of exactly 10 random letters | A crypt is a topic, `tm_bsecret_<crypt>`, of at most 50 bytes | Plane: one topic the hosts subscribe to |
@@ -156,7 +156,7 @@ this version chooses) or **the contract's** (a record bound).
 | Retention of a carrier of a vault the host holds no chain of (`BSECRET_UNHELD_HOURS`) | 24 hours | at least 24 hours (spec) | Any key can publish carriers for a vault that does not exist; a new vault's carriers arrive before its first token | Same |
 | A listed version the set still holds | kept for as long as it does | none | It is the vault's current state | Same |
 | Tokens and sweeps | kept for the host's life | none | The chain is the audit trail | Same |
-| Submissions | host policy | host policy | Funding does not bound what a key can store at a host: the value returns by sweep. A host rate-limits submissions, and may serve only the organisations it chooses | Same |
+| Submissions | host policy | host policy | Funding does not bound what a key can store at a host: the value returns by sweep. A host rate-limits submissions, and may serve only the organizations it chooses | Same |
 | BRC-104 sessions the terms route keeps (`BSECRET_SESSIONS`, `BSECRET_SESSION_TTL`) | 10000, each forgotten after 600 s idle | host policy | A handshake is unauthenticated: the store must not grow without end | Not on the plane |
 | BRC-104 handshakes the terms route answers (`BSECRET_HANDSHAKES_PER_SEC`, `BSECRET_HANDSHAKE_BURST`, `BSECRET_HANDSHAKES_PER_ADDR_PER_SEC`, `BSECRET_HANDSHAKE_ADDR_BURST`) | 4 a second, 8 at once; per remote address (IPv6 per /64) 1 a second, 4 at once | host policy; over it answered 429 with `Retry-After`, before any signature | The session cap bounds memory, not work; the budget bounds the signatures a flood can make a host compute | Not on the plane |
 | Signed responses one session is given (`BSECRET_RESPONSES_PER_SEC`, `BSECRET_RESPONSE_BURST`) | 5 a second, 20 at once | host policy; over it answered 429 with `Retry-After`, with nothing signed; a signed request sent twice is refused | One handshake must not buy signatures without end | Not on the plane |
@@ -276,7 +276,11 @@ twice. Each entry of a change list adds 104 bytes to a token.
 satoshi a byte with a floor of 250 (`mint.DefaultFees`), over 121 vault tokens, 136 versions, 21 sweeps, 2 chain trees and 7 secret
 trees of two owners.
 A mined transaction costs its size in satoshis; a carrier is never mined
-and rides one funding output of 1 satoshi, which a sweep returns.
+and rides one funding output of 1 satoshi, which a sweep returns. The rate is ten times the BSV mainnet miner
+minimum of 100 satoshis a kilobyte, so a transaction is never held back for
+its fee; it is not configurable. About 20,000 satoshis (0.0002 BSV) covers a
+vault, its chain tree and about twenty versions; members and free audits
+need no coin.
 
 | Operation | Mined | Bytes mined | Satoshis |
 | --- | --- | --- | --- |

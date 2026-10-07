@@ -1,6 +1,15 @@
 # bsecret
 
+[![CI](https://github.com/lightwebinc/bsecret/actions/workflows/ci.yml/badge.svg)](https://github.com/lightwebinc/bsecret/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/lightwebinc/bsecret)](https://github.com/lightwebinc/bsecret/releases)
+[![Go version](https://img.shields.io/github/go-mod/go-version/lightwebinc/bsecret)](go.mod)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+
+> [!WARNING]
+> **Experimental software.** bsecret is part of [bstack](https://github.com/lightwebinc/bstack),
+> the applications and patterns built on [BSV Layered Multicast](https://github.com/lightwebinc/bsv-multicast).
+> It is published to be built on and improved. Interfaces, formats and behavior may change
+> rapidly between releases; pin an exact version.
 
 Secrets management on Bitcoin, replicated by overlay hosts that hold
 ciphertext and never a key. A secret is encrypted once under a random key;
@@ -33,25 +42,31 @@ does anything else.
 - **Honest about what removal does.** A removed member keeps everything it
   could read. Removal protects what is written after the vault re-keys.
 
-## Documentation
-
-| If you want to | Read |
-| --- | --- |
-| Try it on one machine in ten minutes | [QUICKSTART.md](QUICKSTART.md) |
-| Understand the ideas and use it day to day | [docs/user-guide.md](docs/user-guide.md) |
-| Look up a command, a setting or an exit code | [docs/usage.md](docs/usage.md) |
-| Implement a compatible owner, reader, auditor or host | [docs/spec.md](docs/spec.md) (the specification) |
-| Know what cannot change once published | [docs/frozen.md](docs/frozen.md) |
-| Know the defaults and caps, why each is set where it is, what was measured, and what it does not do | [docs/limits.md](docs/limits.md) |
-| Run an overlay host that carries a crypt | [docs/host.md](docs/host.md) |
-
-## The command
-
-`bsecret` is the owner's tooling, the member's reader and the auditor's
-check in one command ([docs/usage.md](docs/usage.md)).
+## Install
 
 ```console
-$ bsecret init -borg ~/.borg                    # a home around the organisation's identity
+$ go install github.com/lightwebinc/bsecret/cmd/bsecret@latest
+$ go install github.com/lightwebinc/borg/cmd/borg@latest   # the owner also runs borg
+```
+
+Or download a static binary for Linux or macOS (amd64, arm64) from
+[Releases](https://github.com/lightwebinc/bsecret/releases), or build the
+image `ghcr.io/lightwebinc/bsecret` (`make docker-build`).
+
+## Example: a vault on mainnet
+
+The owner is a borg organization with a group (see
+[borg](https://github.com/lightwebinc/borg)), and has run `borg org signer`
+once. Nothing is mined for you: the bsecret home is funded with a payment
+you send from your own wallet.
+
+```console
+$ bsecret -network main init -borg ~/.borg      # a home around the organization's identity
+identity     02c6…9a1e
+fund address 1EUY…zipY (main)
+$ # send about 20,000 sat from your own wallet to the fund address, wait one block
+$ bsecret fund -txid <txid of that payment>
+$ bsecret crypt new example                     # give the printed BSECRET_CRYPTS line to your hosts
 $ bsecret vault create engineering -name ops    # a vault on a borg group
 $ bsecret put db/password < new-password.txt    # a version, listed in a mined token
 $ bsecret get db/password | psql ...            # a member reads, every check in order
@@ -60,16 +75,33 @@ $ bsecret rotate -set db/password=new.txt -same-all   # acknowledge, re-key, swe
 $ bsecret -org <key> -vault <id> audit -free    # anyone: the trail, from headers
 ```
 
-A vault's owner is a borg organisation, so an owner's bsecret home is made
-around the identity of its borg home and shares nothing else with it: the
-group's chain and its epoch keys are read from the hall's hosts by borg's
-own packages.
+The owner's bsecret home is made around the identity of its borg home and
+shares nothing else with it: the group's chain and its epoch keys are read
+from the hall's hosts by borg's own packages. Members and auditors need no
+coin. The full walk, on mainnet or testnet,
+is [docs/examples.md](docs/examples.md); a private sandbox that needs no
+coin is [QUICKSTART.md](QUICKSTART.md).
+
+## Documentation
+
+| If you want to | Read |
+| --- | --- |
+| Run it on mainnet or testnet, step by step | [docs/examples.md](docs/examples.md) |
+| Try it on one machine with no coin (a private regtest chain) | [QUICKSTART.md](QUICKSTART.md) |
+| Understand the ideas and use it day to day | [docs/user-guide.md](docs/user-guide.md) |
+| Set every key, flag and environment variable | [docs/configuration.md](docs/configuration.md) |
+| Look up a command or an exit code | [docs/usage.md](docs/usage.md) |
+| See how the pieces fit | [docs/architecture.md](docs/architecture.md) |
+| Run an overlay host that carries a crypt | [docs/host.md](docs/host.md) |
+| Know the defaults and caps, what was measured, and what things cost | [docs/limits.md](docs/limits.md) |
+| Implement a compatible owner, reader, auditor or host | [docs/spec.md](docs/spec.md) (the specification) |
+| Know what cannot change once published | [docs/frozen.md](docs/frozen.md) |
 
 ## Build and test
 
 ```console
 $ (cd host && npm ci)   # once: the TypeScript package's dependencies
-$ make verify           # gofmt, vet, dependency set, licences, typecheck, vectors, tests
+$ make verify           # gofmt, vet, dependency set, licenses, typecheck, vectors, tests
 $ make bsecret          # the command, bin/bsecret
 $ make module           # the host module, host/bundle/bsecret-module.js
 $ make vectors          # regenerate the golden vectors, both languages
@@ -85,13 +117,13 @@ Go 1.27.1 or later, and Node 24 for the TypeScript package under `host/`
 dependencies are go-sdk v1.7.1, bcommon v0.12.0 and borg v0.3.1, and nothing
 else.
 
-borg is a private module. Its tagged archive is kept under
-`third_party/goproxy` and the Makefile serves it to the `go` command as a
-file proxy, so `make` needs no credentials for borg's repository; `go.sum`
-holds the tag's hashes and the `go` command checks the copy against them.
-Outside `make`, either set the same `GOPROXY`, `GONOPROXY` and `GONOSUMDB`
-the Makefile sets, or set `GOPRIVATE=github.com/lightwebinc/*` and give git
-credentials for the repository. `make borg-module` refreshes the copy after
+borg's tagged module archive is kept under `third_party/goproxy`, and the
+Makefile, the Dockerfile and CI serve it to the `go` command as a file
+proxy ahead of the public one, so a build needs no access to borg's
+repository; `go.sum` holds the tag's hashes and the `go` command checks the
+copy against them. Outside `make`, set the same `GOPROXY`, `GONOPROXY` and
+`GONOSUMDB` the Makefile sets, or set `GOPRIVATE=github.com/lightwebinc/*`
+with git access to borg's repository. `make borg-module` refreshes the copy after
 `go.mod` moves to another tag.
 
 The record layer exists twice, held to one set of vectors: `internal/secrec`
@@ -102,4 +134,5 @@ topic manager `tm_bsecret_<name>_<suffix>` and the lookup service
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+Apache 2.0; see [LICENSE](LICENSE), [NOTICE](NOTICE) and
+[LICENSE-THIRD-PARTY](LICENSE-THIRD-PARTY).

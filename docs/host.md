@@ -47,9 +47,9 @@ carries only crypts, with the groups' hall on other hosts, sets no
 replaced by a random one for the run.
 
 The host must run with no broadcaster, and must not enable an unordered
-synchronisation of unspent outputs for `tm_bsecret_` topics (spec sections
+synchronization of unspent outputs for `tm_bsecret_` topics (spec sections
 11.1 and 11.6). The module refuses to start on a host whose
-`OVERLAY_SYNC_PEERS` names one: such a synchronisation never carries a
+`OVERLAY_SYNC_PEERS` names one: such a synchronization never carries a
 chain's spent tokens, and drops what a topic manager refuses without trying
 it again. A crypt is joined by replay (below).
 
@@ -145,7 +145,7 @@ later token has the same status, tokens from the break on list nothing, and
 the set stays that of the last token before it. A `commitment-reuse` token
 does not stop the set.
 
-After a reorganisation two rooted tokens can share a `seq`. Each is a branch,
+After a reorganization two rooted tokens can share a `seq`. Each is a branch,
 folded on its own. The answers that use a set (`secret`, `secrets`, `label`,
 `pending`) use the highest rooted token at or below which nothing broke the
 fold; of two at that `seq`, the one whose proof verifies against the header

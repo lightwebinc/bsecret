@@ -1,6 +1,6 @@
 # bsecret: user guide
 
-bsecret keeps an organisation's secrets (passwords, tokens, keys, small
+bsecret keeps an organization's secrets (passwords, tokens, keys, small
 files) on overlay hosts that hold ciphertext and never a key. This guide
 explains the ideas and the day-to-day use. [usage.md](usage.md) is the
 reference for every command and setting, [spec.md](spec.md) the contract,
@@ -17,9 +17,9 @@ the owner can always read what it wrote. And once under the key of one
 **epoch** of a borg group, so the members of that epoch, and nobody else,
 can open it.
 
-**A group and its epochs are borg's.** An organisation (an identity key)
+**A group and its epochs are borg's.** An organization (an identity key)
 runs groups with borg. A group's membership is a chain of mined tokens.
-Every time the organisation removes a member, the group begins a new epoch
+Every time the organization removes a member, the group begins a new epoch
 with a new key that the removed member never receives. bsecret does not
 manage members: to give someone access you add their key to the group with
 borg, and to take it away you remove it.
@@ -30,7 +30,7 @@ and names the epoch each is keyed under. Different readers for different
 secrets means different vaults on different groups.
 
 **A crypt** is where vaults live: one topic that a set of overlay hosts
-carries. Many organisations can share a crypt.
+carries. Many organizations can share a crypt.
 
 **Revoke forces rotation.** When the group begins a new epoch, the vault
 must acknowledge it in its next token. From that token on, every host
@@ -71,23 +71,30 @@ anyone kept stays a copy. [spec.md](spec.md) section 18 has the whole list.
 
 ## 3. Install
 
-Build `bin/bsecret` with `make bsecret` (Go 1.27.1 or later), or run the
-image `ghcr.io/lightwebinc/bsecret` with a volume at
-`/home/nonroot/.bsecret`. The organisation and its groups are borg's, so an
-owner also needs the `borg` command (`make borg` builds the one this
+```console
+$ go install github.com/lightwebinc/bsecret/cmd/bsecret@latest
+$ go install github.com/lightwebinc/borg/cmd/borg@latest
+```
+
+Or take a static binary from the
+[releases](https://github.com/lightwebinc/bsecret/releases), or build from a
+checkout (`make bsecret`, Go 1.27.1 or later), or run the image
+`ghcr.io/lightwebinc/bsecret` (built by `make docker-build`) with a volume
+at `/home/nonroot/.bsecret`. The organization and its groups are borg's,
+so an owner also needs the `borg` command (`make borg` builds the one this
 version was tested with). A host is borg's host image with the bsecret
 module added, or the module on a reference overlay host
 ([host.md](host.md)). `bsecret doctor` shows the home and asks every
 configured endpoint whether it answers; it changes nothing.
 [../QUICKSTART.md](../QUICKSTART.md) runs all of it in containers on one
-machine.
+machine with no coin, and [examples.md](examples.md) on mainnet or testnet.
 
 ## 4. Words
 
 | Word | Meaning |
 | --- | --- |
 | home | a directory holding one identity: its key, its coin and its state. Secret: the owner's key opens everything it wrote |
-| organisation, owner | an identity key that runs groups with borg and owns vaults here |
+| organization, owner | an identity key that runs groups with borg and owns vaults here |
 | group, epoch | borg's: a chain of tokens naming the members, and one generation of the group's key; every removal begins an epoch |
 | crypt | the topic `tm_bsecret_<name>_<suffix>` a set of hosts carries, shared by any number of owners |
 | vault | a chain of mined tokens that lists every version of every secret it holds, bound to one group for good |
@@ -104,44 +111,49 @@ machine.
 
 | Role | Has | Runs |
 | --- | --- | --- |
-| The owner | the organisation's identity key; a borg home and a bsecret home around the same key; some coin | `borg` to manage the group; `bsecret vault create`, `put`, `rotate`, `retire` |
+| The owner | the organization's identity key; a borg home and a bsecret home around the same key; some coin | `borg` to manage the group; `bsecret vault create`, `put`, `rotate`, `retire` |
 | A member | its own identity key, which the group names; no coin | `bsecret get`, `list` |
 | An auditor | nothing but block headers and the vault's identifier; coin only to pay a priced question | `bsecret audit` |
 | A host operator | an overlay host with the bsecret module ([host.md](host.md)) | the host; `bsecret payee settle` for its payee |
 
 ## 6. Setting up as the owner
 
-You need the organisation's borg home, with the group created and, once,
-`borg org signer` run: that makes the organisation's own signer key a
-member of every group, which is how the organisation's tooling comes to
+You need the organization's borg home, with the group created and, once,
+`borg org signer` run: that makes the organization's own signer key a
+member of every group, which is how the organization's tooling comes to
 hold each epoch's key. bsecret reads that key from borg's wrap each time
 it needs it, and keeps none on disk.
 
 ```console
-$ bsecret init -borg ~/.borg          # a bsecret home around the same identity
-$ bsecret fund -txid <a payment to the fund address printed>
+$ bsecret init -borg ~/.borg          # a bsecret home around the same identity; prints the fund address
+$ # send about 20,000 sat from your own wallet to that address; wait one block
+$ bsecret fund -txid <txid>           # import that payment into the home's pool
 $ bsecret crypt new ops               # or use a crypt your hosts already carry
 $ bsecret vault create engineering -name ops
 ```
 
 `init -borg` copies the identity file and nothing else. The two homes keep
 separate coin, state and locks, and bsecret never writes into the borg
-home. Put the addresses in `~/.bsecret/config` ([usage.md](usage.md) has an
-example): the crypt's hosts, the hall's hosts when they are others, a
+home. Put the addresses in `~/.bsecret/config`
+([configuration.md](configuration.md) has examples): the crypt's hosts, the hall's hosts when they are others, a
 header source, a node, a settlement leg, and on a multicast plane the
 facade.
 
 ```text
-# ~/.bsecret/config, a member
+# ~/.bsecret/config, a member on mainnet
+network    = main
 crypt      = example_crypt_hmqzvtkwrx
 org        = 02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
 vault      = ops
 hosts      = https://host-a.example.com,https://host-b.example.com
-header_url = https://headers.example.com
-asset      = http://192.0.2.10:8090
+header_url = woc:main
+asset      = https://asset.example.com
 ```
 
-No address has a default: a default would send an organisation's records,
+On testnet, `network = test` and `header_url = woc:test`, with a testnet
+node's asset API.
+
+No address has a default: a default would send an organization's records,
 or a member's questions, to a server nobody chose.
 
 A vault's label set (`-labels`) and anchor mode (`-anchor`) are fixed when
@@ -255,7 +267,7 @@ of what is still under the old epoch.
 
 `rotate` waits for borg to have published the new epoch's key to the
 members who remain; if it says the wraps are not published yet, run a borg
-command in the organisation's home so that it publishes them, then rotate
+command in the organization's home so that it publishes them, then rotate
 again.
 
 Then, for each credential you gave a new value: **change it where it is
@@ -348,7 +360,7 @@ publishes it first.
 ## 13. A second machine
 
 ```console
-$ bsecret init -from identity.json    # the organisation's key, carried by hand
+$ bsecret init -from identity.json    # the organization's key, carried by hand
 $ bsecret fund -txid <...>
 $ bsecret sync
 ```
@@ -417,8 +429,8 @@ every endpoint answers.
 | `BEHIND` | the group began an epoch the vault has not acknowledged | `bsecret rotate`, with a choice for every secret |
 | `IN DEBT` | the vault acknowledged, and some secrets are not re-keyed yet | run `bsecret rotate` again |
 | `EXPOSED` | the version is keyed under an epoch before the group's latest | as above; treat the value as known to whoever was removed |
-| `undecryptable` | this key was not a member of the epoch the record names; or, when the message says this key opened that epoch's key, the owner wrapped the content key under another key | ask the organisation to add the key to the group; the second names the owner |
-| `was a member of epoch N ... no host of the hall answers a wrap` (exit 3) | the hall's hosts withhold, lost or have not yet received borg's wrap of that epoch's key to this key; a host that answered one that does not verify is named | other hosts of the hall (`hall_hosts`); the organisation runs a borg command, which publishes the wraps it owes |
+| `undecryptable` | this key was not a member of the epoch the record names; or, when the message says this key opened that epoch's key, the owner wrapped the content key under another key | ask the organization to add the key to the group; the second names the owner |
+| `was a member of epoch N ... no host of the hall answers a wrap` (exit 3) | the hall's hosts withhold, lost or have not yet received borg's wrap of that epoch's key to this key; a host that answered one that does not verify is named | other hosts of the hall (`hall_hosts`); the organization runs a borg command, which publishes the wraps it owes |
 | `hall host ...: REFUSED wrap carrier` (exit 3) | a host of the hall answered a wrap of the epoch's key to this key that does not verify; another host's wrap opened the key, which the group's commitment binds, so the value was read | that host of the hall is at fault or damaged on the way; ask it again, or name other hosts of the hall (`hall_hosts`) |
 | `hall host ...: OVERFULL` or `TRUNCATED` (exit 3) | a host of the hall answered one question with more than borg's reader takes (128 outputs, or 16 tokens to one seq of the group's chain), or its paged answer was cut; what it answered below the bound was used, and the rest was not read | that host of the hall is at fault; ask it again, or name other hosts of the hall (`hall_hosts`) |
 | `hash` | the content source named served other bytes than the record names: it substituted or cut them | use another content source; the record names what is right |
@@ -433,10 +445,10 @@ every endpoint answers.
 | `another bsecret command is using the home` (exit 2) | one command at a time uses a home, a read too | wait for it, and run the command again |
 | `no host answers its carrier` (exit 3) | the vault lists it and no host holds it; proves nothing | `bsecret fill`, or the owner publishes it again |
 | `the vault's latest token ... is spent` on a write | another home moved the vault | `bsecret sync` |
-| `borg org signer` | the organisation's signer key is not a member of the group | run `borg org signer` in the organisation's borg home |
+| `borg org signer` | the organization's signer key is not a member of the group | run `borg org signer` in the organization's borg home |
 | `outbox` in `doctor` | something was built and not confirmed at every host | run any writing command: it publishes it first |
 | `tree ... signed for coin ... and not recorded as minted` in `doctor` | a command stopped while minting a funding tree | run any writing command: it asks the node and says what it found |
-| `fee input: ... no spendable output` (exit 2) | the home has no coin | `bsecret fund`. If it says coins are change not yet mined, or that a funding tree minted ahead still holds the coin, run the command again after a block |
+| `fee input: ... no spendable output` (exit 2) | the home has no coin | send a payment to its fund address and `bsecret fund -txid <txid>`. If it says coins are change not yet mined, or that a funding tree minted ahead still holds the coin, run the command again after a block |
 | `the only transitions built are the acknowledgement ...` on a write | the vault is behind its group or in debt: nothing else is built | `bsecret rotate`, with a choice for every secret |
 
 ## 17. The kill switch

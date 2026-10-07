@@ -88,7 +88,7 @@ and the grant is borg's.
 | One carrier per funding outpoint, by the owner | an owner makes at most one carrier per funding output | signed |
 | Hosts broadcast nothing, decrypt nothing | an engine that carries `tm_bsecret_` topics runs with no broadcaster; a host holds no key | signed |
 | Coin retention | every accepted transaction retains every held output it spends | signed |
-| Joining a crypt | by replay, the replayer assembling each token's BEEF from the token and its parent; an unordered synchronisation of unspent outputs is never enabled for `tm_bsecret_` topics | signed |
+| Joining a crypt | by replay, the replayer assembling each token's BEEF from the token and its parent; an unordered synchronization of unspent outputs is never enabled for `tm_bsecret_` topics | signed |
 | The vault's chain | a token is **rooted** when the host holds every token from it back to the vault's first by spends; only rooted tokens are answered as a vault's latest, folded into its set, or list a carrier. A host admits a token on its parent's bytes alone, so a token can be admitted and never rooted | signed |
 | A broken vault | a `set-mismatch` or `stale-mismatch` token breaks the vault's chain from it on, for good; answers use the set of the last rooted token before it; a `commitment-reuse` token does not stop the set. A reader that folds the chain refuses a broken vault entirely, the earlier set included. Where two rooted tokens share a `seq`, each branch is folded on its own, and an answer uses the one whose proof verifies in the host's headers, else the lowest txid | signed |
 | Index statuses | tokens `pending`, `set-mismatch`, `stale-mismatch`, `commitment-reuse`, `consistent`; carriers `retracted`, `superseded`, `mismatched`, `listed`, `unlisted` | signed |
@@ -100,7 +100,7 @@ and the grant is borg's.
 | Keys: 0 `magic`, 1 `crypt`, 2 `org`, 3 `vault`, 4 `seq`, 5 `prev`, 6 `name`, 7 `hall`, 8 `group`, 9 `epoch`, 10 `epochId`, 11 `labels`, 12 `anchor`, 13 `create`, 14 `update`, 15 `retire`, 16 `count`, 17 `stale`, 18 `root`, 19 `created`; all required | signed |
 | Types and bounds of spec section 3; a display name is 1 to 64 bytes of one line of plain text, holding no control character (U+0000 to U+001F, U+007F to U+009F) and neither U+2028 nor U+2029 (`name`); an entry is `[id, version, contentId, commitment]` with a version from 1 to 2^53 - 1; a change list is decided as length (`list`), then each entry (`entry`), then order (`list`); `prev` zero exactly at `seq` 0; the first token only creates, and its `stale` is 0 | signed |
 | The refusal order and labels of spec section 3.1 | signed |
-| **The owner is the organisation:** `org` is the only writer of a vault and of its secrets | signed |
+| **The owner is the organization:** `org` is the only writer of a vault and of its secrets | signed |
 | **The vault identifier:** `SHA-256("bsecret vault id v1" \|\| txid \|\| index as 4 bytes big-endian)` of the outpoint the first token spends from its chain tree, checked at admission (`vault-id`); one identifier has one chain | signed |
 | **One vault, one group:** `hall`, `group`, `labels` and `anchor` are fixed at the first token | signed |
 | The current set: before, less `retire`, with `update` replacing, plus `create`; its root RFC 6962 over the leaf data `SHA-256(id \|\| version as 8 bytes big-endian \|\| contentId)`, ascending by id; the empty root `SHA-256()` | signed |
@@ -136,7 +136,7 @@ and the grant is borg's.
 | **The listing check:** an inclusion path that names the latest token by `seq` and txid takes the leaf to that token's root; the record names the token's crypt, owner, vault, group and one of its labels; it is keyed under the token's epoch and epoch id, or, only while the token's `stale` is not 0, under an earlier epoch with another epoch id. A path proves that the root holds the leaf and nothing else | signed |
 | **A wrap is opened only with the key of the epoch the record names.** A wrap that does not open under that key, for a reader that verified the key, names the owner | signed |
 | **Descent:** a reader takes a token as the vault's only when it descends by spends from the vault's first token, which it checks from `seq` 0 once and from the token it remembers afterwards; it checks a first token by the outpoint hash alone (an input's outpoint hashes to the vault identifier) | signed |
-| A reader checks that the vault's `org` is the group's organisation and that every `epoch` and `epochId` it relies on is on the group's canonical chain; a vault that names an epoch the group has not begun is refused | signed |
+| A reader checks that the vault's `org` is the group's organization and that every `epoch` and `epochId` it relies on is on the group's canonical chain; a vault that names an epoch the group has not begun is refused | signed |
 | A successor (interval vaults only): the next `version` of the same secret of the same vault and group, naming the content id before it, with one of the vault's labels, keyed under an epoch neither before its predecessor's nor before the latest token's, the same epoch with the same epoch id and a later one with another; no commitment repeats in a run, the listed version included; two records at one version are both refused; a run of links ends below a retracted version, and a retracted listed version is refused (`retracted`); a reader follows at most 64 unlisted versions and says that a later one exists | signed |
 | Writers build a transition only with positive evidence, no older than a bound of at most 600 seconds (60 by default, which is policy), that the vault's latest token and the group's latest token are unspent per a spend index; without it they do not write. A transition or a sweep that is persisted is given up only when a spend index names another spender of what it spends | signed |
 | Readers report a version as exposed when it is keyed under an epoch before the group's latest, and never as current without evidence that the vault's token and the group's token are each the latest, taken at the read (a value kept keeps its age); a reader refuses a latest token below the highest `seq` it has verified, of the vault and of its group (`rollback`). A version read as history is held to the first token that listed it, where commitment reuse is refused too. The states a reader reports: anchored or unanchored; current or exposed; settled, in debt, behind or ahead | signed |
@@ -167,7 +167,7 @@ bound of at least 1024. Signed, as floors.
 
 - Funding tree sizes and output values; fee sources of tokens.
 - Host policy: retention beyond the floors, lookup rate limits, prices, the
-  handshake budget's numbers, which organisations a host serves, metric
+  handshake budget's numbers, which organizations a host serves, metric
   names.
 - The answer limits (8 per question, 64 tokens or 16 secret carriers per
   page), the tokens kept per `seq` (8; rooted first, then lowest txid), and the superseded carriers and

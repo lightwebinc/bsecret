@@ -83,7 +83,7 @@ printf '%s\n' "$out"
 [ "$(printf '%s\n' "$out" | grep -c '^host .* answering$')" = 2 ] || fail "the hosts did not come up"
 
 step "5. the organisation, a group, and the signer key (borg)"
-borg org org create 'Example Organisation' -member "$ALICE" -member "$BOB" -member "$CAROL" | tee create.txt
+borg org org create 'Example Organization' -member "$ALICE" -member "$BOB" -member "$CAROL" | tee create.txt
 [ "$(grep -c '^grant ' create.txt)" = 3 ] || fail "org create did not issue three grants"
 borg org group create engineering -member "$ALICE" -member "$BOB" -member "$CAROL" | tee group.txt
 GROUP=$(sed -n 's/^group *//p' group.txt)

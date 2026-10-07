@@ -45,7 +45,6 @@ import {
   type ResponseBudgetConfig,
 } from '@lightwebinc/bcommon/host'
 import { Ledger, PaymentProtocol, bsecretRoute, parsePrices, termsDocument } from './paid.js'
-
 import { config, crypt, engineOf, topic } from './testhost.js'
 import { Chain, OwnerSim, Party, PayingWallet, epochOf, fromNowhere } from './testmint.js'
 import { FakeHost, MemoryStorage } from './testutil.js'

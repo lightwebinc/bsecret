@@ -18,7 +18,7 @@ import (
 const rotateHelp = `usage: bsecret rotate [-set NAME=FILE]... [-same NAME]... [-same-all] [-retire NAME]... [-keep] [-check] [-unwrapped]
 
 Finish a revoke (spec section 8.2). The removal itself is borg's: the
-organisation removes the reader's key from the vault's group, which begins
+organization removes the reader's key from the vault's group, which begins
 a new epoch whose key the removed member never receives. This command does
 the other two parts: it acknowledges the new epoch in the vault's next
 token, and re-keys or retires everything the vault held under an earlier

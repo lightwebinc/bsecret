@@ -35,7 +35,7 @@ published as one: another instance of the tooling swept it.
 What it does not do: the vaults' tokens are mined and stay, and they name
 identifiers, versions, content ids and commitments, never a value or a
 name; a copy of a carrier anyone kept stays a copy; and a value anyone read
-stays read. A tree another home of this organisation minted is swept only
+stays read. A tree another home of this organization minted is swept only
 once this home knows it (bsecret sync records the tree of every carrier the
 hosts answer).`
 

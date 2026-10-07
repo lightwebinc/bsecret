@@ -35,7 +35,7 @@ const vaultHelp = `usage: bsecret vault create <group> -name NAME [-hall HALL] [
        bsecret vault list
        bsecret vault show
 
-create makes a vault keyed to a group of the organisation this home's
+create makes a vault keyed to a group of the organization this home's
 identity key is (spec section 8.1). <group> is the group's identifier (32
 hex digits) or its name in the hall, which is the configured one (config
 key hall) or -hall. The vault is bound to that group for good: its members
@@ -51,8 +51,8 @@ first token:
                     yet, marked unanchored (for credentials machines rotate
                     faster than blocks; put -defer, then anchor)
 
-The organisation must hold the epoch's key, which it does through its
-signer key: run 'borg org signer' once in the organisation's borg home.
+The organization must hold the epoch's key, which it does through its
+signer key: run 'borg org signer' once in the organization's borg home.
 The first token spends an output of a chain tree, which gives the vault its
 identifier, is waited for until it mines (one block), and is published with
 the chain tree in its BEEF.

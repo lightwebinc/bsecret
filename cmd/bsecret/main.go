@@ -50,15 +50,16 @@ const usageText = `usage: bsecret [global flags] <command> [flags] [arguments]
 identity (a home):
   init [-from FILE | -borg DIR] create the home: identity key and coin pool;
                                 -borg: around the identity of a borg home
-  fund -txid TXID               import a mined payment to the fund address
-  fund [-blocks N]              mine coinbase to the fund address (a chain you run)
+  fund -txid TXID               import a mined payment you sent to the fund address
+  fund [-blocks N] [-rescan]    coinbase: only on a regtest chain you run
+                                (development and tests)
   crypt new <name>              create a crypt: <name>_<random suffix>, its topic,
                                 and the BSECRET_CRYPTS line a host takes
   crypt list                    the crypts this home created
   doctor                        local state, what is owed and reachability; reads only
 
-the owner (this home's identity key is a borg organisation's):
-  vault create <group> -name N  a vault keyed to a group of the organisation
+the owner (this home's identity key is a borg organization's):
+  vault create <group> -name N  a vault keyed to a group of the organization
                                 (-anchor version, the default, or interval)
   put <name>                    write a secret's next version: the value from
                                 standard input or -file, listed in the vault's

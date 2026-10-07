@@ -6,8 +6,8 @@
 #   docker build -t ghcr.io/lightwebinc/bsecret .                             # the command (default)
 #   docker build --target devchain -t ghcr.io/lightwebinc/bsecret-devchain .  # the local chain
 #
-# The builder is pinned by digest and is a later toolchain than go.mod's
-# floor, so scanning sees the standard library that ships.
+# The builder is pinned by digest at go.mod's Go release line (1.27), so
+# scanning sees the standard library that ships.
 #
 # borg is a private module. Its tagged archive is in third_party/goproxy and
 # is served to the go command as a file proxy, ahead of the public one, as

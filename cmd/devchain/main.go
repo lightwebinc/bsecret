@@ -50,7 +50,8 @@ func main() {
 A local stand-in chain for trying bsecret: a node's RPC at /rpc, its asset
 API under /api/v1/, and a header source at /v1/root/<height> and /v1/tip.
 Every transaction is mined at once. No proof of work, no peers: for a
-laptop, never for a network.
+laptop, never for a network. Its generatetoaddress mines coinbase
+(coinbase: only on a regtest chain you run, for development and tests).
 
 `)
 		flag.PrintDefaults()

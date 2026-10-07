@@ -432,13 +432,13 @@ Create the home (mode 0700): an identity key and an empty coin pool. Print
 the identity key and the fund address for the configured network. A home
 that exists is left alone and printed.
 
-A vault's owner is a borg organisation: the key that signs every token and
-every carrier is the organisation's identity key. So an owner's home is
+A vault's owner is a borg organization: the key that signs every token and
+every carrier is the organization's identity key. So an owner's home is
 made around that key: -borg DIR takes it from the borg home DIR (its
 identity.json), and -from FILE from an identity file carried by hand.
 Nothing else of the borg home is read, then or later: the group's chain and
 its epoch keys are read from the hall's hosts, and the two homes keep
-separate coin pools, state and locks. The file is the organisation's key:
+separate coin pools, state and locks. The file is the organization's key:
 carry it as the secret it is.
 
 A member's home is made the same way around the key the group names, which
@@ -528,19 +528,21 @@ func cmdInit(_ context.Context, g *global, args []string) error {
 	return nil
 }
 
-const fundHelp = `usage: bsecret fund [-blocks N] [-batch N] [-rescan]
-       bsecret fund -txid TXID
+const fundHelp = `usage: bsecret fund -txid TXID
+       bsecret fund [-blocks N] [-batch N] [-rescan]
 
 With -txid, import a payment: read the mined transaction TXID with its
 proof from the node (asset), check the proof against the header source,
 and add every output it pays to the home's fund address to the pool. This
-is how a home on a real network is funded: send BSV to the fund address
-init printed, wait for one confirmation, and import it.
+is how a home on mainnet or testnet is funded: send BSV from your own
+wallet to the fund address init printed, wait for one confirmation, and
+import it.
 
-Without -txid, mine coinbase to the fund address through the node's
-generatetoaddress, which only a chain you run answers. Coinbase can be
-spent 100 blocks after it is mined, so the first fund mines 101 or more.
--rescan re-reads recent blocks for coinbase the pool lacks.
+Without -txid (coinbase: only on a regtest chain you run, for development
+and tests): mine coinbase to the fund address through the node's
+generatetoaddress. Coinbase can be spent 100 blocks after it is mined, so
+the first fund mines 101 or more. -rescan re-reads recent blocks for
+coinbase the pool lacks. Refused on network main.
 
 The fund address is bsecret's own, under its own protocol: a borg home's
 coin is not this home's, even when both are made around one identity key.`
@@ -575,10 +577,10 @@ func checkFundAddress(addr, network string) error {
 
 func cmdFund(ctx context.Context, g *global, args []string) error {
 	fs := g.flagSet("fund", fundHelp)
-	blocks := fs.Int("blocks", 101, "blocks to mine to the fund address")
-	batch := fs.Int("batch", bwallet.DefaultFundBatch, "blocks per generatetoaddress call")
-	rescan := fs.Bool("rescan", false, "re-read the last -blocks blocks for coinbase the pool lacks instead of mining")
-	txid := fs.String("txid", "", "import this mined payment to the fund address instead of mining")
+	blocks := fs.Int("blocks", 101, "coinbase: only on a regtest chain you run (development and tests); blocks to mine to the fund address")
+	batch := fs.Int("batch", bwallet.DefaultFundBatch, "coinbase: only on a regtest chain you run (development and tests); blocks per generatetoaddress call")
+	rescan := fs.Bool("rescan", false, "coinbase: only on a regtest chain you run (development and tests); re-read the last -blocks blocks for coinbase the pool lacks instead of mining")
+	txid := fs.String("txid", "", "import this mined payment you sent to the fund address (mainnet, testnet)")
 	if pos, err := parse(fs, args); err != nil {
 		return err
 	} else if len(pos) > 0 {
@@ -717,7 +719,7 @@ crypt identifier <name>_<suffix>, its topic, and the line a host's
 BSECRET_CRYPTS takes to carry it. <name> is 1 to 28 lowercase letters and
 single underscores, starting and ending with a letter. The suffix is not a
 secret and not an access control: it keeps unrelated crypts off each
-other's topic. Many organisations may share one crypt. When a home exists,
+other's topic. Many organizations may share one crypt. When a home exists,
 the crypt is recorded in it, and list prints the crypts recorded.`
 
 func cmdCrypt(_ context.Context, g *global, args []string) error {

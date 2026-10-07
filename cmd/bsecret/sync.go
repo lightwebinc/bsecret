@@ -18,7 +18,7 @@ record, and its name through its self wrap, which needs only the identity
 key; every commitment any token listed; and the funding tree of every
 carrier a host answers, recorded as spent, so that a sweep or the kill
 switch reaches versions another instance published. It is how a home made
-around the organisation's key on a new machine comes to write, and how a
+around the organization's key on a new machine comes to write, and how a
 home catches up after another instance changed a vault.
 
 What it cannot bring back: a version published and not yet listed whose

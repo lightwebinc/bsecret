@@ -38,7 +38,7 @@
  *   BSECRET_HANDSHAKES_PER_SEC, BSECRET_HANDSHAKE_BURST
  *                            the BRC-104 handshakes a second the terms
  *                            route answers, and at once; default 4 and 8
- *                            (budget.ts)
+ *                            (bcommon host)
  *   BSECRET_HANDSHAKES_PER_ADDR_PER_SEC, BSECRET_HANDSHAKE_ADDR_BURST
  *                            the same for one remote address; default 1
  *                            and 4
@@ -66,13 +66,24 @@ import type { Server } from 'node:http'
 import { PrivateKey, ProtoWallet, type ChainTracker } from '@bsv/sdk'
 import { Transaction, Utils } from '@bsv/sdk'
 import type { Module, ModuleHost } from '@lightwebinc/bcommon'
-import { gateFor, parseAcceptConfig, type AcceptConfig } from './accept.js'
+import {
+  DefaultBudget,
+  DefaultMaxSessions,
+  DefaultResponseBudget,
+  DefaultSessionTTL,
+  gateFor,
+  LedgerReceiver,
+  LookupFront,
+  parseAcceptConfig,
+  type AcceptConfig,
+  type BudgetConfig,
+  type ResponseBudgetConfig,
+} from '@lightwebinc/bcommon/host'
 import { DefaultMaxBEEF, DefaultMaxSweepInputs } from './admit.js'
-import { DefaultBudget, DefaultResponseBudget, type BudgetConfig, type ResponseBudgetConfig } from './budget.js'
 import { HeaderTracker, isNativeSource } from './headers.js'
 import { FileJournal, type Journal } from './journal.js'
 import { FloorDays, FloorUnheldHours, MinSpendTable, SecretLookupService } from './ls_bsecret.js'
-import { DefaultMaxSessions, DefaultSessionTTL, LedgerReceiver, LookupFront, parsePrices } from './paid.js'
+import { Ledger, bsecretRoute, parsePrices } from './paid.js'
 import { LookupService, TopicPrefix, checkCrypt, topic } from './secrec.js'
 import { AdmitKinds, Reasons, SecretTopicManager } from './tm_bsecret.js'
 
@@ -260,7 +271,7 @@ export function secretModule(host: ModuleHost, c: Config, overlayTopics?: readon
   for (const crypt of c.crypts) topics[topic(crypt)] = new SecretTopicManager(topic(crypt), host, tracker, c.maxBEEF, c.maxSweepInputs)
   let front: LookupFront | undefined
   const accept = c.accept ?? parseAcceptConfig('BSECRET', {})
-  const receiver = c.listen !== undefined && priced.size > 0 ? new LedgerReceiver(c.stateDir) : undefined
+  const receiver = c.listen !== undefined && priced.size > 0 ? new LedgerReceiver(c.stateDir, Ledger) : undefined
   const gate = receiver !== undefined && tracker !== undefined ? gateFor('bsecret', host, tracker, accept, c.stateDir) : undefined
   if (gate !== undefined && receiver !== undefined) {
     for (const f of receiver.fast) {
@@ -273,7 +284,7 @@ export function secretModule(host: ModuleHost, c: Config, overlayTopics?: readon
   }
   if (c.listen !== undefined) {
     front = new LookupFront({
-      ls,
+      ...bsecretRoute(ls),
       host,
       prices: c.prices,
       wallet: c.payeeKey === undefined ? undefined : new ProtoWallet(c.payeeKey),
@@ -350,4 +361,5 @@ export default async function create(host: ModuleHost): Promise<Module> {
 
 export { Refused, SecretTopicManager } from './tm_bsecret.js'
 export { SecretLookupService } from './ls_bsecret.js'
-export { LookupFront, termsDocument } from './paid.js'
+export { LookupFront } from '@lightwebinc/bcommon/host'
+export { termsDocument } from './paid.js'

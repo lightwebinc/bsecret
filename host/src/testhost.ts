@@ -6,7 +6,7 @@
 import { Engine } from '@bsv/overlay'
 import { Transaction, type ChainTracker } from '@bsv/sdk'
 import type { Module, TopicManager } from '@lightwebinc/bcommon'
-import { DefaultBudget, DefaultResponseBudget } from './budget.js'
+import { DefaultBudget, DefaultResponseBudget } from '@lightwebinc/bcommon/host'
 import { MemoryJournal } from './journal.js'
 import { secretModule, type Config } from './module.js'
 import { LookupService } from './secrec.js'

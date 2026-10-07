@@ -26,18 +26,39 @@ import {
   type PeerSession,
   type WalletInterface,
 } from '@bsv/sdk'
-import type { BudgetConfig, ResponseBudgetConfig } from './budget.js'
 import { MemoryJournal } from './journal.js'
 import { decodeContext } from './merkle.js'
 import { secretModule } from './module.js'
-import { BoundedSessions, LedgerReceiver, LookupFront, MemoryReceiver, PaymentProtocol, parsePrices, spentOutpoints, termsDocument, type ReceivedPayment } from './paid.js'
+import {
+  ArcadeHttp,
+  BoundedSessions,
+  BroadcastRefused,
+  isFinal,
+  LedgerReceiver as SharedLedger,
+  LookupFront,
+  MemoryReceiver,
+  overspends,
+  PaymentGate,
+  spentOutpoints,
+  type BudgetConfig,
+  type ReceivedPayment,
+  type ResponseBudgetConfig,
+} from '@lightwebinc/bcommon/host'
+import { Ledger, PaymentProtocol, bsecretRoute, parsePrices, termsDocument } from './paid.js'
+
 import { config, crypt, engineOf, topic } from './testhost.js'
 import { Chain, OwnerSim, Party, PayingWallet, epochOf, fromNowhere } from './testmint.js'
 import { FakeHost, MemoryStorage } from './testutil.js'
-import { ArcadeHttp, BroadcastRefused, PaymentGate, isFinal, overspends } from './accept.js'
 import { TestNetwork } from './testnetwork.js'
 import { defaultAcceptancePolicy, type AcceptancePolicy } from '@lightwebinc/bcommon'
 import { fromHex } from './util.js'
+
+/** bsecret's ledger: the shared receiver in the layout bsecret writes. */
+class LedgerReceiver extends SharedLedger {
+  constructor(dir: string) {
+    super(dir, Ledger)
+  }
+}
 
 const payee = PrivateKey.fromHex('11'.repeat(32))
 const payeeWallet = new ProtoWallet(payee)
@@ -98,7 +119,7 @@ async function rig(prices: string, sessions?: { max: number; ttlSeconds: number 
   }
   const net = new TestNetwork(chain)
   const gate = new PaymentGate({ app: 'bsecret', host, headers: chain.tracker, policy: { ...defaultAcceptancePolicy(), ...policy }, arcade: networked ? net : undefined, node: networked ? net : undefined, waitMs: 200, pollMs: 10 })
-  const front = new LookupFront({ ls: m.ls, host, prices: parsePrices(prices), wallet, receiver, headers: chain.tracker, sessions, budget, responses, gate })
+  const front = new LookupFront({ ...bsecretRoute(m.ls), host, prices: parsePrices(prices), wallet, receiver, headers: chain.tracker, sessions, budget, responses, gate })
   const server = await front.listen(0, '127.0.0.1')
   servers.push(server)
   return {

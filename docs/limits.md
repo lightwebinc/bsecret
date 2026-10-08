@@ -275,36 +275,36 @@ twice. Each entry of a change list adds 104 bytes to a token.
 **Costs.** Sizes measured on a test network over 121 vault tokens, 136
 versions, 21 sweeps, 2 chain trees and 7 secret trees of two owners;
 satoshis at the default fee policy, the network's rate of 100 satoshis per
-1000 bytes with a floor of 250 a transaction (`mint.DefaultFees`). A
-transaction under 2,500 bytes pays the floor; a larger one pays the rate on
+1000 bytes with a floor of 100 a transaction and that rate as the most
+paid (`mint.DefaultFees`). A transaction under 1,000 bytes pays the floor; a larger one pays the rate on
 its size. A carrier is never mined and rides one funding output of 1
 satoshi, which a sweep returns. The rate, the floor and a ceiling are
 settings (`fee_rate`, `fee_floor`, `fee_max_rate`, `fee_max_tx`), and
 `fee_source = arc` follows the broadcaster's published policy instead
-([configuration.md](configuration.md)). About 20,000 satoshis (0.0002 BSV)
-covers a vault, its chain tree and about seventy versions; members and free
+([configuration.md](configuration.md)). About 10,000 satoshis (0.0001 BSV)
+covers a vault, its chain tree and about ninety versions; members and free
 audits need no coin.
 
 | Operation | Mined | Bytes mined | Satoshis |
 | --- | --- | --- | --- |
-| A chain tree of 8 outputs (one per 8 vaults) | 1 transaction | 583 | 250, and 8 in its outputs |
-| A secret tree of 32 outputs (one per 32 versions) | 1 transaction | 1760 | 250, and 32 in its outputs |
-| `vault create` | the first token | 732 to 741 | 250, and 1 in the token, carried from token to token |
-| `vault create`, the home's first, from one coin | also the payment to the home's own fund key | about 226, the shape of a payment | 250, the floor, once |
-| `put`, `put -defer` then `anchor`, `retire`: one token | 1 token | 769 to 1054; 845 at the median | 250 |
-| `put`: its share of a secret tree | 1/32 of a tree | 55 | 9 |
-| `rotate` of `n` secrets | `ceil(n / 64)` tokens, and `n` carriers | about 770 and 104 a secret | 250 a token up to 16 secrets, then the rate on its size |
-| A sweep of `k` outputs of one tree | 1 transaction | 353 to 355 for one output, and about 113 for each further one | 250, or the rate on its size over 2,500 bytes; the `k` satoshis of the outputs come back |
+| A chain tree of 8 outputs (one per 8 vaults) | 1 transaction | 583 | 100, and 8 in its outputs |
+| A secret tree of 32 outputs (one per 32 versions) | 1 transaction | 1760 | 176, and 32 in its outputs |
+| `vault create` | the first token | 732 to 741 | 100, and 1 in the token, carried from token to token |
+| `vault create`, the home's first, from one coin | also the payment to the home's own fund key | about 226, the shape of a payment | 100, the floor, once |
+| `put`, `put -defer` then `anchor`, `retire`: one token | 1 token | 769 to 1054; 845 at the median | 100 to 106; 100 at the median |
+| `put`: its share of a secret tree | 1/32 of a tree | 55 | 7 |
+| `rotate` of `n` secrets | `ceil(n / 64)` tokens, and `n` carriers | about 770 and 104 a secret | 100 a token up to 2 secrets, then the rate on its size |
+| A sweep of `k` outputs of one tree | 1 transaction | 353 to 355 for one output, and about 113 for each further one | 100, or the rate on its size over 1,000 bytes; the `k` satoshis of the outputs come back |
 | `kill`, a tree of 32 | 1 sweep | 3872 | 388 |
-| A paid `audit` or `history` page | the payment | 225 or 226 | the host's price, and 250, the floor: 270 a page at a price of 20 |
+| A paid `audit` or `history` page | the payment | 225 or 226 | the host's price, and 100, the floor: 120 a page at a price of 20 |
 | A read, a free audit, `fill`, `due`, `doctor` | nothing | 0 | 0 |
 
-So a version costs about 260 satoshis, and a vault 250 to begin, with 258
+So a version costs about 107 satoshis, and a vault 100 to begin, with 108
 more for the chain tree every eighth vault. The walk-through in
 [../QUICKSTART.md](../QUICKSTART.md)'s shape (a vault, three secrets, a
 removal acknowledged and re-keyed in one token, a retirement, and four
-sweeps: six tokens in all) comes to about 3,300 satoshis by this table, and
-each paid page of the audit costs the auditor 270.
+sweeps: six tokens in all) comes to about 1,400 satoshis by this table, and
+each paid page of the audit costs the auditor 120.
 
 **Times, measured.** On the same test network, whose blocks are about 30 s
 apart, with two hosts on the plane:

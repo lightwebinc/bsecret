@@ -12,8 +12,8 @@ You need:
 
 - A borg organization with a group, and `borg org signer` run once in its
   borg home ([borg's quickstart](https://github.com/lightwebinc/borg/blob/main/QUICKSTART.md)).
-- BSV in a wallet you control (testnet coin on testnet). About 20,000 sat
-  covers a vault and about seventy versions; a version costs about 260 sat
+- BSV in a wallet you control (testnet coin on testnet). About 10,000 sat
+  covers a vault and about ninety versions; a version costs about 107 sat
   ([limits.md](docs/limits.md)). The borg home is funded separately.
 - Overlay hosts that carry the crypt (and the group's hall): borg's host
   image with the bsecret module added, or the module on any reference

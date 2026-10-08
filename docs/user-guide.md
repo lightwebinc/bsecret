@@ -211,7 +211,7 @@ one block each; different vaults move in the same block.
 
 What it costs: a version is one carrier, which is never mined and rides a
 funding output of one satoshi, and one mined token of about 850 bytes, so
-about 260 satoshis at the default fees (the 250-satoshi floor) with its
+about 107 satoshis at the default fees (the 100-satoshi floor) with its
 share of the funding tree.
 Reading costs nothing. [limits.md](limits.md) has the measured table.
 

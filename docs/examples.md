@@ -38,7 +38,7 @@ crypt       not configured
 chain       woc:main
 …
 headers     woc:main tip 970084
-fee         100/1000 sat/bytes, floor 250 sat (static)
+fee         100/1000 sat/bytes, floor 100 sat (static)
 …
 settle      arcade:main
 ```
@@ -154,7 +154,7 @@ $ bsecret put api/token -file token.txt -label restricted -not-after 2027-01-01T
 ```
 
 A value is read from standard input or `-file`, never from an argument.
-Each `put` takes about a block and a minute and costs about 260 sat.
+Each `put` takes about a block and a minute and costs about 107 sat.
 
 ## 7. As a member: read a secret
 

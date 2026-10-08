@@ -46,9 +46,9 @@ services and no defaults.
 | `crypt` | none | the crypt identifier a command uses; an owner whose vaults are all in one crypt uses it |
 | `delay` | `60s` | the propagation delay: a mined token or sweep is published this long after its block is in this home's headers, so the hosts' headers have it too (spec section 8.3); `0s` to `10m` |
 | `facade` | none | mode `plane`: the overlay host a publisher submits to, from which the plane delivers to every subscribed host. Refused in mode `unicast` |
-| `fee_dust` | `250` | the least change kept as an output, in satoshis; less goes to the fee |
-| `fee_floor` | `250` | the least fee one transaction pays, in satoshis |
-| `fee_max_rate` | none; `1/1` with `fee_source = arc` | the most the fee rate may be, `SATS/BYTES`; a rate above it, a live policy's included, is lowered to it |
+| `fee_dust` | `100` | the least change kept as an output, in satoshis; less goes to the fee |
+| `fee_floor` | `100` | the least fee one transaction pays, in satoshis |
+| `fee_max_rate` | `100/1000` | the most the fee rate may be, `SATS/BYTES`; a rate above it, a live policy's included, is lowered to it, so a broadcaster that raises its rate refuses the transaction until this is raised |
 | `fee_max_tx` | none | the most fee one transaction may pay, in satoshis; a build above it is refused, not paid |
 | `fee_min_rate` | `100/1000` | with `fee_source = arc`, the least a live policy's rate is taken as |
 | `fee_policy_urls` | the `settle` arcade or ARC | with `fee_source = arc`, the broadcasters whose `GET /policy` is read, comma separated; the highest rate of those that answer is used |

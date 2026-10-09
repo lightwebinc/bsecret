@@ -179,7 +179,8 @@ vectors-check: ts-build
 	cd host && $(NODE) dist/tsvectors.js -check
 
 # Copy the borg tag go.mod requires into third_party/goproxy, from borg's
-# repository. Needs git credentials for it. The go command checks the
+# repository, and remove every older tag's files: the mirror holds only what
+# go.mod needs. Needs git credentials for it. The go command checks the
 # archive against go.sum, so a tag that moved is refused here.
 borg-module:
 	@set -eu; v=$$(GOWORK=off go list -m -f '{{.Version}}' $(BORG)); \
@@ -188,6 +189,7 @@ borg-module:
 	src=$$tmp/cache/download/$(BORG)/@v; dst=third_party/goproxy/$(BORG)/@v; \
 	mkdir -p $$dst; cp $$src/$$v.mod $$src/$$v.zip $$dst/; \
 	GOWORK=off GOFLAGS=-mod=mod GOMODCACHE=$$tmp GOPROXY=direct GONOSUMDB=$(BORG) go list -m -f '{"Version":"{{.Version}}","Time":"{{.Time.UTC.Format "2006-01-02T15:04:05Z"}}"}' $(BORG)@$$v > $$dst/$$v.info; \
+	find $$dst -maxdepth 1 -type f ! -name "$$v.*" ! -name list -delete; \
 	ls $$dst | sed -n 's/\.zip$$//p' > $$dst/list; \
 	echo "borg-module: $$v in $$dst"
 

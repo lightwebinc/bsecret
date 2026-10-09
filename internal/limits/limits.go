@@ -131,12 +131,6 @@ const (
 	MaxUnminedPayments = 16
 )
 
-// Settling.
-const (
-	DefaultSettleInFlight = 16
-	MaxSettleInFlight     = 64
-)
-
 // Publisher is a publisher's settings, as the checks see them.
 type Publisher struct {
 	Plane          bool

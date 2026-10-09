@@ -47,7 +47,7 @@ use; this page is the reference.
 
 ```console
 $ go install github.com/lightwebinc/bsecret/cmd/bsecret@latest
-$ make bsecret            # or from a checkout: bin/bsecret (Go 1.27.1 or later)
+$ make bsecret            # or from a checkout: bin/bsecret (Go 1.27.2 or later)
 $ make borg               # bin/borg, the borg command at the tag go.mod pins
 $ make docker-build       # ghcr.io/lightwebinc/bsecret and bsecret-devchain, locally
 ```

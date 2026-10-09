@@ -80,7 +80,7 @@ import {
   type ResponseBudgetConfig,
 } from '@lightwebinc/bcommon/host'
 import { DefaultMaxBEEF, DefaultMaxSweepInputs } from './admit.js'
-import { HeaderTracker, isNativeSource } from './headers.js'
+import { HeaderTracker, isNativeSource } from '@lightwebinc/bcommon/host'
 import { FileJournal, type Journal } from './journal.js'
 import { FloorDays, FloorUnheldHours, MinSpendTable, SecretLookupService } from './ls_bsecret.js'
 import { Ledger, bsecretRoute, parsePrices } from './paid.js'

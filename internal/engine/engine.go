@@ -65,10 +65,10 @@ import (
 
 	"github.com/lightwebinc/borg/reader"
 
+	"github.com/lightwebinc/bcommon/unicast"
 	"github.com/lightwebinc/bsecret/internal/limits"
 	"github.com/lightwebinc/bsecret/internal/secrec"
 	"github.com/lightwebinc/bsecret/internal/state"
-	"github.com/lightwebinc/bsecret/internal/unicast"
 	"github.com/lightwebinc/bsecret/internal/vread"
 )
 

@@ -11,10 +11,10 @@ import (
 	"github.com/lightwebinc/bcommon/funding"
 	"github.com/lightwebinc/bcommon/termsafe"
 
+	"github.com/lightwebinc/bcommon/unicast"
 	"github.com/lightwebinc/bsecret/internal/engine"
 	"github.com/lightwebinc/bsecret/internal/secrec"
 	"github.com/lightwebinc/bsecret/internal/state"
-	"github.com/lightwebinc/bsecret/internal/unicast"
 	"github.com/lightwebinc/bsecret/internal/vread"
 )
 

@@ -78,7 +78,7 @@ $ go install github.com/lightwebinc/borg/cmd/borg@latest
 
 Or take a static binary from the
 [releases](https://github.com/lightwebinc/bsecret/releases), or build from a
-checkout (`make bsecret`, Go 1.27.1 or later), or run the image
+checkout (`make bsecret`, Go 1.27.2 or later), or run the image
 `ghcr.io/lightwebinc/bsecret` (built by `make docker-build`) with a volume
 at `/home/nonroot/.bsecret`. The organization and its groups are borg's,
 so an owner also needs the `borg` command (`make borg` builds the one this

@@ -115,10 +115,11 @@ $ make docker-build     # the command's and the local chain's images
 $ make quickstart-check # QUICKSTART.md, run as written
 ```
 
-Go 1.27.1 or later, and Node 24 for the TypeScript package under `host/`
+Go 1.27.2 or later, and Node 24 for the TypeScript package under `host/`
 (`make verify NODE=/path/to/node24` when it is not on `PATH`). The direct Go
-dependencies are go-sdk v1.7.1, bcommon v0.20.0 and borg v0.4.4, and nothing
-else.
+dependencies are go-sdk v1.7.1, bcommon v0.21.0 and borg v0.4.5, and nothing
+else but bcommon's devkit v0.1.0, which only the tests and the devchain and
+vectors commands import.
 
 borg's tagged module archive is kept under `third_party/goproxy`, and the
 Makefile, the Dockerfile and CI serve it to the `go` command as a file

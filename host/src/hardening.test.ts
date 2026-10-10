@@ -66,23 +66,35 @@ test('a sweep that waits in the table still retracts after a restart, although a
 test('a token turned away from a full seq while it was pending is read again once its predecessor is rooted', async () => {
   const chain = new Chain(92000)
   const s = await setup({ chain })
-  const owner = new OwnerSim(crypt, 'bound owner', chain, { chains: 400 })
-  const vault = owner.vault('bound', hall, group, epochOf('bound', 0))
-  const a1 = await vault.version('a', 'one')
-  const t0 = await vault.token({ create: [a1] })
-  const t1 = await vault.token({ update: [await vault.version('a', 'two')] })
-  const a3 = await vault.version('a', 'three')
-  const t2 = await vault.token({ update: [a3] })
-  const a4 = await vault.version('a', 'four')
-  const t3 = await vault.token({ update: [a4] })
   const id = (m: { tx: { id: (e: 'hex') => string } }): string => m.tx.id('hex')
-  // The owner's own rootless tokens at seq 2, each on a parent no host admits, until eight have a txid below the real one's.
+  // A vault whose seq 2 token has a txid in the upper half, so that a txid below it is found in a try or two.
+  const made = async (n: number) => {
+    const owner = new OwnerSim(crypt, `bound owner ${n}`, chain, { chains: 16 })
+    const vault = owner.vault('bound', hall, group, epochOf('bound', 0))
+    const a1 = await vault.version('a', 'one')
+    const t0 = await vault.token({ create: [a1] })
+    const t1 = await vault.token({ update: [await vault.version('a', 'two')] })
+    const a3 = await vault.version('a', 'three')
+    const t2 = await vault.token({ update: [a3] })
+    const a4 = await vault.version('a', 'four')
+    const t3 = await vault.token({ update: [a4] })
+    return { owner, vault, t0, t1, a3, t2, a4, t3 }
+  }
+  let m = await made(0)
+  for (let n = 1; id(m.t2) < '8'; n++) m = await made(n)
+  const { owner, vault, t0, t1, a3, t2, a4, t3 } = m
+  // The owner's own rootless tokens at seq 2, each on a parent no host admits, eight with a txid below the real one's.
+  // Each spends one chain output; its seq 2 token is reworked (a later created) until its txid is below t2's, so the
+  // count of chain outputs used is fixed, whatever t2's txid is.
   const rogues: Array<{ beef: Uint8Array; txid: string }> = []
-  for (let n = 0; rogues.filter((r) => r.txid < id(t2)).length < 8; n++) {
+  for (let n = 0; n < 8; n++) {
     const pseudo = encodeVault({ ...t1.rec, prev: hashOrder((n + 1).toString(16).padStart(64, '0')), created: t1.rec.created + 1 + n })
     const x = await token(owner.party, pseudo, [{ src: owner.chainTree, vout: owner.nextChainVout(), keyID: KeyChain }])
     chain.mine(x)
-    const y = await token(owner.party, encodeVault({ ...t2.rec, prev: Uint8Array.from(x.hash() as number[]), created: t2.rec.created + 1 + n }), [{ src: x, vout: 0, keyID: KeyVault }])
+    let y = null
+    for (let k = 0; y === null || y.id('hex') >= id(t2); k++) {
+      y = await token(owner.party, encodeVault({ ...t2.rec, prev: Uint8Array.from(x.hash() as number[]), created: t2.rec.created + 1 + n + 8 * k }), [{ src: x, vout: 0, keyID: KeyVault }])
+    }
     chain.mine(y)
     rogues.push({ beef: tokenBEEF(y, x), txid: y.id('hex') })
   }

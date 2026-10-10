@@ -111,7 +111,9 @@ vault and epoch it names, and a token whether or not the host holds its
 predecessor. Everything across records is a status of the index, below.
 
 `bsecret_admitted_total{kind}` counts admitted transactions (`secret`,
-`vault-token`, `sweep`) and `bsecret_refused_total{reason}` every refusal by
+`vault-token`, `sweep`) once each, `bsecret_admitted_repeats_total{kind}`
+the same txid shown again when two submissions race past the engine's
+duplicate check, and `bsecret_refused_total{reason}` every refusal by
 its label.
 
 ## The index
@@ -238,115 +240,52 @@ a host rate-limits submissions in front of the engine.
 
 ## The state directory
 
-- `bsecret-rows.jsonl` holds what the host keeps for its life beside the
-  engine's storage: the carriers each funding outpoint's row took in, a
-  count for each it turned away, every drop, every spend of such an outpoint
-  by an admitted sweep, when the host first saw each token, and each held
-  sweep whose tombstone a later transaction spent. Replayed in order it
-  rebuilds every row. A carrier storage holds that the file does not name
-  (a line lost to a crash, or a directory restored from a copy) is taken
-  into its row again when it is below what the row keeps, so the winner
-  stays the lowest commitment the host holds. It keeps a funding output from answering a
-  second carrier and keeps retention's clocks, so it is kept for the host's
-  life, backed up with the database, and never edited. Each line is flushed
-  to disk before the admission it records completes. It names outpoints,
-  txids and commitments, never an identity or a secret.
-- `payments.jsonl` holds every payment the terms route accepted: the Atomic
-  BEEF, the derivation prefix and suffix, the sender's identity key, the
-  satoshis, the class and the outpoints the payment spends. The route
-  answers once the line is on disk. The host broadcasts the payment ([Payment acceptance](#payment-acceptance)); the payee still settles it.
+Besides the generic `payments.jsonl` and `unsettleable.jsonl` of
+[the host module](https://github.com/lightwebinc/bcommon/blob/main/docs/host-module.md#the-state-directory),
+`bsecret-rows.jsonl` holds what the host keeps for its life beside the
+engine's storage: the carriers each funding outpoint's row took in, a count
+for each it turned away, every drop, every spend of such an outpoint by an
+admitted sweep, when the host first saw each token, and each held sweep
+whose tombstone a later transaction spent. Replayed in order it rebuilds
+every row. A carrier storage holds that the file does not name (a line lost
+to a crash, or a directory restored from a copy) is taken into its row again
+when it is below what the row keeps, so the winner stays the lowest
+commitment the host holds. It keeps a funding output from answering a second
+carrier and keeps retention's clocks, so it is kept for the host's life,
+backed up with the database, and never edited. Each line is flushed to disk
+before the admission it records completes. It names outpoints, txids and
+commitments, never an identity or a secret. A cut-short last line is
+skipped; any other line that does not parse stops the host, because a row
+skipped could let a swept or superseded carrier be answered again.
 
-Both files are append-only, so a copy taken while the host runs is safe: at
-worst its last line is cut short, and both readers skip such a line. Any
-other line of the rows file that does not parse stops the host, because a
-row skipped could let a swept or superseded carrier be answered again. Copy
-the directory daily beside the database backup and keep several days.
-Restore it only when it is lost or damaged, never to roll the host back:
-rows written after the copy are gone.
-
-A payment is money only once it is mined; until then the payer can race a conflicting spend to a miner. The route refuses a payment that
-spends a coin an accepted payment already spent, across restarts, so two
-transactions on one coin buy one answer and not two, and the host's own
-broadcast and the node's spend view catch a spend it was never shown
-([Payment acceptance](#payment-acceptance)). Settle each line promptly with
-the payee wallet's BRC-100 `internalizeAction` (protocol `wallet payment`,
-output 0, the remittance as written), which broadcasts it.
+Back up, restore and settle as the host module says; the payee settles
+with `bsecret payee settle`.
 
 ## The terms route
 
-The reference host lets a module add no route of its own, so with
-`BSECRET_LISTEN` set the module serves its own, beside the host:
+The route, its session bound, handshake and response budgets, replay
+refusal and payment acceptance are bcommon's: see
+[the host module](https://github.com/lightwebinc/bcommon/blob/main/docs/host-module.md).
+What is bsecret's own:
 
-| Route | Answer |
-| --- | --- |
-| `GET /ls_bsecret/terms` | the terms document of spec section 10.3; 404 when the host prices nothing |
-| `POST /.well-known/auth` | the BRC-104 handshake |
-| `POST /lookup` | the same BRC-24 questions as the host's `/lookup`, a `secret`, `secrets` or `label` answer's context included |
+- the service is `ls_bsecret`, the terms document is spec section 10.3, and
+  a `secret`, `secrets` or `label` answer's context is included on the
+  route's `/lookup`;
+- the priceable classes are `history`, `history-after`, `audit` and
+  `audit-after`, each priced by its own name (`BSECRET_PRICES`); asked on the
+  host's own `/lookup` they are refused with an error naming the route;
+- the variables are the `BSECRET_` ones in [Configuration](#configuration);
+- 400 also covers a question naming a crypt the host does not carry, and
+  503 is answered until the index is restored.
 
-Its base URL is what the host publishes as `ls_bsecret`'s base (BRC-180
-`metanet.overlays`), an origin with no path: a BRC-104 client shakes hands
-at the origin's `/.well-known/auth`. A reverse proxy in front of it gives
-it an origin of its own and passes the path unchanged, because a BRC-104
-signature covers it.
+### Route metrics
 
-A free question is answered with or without BRC-104. A question of a class
-the host prices (`history`, `history-after`, `audit`, `audit-after`, each by
-its own name) must be asked here, over BRC-104: the host's own `/lookup`
-refuses it with an error that says so. Without a payment it is answered 402
-with BRC-105's headers (`x-bsv-payment-version`,
-`x-bsv-payment-satoshis-required`, `x-bsv-payment-derivation-prefix`); with
-an `x-bsv-payment` header whose transaction's output 0 pays at least the
-price to the key BRC-29 derives for the prefix, the suffix and the asker,
-and which verifies against the host's headers, it is answered. One payment
-buys one question, which is one page. A payment used twice is answered 409,
-and so is one that spends a coin an earlier payment spent.
-
-| Status | When |
-| --- | --- |
-| 400 | the question is not one class's, names a crypt the host does not carry, or the payment is malformed, pays too little or the wrong key, or does not verify |
-| 401 | a priced class asked without BRC-104, a request that does not verify, or a signed request sent a second time |
-| 402 | a priced class asked without a payment |
-| 409 | a payment already used, or one that spends a coin an accepted payment spent |
-| 429 | a handshake over the budget, or a request over its session's budget of signed responses, with `Retry-After` |
-| 503 | the index is not restored yet |
-
-### The handshake budget
-
-A BRC-104 handshake is unauthenticated and costs the host a signature. The
-route answers handshakes from a budget for the route and a budget for each
-remote address (an IPv6 address by its /64), checked before the body is read
-and before any signature is made, and answers 429 with `Retry-After` over
-either. It keeps at most `BSECRET_SESSIONS` sessions and forgets one idle
-for `BSECRET_SESSION_TTL` seconds; a client whose session went shakes hands
-again. Behind a reverse proxy every client has the proxy's address, so the
-per-address budget becomes a second route budget: limit by address at the
-proxy.
-
-A handshake buys a session, and every answered request on a session costs
-the host another signature. So each session has its own budget of signed
-responses (`BSECRET_RESPONSES_PER_SEC`, `BSECRET_RESPONSE_BURST`), taken
-only by a request that verified, and a request over it is answered 429
-with nothing signed. A signed request sent again byte for byte is refused
-401 before anything is verified or signed: the route remembers the last
-65536 requests it answered, and the session budget bounds what an older
-replay can cost.
-
-`bsecret_handshakes_total{result}` counts `accepted`, `failed`,
-`limited_address` and `limited_global`; `bsecret_requests_total{result}`
-counts authenticated requests refused before any signature (`replayed`,
-`limited`); `bsecret_sessions` is the sessions kept;
-`bsecret_payments_total{decision,reason}` counts paid questions by what the
-host did: `requested` (`no-payment`, a 402 with the price), `fast`
-(`at-or-below-threshold`, `mined`), `hold` (`above-threshold`,
-`payer-limit`, `total-limit`, `payer-flagged`, `no-broadcast-leg`,
-`broadcast-unconfirmed`, `no-network-verdict`, `double-spend-attempted`,
-`spend-view-unknown`, `watch-limit`, ...) and `refuse` (`malformed`,
-`wrong-script`, `spv-failed`, `not-final`, `outputs-exceed-inputs`,
-`network-refused`, `double-spent`, `replayed`, `conflict`);
-`bsecret_payment_events_total{kind}` counts fast payments the watch
-resolved (`confirmed`, `double-spent`, `refused`, `unmined`; all but the
-first flag the payer); `bsecret_payments_unmined` is the fast payments being
-watched.
+`bsecret_handshakes_total{result}` (`accepted`, `failed`, `limited_address`,
+`limited_global`), `bsecret_requests_total{result}` (`replayed`, `limited`),
+`bsecret_sessions`, `bsecret_sessions_evicted_total{why}` (`cap`, `idle`),
+`bsecret_payments_total{decision,reason}`,
+`bsecret_payment_events_total{kind}` and `bsecret_payments_unmined`, with the
+labels the host module lists.
 
 ## Joining a crypt
 
@@ -360,52 +299,6 @@ source while it still serves the tree. Tokens, carriers and
 sweeps may be replayed in any order: a token ahead of its predecessor is
 `pending` until the predecessor arrives.
 
-
-## Payment acceptance
-
-A paid question is answered only after the payment is held to bcommon's
-acceptance rule (package `acceptance`, the same rule for every layer):
-
-1. the route's own checks (prefix, output 0 pays the derived key, SPV
-   against the host's headers, a txid and coins never used before);
-2. finality (lock time 0, or every input final) and conservation (every
-   input carries its source, and the outputs do not exceed the inputs);
-3. the value: at or below `BSECRET_ACCEPT_THRESHOLD_SATS`, and within the
-   payer's and the total limits, it is fast; otherwise it is held;
-4. the host broadcasts it through `BSECRET_ARCADE_URL`, unmined ancestors first,
-   held or fast: this is how the payee collects;
-5. on the fast path the host answers only once arcade reports the network
-   took it (`SEEN_ON_NETWORK`, `ACCEPTED_BY_NETWORK`, ...), with no
-   `DOUBLE_SPEND_ATTEMPTED` and no competing transaction, and the node shows
-   every input unspent or spent by this payment.
-
-A refusal (arcade `REJECTED`, a definitive HTTP refusal, an input spent by
-another transaction, a payment that is not final or spends more than it
-holds) is answered 400 `ERR_PAYMENT_REFUSED`. Anything else that is not
-fast (above the threshold, a limit reached, a conflict reported, no
-verdict within 10 s, a spend view that cannot say) is answered 402
-`ERR_PAYMENT_HELD` with the reason and no BRC-105 headers, so a client
-does not pay again. The held payment is recorded in `payments.jsonl` with
-`"decision":"hold"`, keeps its coins, and the same payment sent again is
-answered once the node serves its proof and that proof verifies against the
-host's headers. A host with no arcade or no node holds every payment (with
-arcade alone it still broadcasts, and with the node alone it answers a
-payment the node shows mined). At most 100,000 fast payments are watched at
-once; past that a payment is held (`watch-limit`).
-
-Every fast payment is watched on the host's background tick (every 30 s,
-the 500 least recently checked each time) until it mines. One whose input
-another transaction spent, that arcade refuses, or that has not mined
-within a day, is written to `unsettleable.jsonl` in the state directory,
-logged, and counted; its payer is then held for confirmation on every
-later payment. Flags outlive a restart: the host reads `unsettleable.jsonl`
-when it starts, so an operator unflags a payer by removing its lines and
-restarting. Nothing is clawed back: the answer was given. A restart
-watches the fast lines of the last day again, and counts those of the last
-window against the limits.
-
-The ledger line carries `decision` (`fast`, `hold` or `mined`) and
-`reason`; `bsecret payee settle` reads it as before.
 
 ## Metrics
 

@@ -129,18 +129,12 @@ paces itself to that. A home that publishes a lot needs `woc_key` (with
 
 ## Chain views
 
-| `chain` | Reads |
-| --- | --- |
-| `woc:main`, `woc:test` | WhatsOnChain: transactions, proofs and spends; no node |
-| `asset:https://node:8090` | a Teranode node's asset API for everything |
-| `asset:https://node:8090,woc:main` | a node, and WhatsOnChain for transactions and proofs the node lacks |
-| `woc:test,spend=asset:https://node:8090` | WhatsOnChain, with a node's answers on spends |
-
-A list is comma separated, and an entry may name the one method it serves
-(`tx=`, `proof=`, `spend=`, `known=`). Transactions and proofs are asked of
-each entry in turn, since each answer is checked; spends come from one
-entry only, the first that serves them, so an absence answer never falls
-through to another source.
+`chain` is bcommon's chain view grammar: `woc:<network>` (the default, no
+node), `asset:<URL>` (a Teranode node's asset API), comma lists such as
+`asset:<URL>,woc:main`, and per-method entries such as
+`woc:test,spend=asset:<URL>`. Spends come from one entry only, so an absence
+answer never falls through. See
+[chain views](https://github.com/lightwebinc/bcommon/blob/main/docs/configuration.md#chain-views-nodeapi-interfaces).
 
 ## Networks
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -12,7 +11,6 @@ import (
 	"net/url"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	clients "github.com/bsv-blockchain/go-sdk/auth/clients/authhttp"
@@ -22,6 +20,7 @@ import (
 
 	"github.com/lightwebinc/bcommon/bwallet"
 	"github.com/lightwebinc/bcommon/funding"
+	"github.com/lightwebinc/bcommon/heldpay"
 	"github.com/lightwebinc/bcommon/lookup"
 	"github.com/lightwebinc/bcommon/producer"
 	"github.com/lightwebinc/bcommon/purse"
@@ -166,10 +165,18 @@ func (g *global) askWithin(ctx context.Context, h *home, hc chaintracker.ChainTr
 	}()
 	once := &oncePurse{Purse: p, record: func(tx *transaction.Transaction) error { return recordPayment(h, tx) }}
 	body, _ := json.Marshal(lookup.Question{Service: secrec.LookupService, Query: q})
-	hw := &heldWatch{next: http.DefaultTransport}
+	hw := &heldpay.Tap{}
 	af := clients.New(once, clients.WithoutLogging(), clients.WithHttpClient(&http.Client{Timeout: g.cfg.Timeout, Transport: hw}))
 	resp, ferr := af.Fetch(ctx, strings.TrimRight(base, "/")+"/lookup", &clients.SimplifiedFetchRequestOptions{
 		Method: http.MethodPost, Headers: map[string]string{"content-type": "application/json"}, Body: body})
+	if once.tx != nil && heldWhy(hw) != "" {
+		// The host took the payment and holds it for confirmation: once it
+		// is mined, the same payment, sent again, buys the answer.
+		resp, ferr = g.sendHeldAgain(ctx, p, once.tx, hw, resp, ferr, func(payment string) (*http.Response, error) {
+			return af.Fetch(ctx, strings.TrimRight(base, "/")+"/lookup", &clients.SimplifiedFetchRequestOptions{
+				Method: http.MethodPost, Headers: map[string]string{"content-type": "application/json", "x-bsv-payment": payment}, Body: body})
+		})
+	}
 	var ans []byte
 	status, paid, payee := 0, "", ""
 	if ferr == nil {
@@ -198,8 +205,8 @@ func (g *global) askWithin(ctx context.Context, h *home, hc chaintracker.ChainTr
 		g.broadcastPayment(ctx, p, once.tx)
 	}
 	switch {
-	case once.tx != nil && hw.why() != "":
-		return nil, once.sats, incomplete("%s at %s: the host broadcast payment %s and holds it for confirmation: %s", qq.Class.Name, base, once.tx.TxID(), termsafe.Abbrev(hw.why()))
+	case once.tx != nil && heldWhy(hw) != "":
+		return nil, once.sats, incomplete("%s at %s: the host broadcast payment %s and holds it for confirmation: %s", qq.Class.Name, base, once.tx.TxID(), termsafe.Abbrev(heldWhy(hw)))
 	case errors.Is(ferr, errPaidOnce) || (ferr == nil && status == http.StatusPaymentRequired && once.tx != nil):
 		return nil, once.sats, refused("%s at %s: the host asked for a payment again after one was sent; one question is paid for once", qq.Class.Name, base)
 	case ferr != nil:
@@ -437,35 +444,4 @@ func cmdHistory(ctx context.Context, g *global, args []string) error {
 		return bad
 	}
 	return h.st.Save()
-}
-
-// heldWatch is the transport of a paid question. It keeps the host's word
-// when the host holds a payment for confirmation (402 ERR_PAYMENT_HELD,
-// which carries no BRC-105 headers, so the SDK does not pay again).
-type heldWatch struct {
-	next http.RoundTripper
-	mu   sync.Mutex
-	held string
-}
-
-func (w *heldWatch) RoundTrip(r *http.Request) (*http.Response, error) {
-	resp, err := w.next.RoundTrip(r)
-	if err == nil && resp.StatusCode == http.StatusPaymentRequired && resp.Header.Get("x-bsv-payment-version") == "" {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
-		_ = resp.Body.Close()
-		resp.Body = io.NopCloser(bytes.NewReader(body))
-		var e struct{ Code, Description string }
-		if json.Unmarshal(body, &e) == nil && e.Code == "ERR_PAYMENT_HELD" {
-			w.mu.Lock()
-			w.held = e.Description
-			w.mu.Unlock()
-		}
-	}
-	return resp, err
-}
-
-func (w *heldWatch) why() string {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.held
 }

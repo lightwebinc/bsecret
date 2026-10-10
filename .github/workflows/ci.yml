@@ -79,3 +79,30 @@ jobs:
         run: npm test
       - name: vectors match the TypeScript codec
         run: npm run vectors-check
+
+  # QUICKSTART.md, run as written (scripts/quickstart-check.sh): what a
+  # newcomer runs. It needs borg's command and host images at the tag go.mod
+  # pins; borg is private and publishes none here, so they are built from
+  # the borg archive this repository commits under third_party/goproxy.
+  quickstart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.2"
+      - name: borg's images, from the archive go.mod pins
+        run: |
+          v=$(sed -n 's#^\s*github.com/lightwebinc/borg \(v[^ ]*\).*#\1#p' go.mod)
+          mkdir -p "$RUNNER_TEMP/borg" && cd "$RUNNER_TEMP/borg"
+          unzip -q "$GITHUB_WORKSPACE/third_party/goproxy/github.com/lightwebinc/borg/@v/$v.zip"
+          cd "github.com/lightwebinc/borg@$v"
+          make docker-build VERSION="$v"
+          make docker-build-host VERSION="$v" REFERENCE_HOST_IMAGE=${{ vars.REFERENCE_HOST_IMAGE || 'ghcr.io/lightwebinc/overlay-blueprints:0.2.2' }}
+      - name: images
+        run: |
+          make docker-build
+          make docker-build-host BORG_HOST_IMAGE=ghcr.io/lightwebinc/borg-host:latest
+      - name: the quickstart, as written
+        run: make quickstart-check

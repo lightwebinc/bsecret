@@ -63,6 +63,9 @@ services:
       BSECRET_LISTEN: 0.0.0.0:8090
       BSECRET_PRICES: history=5,history-after=5,audit=20,audit-after=20
       BSECRET_PAYEE_KEY: ${BSECRET_PAYEE_KEY:-}
+      # The local chain's asset API: how the host sees a payment it holds
+      # for confirmation mine, after which the same payment buys the answer.
+      BSECRET_ASSET_URL: http://chain:8080
       OVERLAY_KNEX_URL: mysql://overlay:quickstart@db:3306/overlay_a
       OVERLAY_CHAIN_TRACKER_URL: http://chain:8080
     volumes:

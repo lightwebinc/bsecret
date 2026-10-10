@@ -338,6 +338,13 @@ reads the same tokens one at a time through the free class, with no home
 and no coin (`nobody` is a home that does not exist). `payee settle` took
 the payment into the payee's wallet: checked, broadcast, mined, pooled.
 
+With no arcade on the local chain, the host cannot take a payment on the
+network's word: it holds it for confirmation (`202 ERR_PAYMENT_HELD`), and
+`bsecret` says so, broadcasts the payment, waits for it to mine (seconds
+here; up to 10 minutes) and sends the same payment again, which buys the
+answer. The host sees it mine through the local chain's asset API
+(`BSECRET_ASSET_URL` in compose.yaml).
+
 ### 11. Do the hosts agree?
 
 ```console

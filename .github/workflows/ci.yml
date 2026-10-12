@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   go:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, lax]
     # borg is a private module this job has no credentials for. Its tagged
     # archive is in third_party/goproxy and is served as a file proxy ahead
     # of the public one; go.sum holds the tag's hashes, so the copy is
@@ -59,7 +59,7 @@ jobs:
   # class, the index rules, restore, and the terms route with a paying
   # client.
   ts:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, lax]
     defaults:
       run:
         working-directory: host
@@ -85,7 +85,7 @@ jobs:
   # pins; borg is private and publishes none here, so they are built from
   # the borg archive this repository commits under third_party/goproxy.
   quickstart:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, lax]
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

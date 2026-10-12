@@ -28,6 +28,11 @@ flowchart LR
   BS -->|"settle"| BSV[("BSV blockchain")]
   BS -->|"chain"| N["chain view<br/>woc:main (default) or a node"]
   M & A & BS -->|headers| HS["header source"]
+  %% The last node is an invisible spacer in the rightmost rank: the rendered
+  %% viewer places its zoom and pan controls over the bottom-right corner.
+  BS ~~~ pad
+  pad["&nbsp;<br/>&nbsp;<br/>&nbsp;<br/>&nbsp;<br/>&nbsp;"]:::pad
+  classDef pad fill:none,stroke:none,color:transparent
 ```
 
 | Part | What it is | Where |

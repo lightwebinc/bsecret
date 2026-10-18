@@ -52,7 +52,7 @@
         "began": "the group is created with alice and bob; carol is added within the epoch",
         "commitment": "ceeed5d6813b5155763f35d7209ce29228cd9625bb6527946fcdf6ee1b30f4ee",
         "epoch": 0,
-        "epochId": "f177512800bb4d36592b8d1828c32da6573fd256908efb8f0a234cd6911e79dc",
+        "epochId": "e1d5c36f56d10af0c71d27509e56b2f06695b781ac0459aa7705e8ba90e7ee27",
         "holders": [
           "alice",
           "bob",
@@ -65,7 +65,7 @@
         "began": "bob is removed",
         "commitment": "33446213fbf23b1a12c81c0b6679ff8cb4345db876f39affabc0050bb46604eb",
         "epoch": 1,
-        "epochId": "2f7d1933ba956338f37d5b60627c5ba30e86dbde98192030d8c0bed41fe3f421",
+        "epochId": "a924a735de0a9c194206a271b3fa2ff19f55d87305f8716950d07c29037dc242",
         "holders": [
           "alice",
           "carol"
@@ -77,7 +77,7 @@
         "began": "a scheduled rotation, no member change",
         "commitment": "16a5a7e954bc2b7400de9f24edd5d81c62e9d0c88557ee6cf2298e3dd39a62be",
         "epoch": 2,
-        "epochId": "2eb099db87764574f67fa85ef85a6b467e003a109aaef169755cf2edb56f8ab2",
+        "epochId": "231dc3fd55fab180c2e241b22e235c106e99f39fe33fe270702091c3f9fda641",
         "holders": [
           "alice",
           "carol"

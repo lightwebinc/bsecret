@@ -25,30 +25,30 @@
       "key": "f32d56bd890f105f1e9731d9607b464078644b0ce1df8e7a87196589bd0266ca",
       "symmetricKey": "3d67c0041301c203085c253fb02a70d5d86ebdbe411759a18c7e63a40af8bd35",
       "commitment": "ceeed5d6813b5155763f35d7209ce29228cd9625bb6527946fcdf6ee1b30f4ee",
-      "epochId": "f177512800bb4d36592b8d1828c32da6573fd256908efb8f0a234cd6911e79dc",
+      "epochId": "e1d5c36f56d10af0c71d27509e56b2f06695b781ac0459aa7705e8ba90e7ee27",
       "beganAtSeq": 0,
-      "releaseKeyId": "370dc9423cf6f0e9e0c38cf005087db50f8b57d99aee22b2ffb853c874d95546",
-      "releaseInvoice": "2-keyed content release-Nw3JQjz28Ongw4zwBQh9tQ+LV9ma7iKy/7hTyHTZVUY="
+      "releaseKeyId": "6a9ae1e18054ae631a84921f374571cfee9b6c9c9e38d84ea84921e71ffa4031",
+      "releaseInvoice": "2-keyed content release-aprh4YBUrmMahJIfN0Vxz+6bbJyeONhOqEkh5x/6QDE="
     },
     {
       "epoch": 1,
       "key": "2502fa9da5b7f889d8de37defbdda85531e2c6b20626a3e59efa6815aac06189",
       "symmetricKey": "836a3cd360f7eb2a083d0fd085c537f6fb6d29df6fbca8b68835e48d07d62dc0",
       "commitment": "33446213fbf23b1a12c81c0b6679ff8cb4345db876f39affabc0050bb46604eb",
-      "epochId": "2f7d1933ba956338f37d5b60627c5ba30e86dbde98192030d8c0bed41fe3f421",
+      "epochId": "a924a735de0a9c194206a271b3fa2ff19f55d87305f8716950d07c29037dc242",
       "beganAtSeq": 2,
-      "releaseKeyId": "a8a2f6b6733d0050f93edfe53061061f0564096be6822fc0059d0d4bf3ccee94",
-      "releaseInvoice": "2-keyed content release-qKL2tnM9AFD5Pt/lMGEGHwVkCWvmgi/ABZ0NS/PM7pQ="
+      "releaseKeyId": "6d8553b92ad9a90b42f2eaa067da599cfd5fdaf8548ae8c32648792af32b5c0b",
+      "releaseInvoice": "2-keyed content release-bYVTuSrZqQtC8uqgZ9pZnP1f2vhUiujDJkh5KvMrXAs="
     },
     {
       "epoch": 2,
       "key": "ceebd5308ddfaee2f1fb4f5f2dc96b596b58f4ad1643136ec53eb35071587947",
       "symmetricKey": "b73945e40061c4823d1d9cf528a76b2e7a33a2b97ef182828c6aaeca48fea003",
       "commitment": "16a5a7e954bc2b7400de9f24edd5d81c62e9d0c88557ee6cf2298e3dd39a62be",
-      "epochId": "2eb099db87764574f67fa85ef85a6b467e003a109aaef169755cf2edb56f8ab2",
+      "epochId": "231dc3fd55fab180c2e241b22e235c106e99f39fe33fe270702091c3f9fda641",
       "beganAtSeq": 3,
-      "releaseKeyId": "90295ec9e3b16f0912a79876584ba60ab1fa96003aa393b6c793fe31c6e24055",
-      "releaseInvoice": "2-keyed content release-kCleyeOxbwkSp5h2WEumCrH6lgA6o5O2x5P+McbiQFU="
+      "releaseKeyId": "5efbe8f1035293dc68d4a24cae8fcf242cbef377bf790551ee2f8284564ab98d",
+      "releaseInvoice": "2-keyed content release-Xvvo8QNSk9xo1KJMro/PJCy+83e/eQVR7i+ChFZKuY0="
     }
   ],
   "note": "Epoch keys are fixed stand-ins for CSPRNG draws: SHA-256(\"borg/vector/epoch/<n>\"), each checked to be a scalar in [1, n-1]."

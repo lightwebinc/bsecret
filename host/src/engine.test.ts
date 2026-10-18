@@ -150,7 +150,9 @@ test('every transaction vector through the engine: admitted as the vectors say, 
   assert.deepEqual(await answer(e, { ...q, secret: sid('tx/ssh-key') }), [], 'never listed')
 
   // version: listed, unlisted and mismatched carriers; never a superseded or a retracted one.
-  assert.deepEqual(await answer(e, { ...q, secret: sid('tx/api-token'), version: '1' }), [id('carrier-locktime-max')], "the outpoint's winner, not the carrier it superseded")
+  // Two carriers share api-token v1's outpoint; the lower txid wins it.
+  const apiV1 = [id('secret-carrier-api-token-v1'), id('carrier-locktime-max')].sort()[0]!
+  assert.deepEqual(await answer(e, { ...q, secret: sid('tx/api-token'), version: '1' }), [apiV1], "the outpoint's winner, not the carrier it superseded")
   assert.deepEqual(await answer(e, { ...q, secret: sid('tx/db-password'), version: '1' }), [], 'its funding outpoint was swept')
   assert.deepEqual(await answer(e, { ...q, secret: sid('tx/tls-key'), version: '1' }), [id('secret-carrier-tls-key-v1')], 'retired, still held')
   assert.deepEqual(await answer(e, { ...q, secret: sid('tx/ssh-key'), version: '1' }), [id('secret-carrier-ssh-key-v1')])
@@ -186,7 +188,7 @@ test('every transaction vector through the engine: admitted as the vectors say, 
 
   // history and audit are free on a host that prices nothing.
   const h = { crypt, history: org, vault: v.vault, secret: sid('tx/api-token') }
-  assert.deepEqual(await answer(e, h), [id('carrier-locktime-max'), id('secret-carrier-api-token-v2'), id('secret-carrier-api-token-v3')])
+  assert.deepEqual(await answer(e, h), [apiV1, id('secret-carrier-api-token-v2'), id('secret-carrier-api-token-v3')])
   assert.deepEqual(await answer(e, { ...h, after: '1' }), [id('secret-carrier-api-token-v2'), id('secret-carrier-api-token-v3')])
   assert.deepEqual(await answer(e, { ...h, after: '3' }), [])
   const a = { crypt, audit: org, vault: v.vault }

@@ -42,8 +42,10 @@ verify: fmt-check vet deps-check licences ts-check vectors-check test
 # -race and run once without it.
 test: go-test ts-test
 
+# cmd/bsecret takes ~5m under -race -count=2 on an idle runner; on the shared
+# self-hosted pool it passed Go's 10m default when PR runs overlapped.
 go-test:
-	GOWORK=off go test -race -count=2 ./...
+	GOWORK=off go test -race -count=2 -timeout 20m ./...
 	GOWORK=off go test -count=1 -run 'TestABudgetRunsOutBetweenPages$$' ./cmd/bsecret/
 
 # The e2e build tag is vetted too, so the client end to end compiles.

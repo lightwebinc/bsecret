@@ -204,7 +204,7 @@ headers     woc:main tip 970084
 | `fund` | `-blocks N` | `101` | coinbase: only on a regtest chain you run (development and tests); blocks to mine, or with `-rescan` to re-read |
 | `fund` | `-batch N` | `30` | coinbase: only on a regtest chain you run (development and tests); blocks per `generatetoaddress` call |
 | `fund` | `-rescan` | off | coinbase: only on a regtest chain you run (development and tests); re-read recent blocks for coinbase the pool lacks |
-| `vault create` | `-name N` | none | the vault's display name, 1 to 64 bytes |
+| `vault create` | `-name N` | drawn at random (`vault_` and ten letters) | the vault's display name, 1 to 64 bytes; public |
 | `vault create` | `-hall HALL` | `hall` | the borg hall the group lives in |
 | `vault create` | `-anchor` | `version` | `version` or `interval` |
 | `vault create` | `-labels` | `confidential,internal,public,restricted` | the vault's label set |
@@ -247,10 +247,6 @@ headers     woc:main tip 970084
 | `BSECRET_HOME` | the home **and** where the config file is looked for first |
 | `XDG_CONFIG_HOME` | the second place the config file is looked for |
 | `HOME` | the default home is `$HOME/.bsecret` |
-
-Building from source outside `make`: `GOPROXY`, `GONOPROXY` and
-`GONOSUMDB` as the Makefile sets them, so borg's tagged archive under
-`third_party/goproxy` is used.
 
 ## Example files
 

@@ -15,14 +15,6 @@ permissions:
 jobs:
   go:
     runs-on: [self-hosted, lax]
-    # borg is a private module this job has no credentials for. Its tagged
-    # archive is in third_party/goproxy and is served as a file proxy ahead
-    # of the public one; go.sum holds the tag's hashes, so the copy is
-    # checked. The Makefile sets the same three for its own targets.
-    env:
-      GOPROXY: file://${{ github.workspace }}/third_party/goproxy,https://proxy.golang.org,direct
-      GONOPROXY: none
-      GONOSUMDB: github.com/lightwebinc/borg
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -82,8 +74,7 @@ jobs:
 
   # QUICKSTART.md, run as written (scripts/quickstart-check.sh): what a
   # newcomer runs. It needs borg's command and host images at the tag go.mod
-  # pins; borg is private and publishes none here, so they are built from
-  # the borg archive this repository commits under third_party/goproxy.
+  # pins, built from borg's repository at that tag.
   quickstart:
     runs-on: [self-hosted, lax]
     timeout-minutes: 50
@@ -92,12 +83,11 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: "1.27.2"
-      - name: borg's images, from the archive go.mod pins
+      - name: borg's images, at the tag go.mod pins
         run: |
           v=$(sed -n 's#^\s*github.com/lightwebinc/borg \(v[^ ]*\).*#\1#p' go.mod)
-          mkdir -p "$RUNNER_TEMP/borg" && cd "$RUNNER_TEMP/borg"
-          unzip -q "$GITHUB_WORKSPACE/third_party/goproxy/github.com/lightwebinc/borg/@v/$v.zip"
-          cd "github.com/lightwebinc/borg@$v"
+          git clone --quiet --depth 1 --branch "$v" https://github.com/lightwebinc/borg "$RUNNER_TEMP/borg"
+          cd "$RUNNER_TEMP/borg"
           make docker-build VERSION="$v"
           make docker-build-host VERSION="$v" REFERENCE_HOST_IMAGE=${{ vars.REFERENCE_HOST_IMAGE || 'ghcr.io/lightwebinc/overlay-blueprints:0.2.2' }}
       - name: images

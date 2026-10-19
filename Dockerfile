@@ -9,11 +9,6 @@
 # The builder is pinned by digest at go.mod's Go release line (1.27), so
 # scanning sees the standard library that ships.
 #
-# borg is a private module. Its tagged archive is in third_party/goproxy and
-# is served to the go command as a file proxy, ahead of the public one, as
-# the Makefile does; go.sum holds the tag's hashes, so the copy is checked.
-# The build needs no credentials.
-#
 # No ENV defaults are baked in. The hosts, the header source, the node and
 # the settlement leg are addresses of somebody's deployment and have no
 # default anywhere: a default would send an organisation's records, or a
@@ -38,13 +33,9 @@
 FROM --platform=$BUILDPLATFORM golang:1.27-alpine@sha256:738d1cf061836894ff6bb8c33881080ac66de8cf0586615012a0c8f592649cfa AS builder
 RUN apk add --no-cache git ca-certificates
 WORKDIR /src
-ENV GOWORK=off \
-    GOPROXY=file:///src/third_party/goproxy,https://proxy.golang.org,direct \
-    GONOPROXY=none \
-    GONOSUMDB=github.com/lightwebinc/borg
+ENV GOWORK=off
 
 COPY go.mod go.sum ./
-COPY third_party/goproxy ./third_party/goproxy
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 

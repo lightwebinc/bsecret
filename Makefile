@@ -8,7 +8,7 @@
 #
 #	make verify NODE=/path/to/node24
 
-.PHONY: verify test go-test ts-test ts-check ts-build module node-check vet fmt-check deps-check licences licences-update vectors vectors-check borg-module e2e e2e-client bsecret devchain borg docker-build docker-build-host docker-smoke docker-smoke-host quickstart-check
+.PHONY: verify test go-test ts-test ts-check ts-build module node-check vet fmt-check deps-check licences licences-update vectors vectors-check e2e e2e-client bsecret devchain borg docker-build docker-build-host docker-smoke docker-smoke-host quickstart-check
 
 NODE ?= node
 TSC := $(NODE) node_modules/typescript/bin/tsc
@@ -18,19 +18,9 @@ IMAGE          ?= ghcr.io/lightwebinc/bsecret
 DEVCHAIN_IMAGE ?= ghcr.io/lightwebinc/bsecret-devchain
 HOST_IMAGE     ?= ghcr.io/lightwebinc/bsecret-host
 
-# borg is a private module: the public proxy and checksum database cannot
-# see it, and a build with no credentials for its repository cannot fetch
-# it. So the tagged module archive is kept under third_party/goproxy and
-# served to the go command as a file proxy, ahead of the public one. It is
-# not a replace and not a vendor directory: go.mod requires the tag, go.sum
-# holds the tag's hashes, and the go command refuses an archive that does
-# not match them. Every target below, and CI, resolve borg this way, so
-# what is tested is the same bytes everywhere. make borg-module refreshes
-# the copy from the repository after go.mod moves to another tag.
+# Every module, borg included, resolves through the public proxy and is
+# checked against go.sum and the public checksum database.
 BORG := github.com/lightwebinc/borg
-export GOPROXY := file://$(CURDIR)/third_party/goproxy,https://proxy.golang.org,direct
-export GONOPROXY := none
-export GONOSUMDB := $(BORG)
 
 verify: fmt-check vet deps-check licences ts-check vectors-check test
 
@@ -179,22 +169,6 @@ vectors: ts-build
 vectors-check: ts-build
 	GOWORK=off go run ./cmd/vectors -check
 	cd host && $(NODE) dist/tsvectors.js -check
-
-# Copy the borg tag go.mod requires into third_party/goproxy, from borg's
-# repository, and remove every older tag's files: the mirror holds only what
-# go.mod needs. Needs git credentials for it. The go command checks the
-# archive against go.sum, so a tag that moved is refused here.
-borg-module:
-	@set -eu; v=$$(GOWORK=off go list -m -f '{{.Version}}' $(BORG)); \
-	tmp=$$(mktemp -d); trap 'chmod -R u+w "$$tmp"; rm -rf "$$tmp"' EXIT; \
-	GOWORK=off GOFLAGS=-mod=mod GOMODCACHE=$$tmp GOPROXY=direct GONOSUMDB=$(BORG) go mod download $(BORG)@$$v; \
-	src=$$tmp/cache/download/$(BORG)/@v; dst=third_party/goproxy/$(BORG)/@v; \
-	mkdir -p $$dst; cp $$src/$$v.mod $$src/$$v.zip $$dst/; \
-	GOWORK=off GOFLAGS=-mod=mod GOMODCACHE=$$tmp GOPROXY=direct GONOSUMDB=$(BORG) go list -m -f '{"Version":"{{.Version}}","Time":"{{.Time.UTC.Format "2006-01-02T15:04:05Z"}}"}' $(BORG)@$$v > $$dst/$$v.info; \
-	find $$dst -maxdepth 1 -type f ! -name "$$v.*" ! -name list -delete; \
-	ls $$dst | sed -n 's/\.zip$$//p' > $$dst/list; \
-	echo "borg-module: $$v in $$dst"
-
 
 # The images, built and tagged locally, each as $(VERSION) and latest.
 # Nothing here pushes. docker-build makes the command and the local chain;

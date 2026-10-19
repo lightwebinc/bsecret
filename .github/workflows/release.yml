@@ -43,11 +43,6 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: "0"
           GOWORK: "off"
-          # borg's tagged archive is served from third_party/goproxy, as in
-          # the Makefile, the Dockerfile and CI.
-          GOPROXY: file://${{ github.workspace }}/third_party/goproxy,https://proxy.golang.org,direct
-          GONOPROXY: none
-          GONOSUMDB: github.com/lightwebinc/borg
         run: |
           set -eux
           version="${GITHUB_REF_NAME#v}"

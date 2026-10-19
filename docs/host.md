@@ -313,6 +313,25 @@ dropped carriers and sweeps (`evidence`, `retention`, `table`);
 `bsecret_tokens_pending`, `bsecret_carriers`, `bsecret_sweeps`,
 `bsecret_outpoint_rows` and `bsecret_spend_table`.
 
+## Keeping a crypt private
+
+A host answers every lookup it receives, and the module has no list of the
+organizations or members it serves. An operator who carries a crypt for
+one organization keeps outsiders out around the host:
+
+- list only that crypt in `BSECRET_CRYPTS`;
+- let only the organization's members and invited auditors reach the
+  host's lookup and submit routes, at the network or in an
+  access-controlled proxy in front of it;
+- set a submission rate there too: the module sets none of its own, and
+  carriers of a vault that does not exist are kept for
+  `BSECRET_UNHELD_HOURS`;
+- receive by unicast, not from a shared plane topic, whose objects reach
+  every host subscribed to it.
+
+None of this hides the vault's tokens, which are mined and readable from
+the chain by anyone ([limits.md](limits.md), known limit 8).
+
 ## What a host cannot tell
 
 A host admits and answers what the contract lets an owner sign. It cannot

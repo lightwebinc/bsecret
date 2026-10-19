@@ -2013,7 +2013,10 @@ and a client MUST respect it.
    group, how many secrets it holds, each secret's identifier (the hash of a
    guessable name), its versions and when each changed, each record's label
    and padded length, and when the vault re-keyed, which says when the group
-   removed someone.
+   removed someone. What a vault token carries (section 3) is readable by
+   anyone from the chain itself, with no host. Identities are keys and
+   identifiers, so this is pseudonymous: it names a company only where the
+   company has said the key is its own.
 8. **No forward secrecy.** A wrap is under a key derived from the epoch's
    key, and the epoch's key reaches a member under BRC-2 from long-term
    identity keys (borg). Whoever later learns a member's identity key opens

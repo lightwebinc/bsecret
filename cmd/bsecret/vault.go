@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -31,7 +32,7 @@ func parseTx(raw []byte, txid string) (*transaction.Transaction, error) {
 	return tx, nil
 }
 
-const vaultHelp = `usage: bsecret vault create <group> -name NAME [-hall HALL] [-anchor version|interval] [-labels a,b,c]
+const vaultHelp = `usage: bsecret vault create <group> [-name NAME] [-hall HALL] [-anchor version|interval] [-labels a,b,c]
        bsecret vault list
        bsecret vault show
 
@@ -51,6 +52,11 @@ first token:
                     yet, marked unanchored (for credentials machines rotate
                     faster than blocks; put -defer, then anchor)
 
+The display name is public: every host of the crypt, and anyone who
+follows its topic, sees it beside the organization's key. Without -name it
+is drawn at random (vault_ and ten letters), which says nothing about what
+the vault holds; -name sets one, 1 to 64 bytes of one line of plain text.
+
 The organization must hold the epoch's key, which it does through its
 signer key: run 'borg org signer' once in the organization's borg home.
 The first token spends an output of a chain tree, which gives the vault its
@@ -63,7 +69,7 @@ group, and its set.`
 
 func cmdVault(ctx context.Context, g *global, args []string) error {
 	fs := g.flagSet("vault", vaultHelp)
-	name := fs.String("name", "", "create: the vault's display name, 1 to 64 bytes")
+	name := fs.String("name", "", "create: the vault's display name, 1 to 64 bytes, public (default: drawn at random)")
 	hall := fs.String("hall", "", "create: the borg hall the group lives in (default the configured hall)")
 	anchor := fs.String("anchor", "version", "create: version or interval")
 	labels := fs.String("labels", strings.Join(secrec.DefaultLabels, ","), "create: the vault's label set, comma separated")
@@ -128,7 +134,15 @@ func (g *global) vaultCreate(ctx context.Context, group, name, hall, anchor, lab
 	if g.cfg.Crypt == "" {
 		return usage("no crypt: set crypt (or -crypt) to the crypt identifier <name>_<suffix> (bsecret crypt new prints one)")
 	}
-	if name == "" || len(name) > secrec.MaxName {
+	if name == "" {
+		drawn, err := secrec.NewCrypt("vault", rand.Reader)
+		if err != nil {
+			return err
+		}
+		name = drawn
+		fmt.Fprintf(g.stderr, "note: no -name: the display name %s is drawn at random; a display name is public\n", name)
+	}
+	if len(name) > secrec.MaxName {
 		return usage("-name: the vault's display name, 1 to %d bytes", secrec.MaxName)
 	}
 	// The record refuses a line break and every control character (spec

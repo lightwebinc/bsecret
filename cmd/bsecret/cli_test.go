@@ -521,7 +521,7 @@ func TestTheOwnerNeedsItsSignerKey(t *testing.T) {
 	h.want(h.run("org", "", "vault", "create", "nosuchgroup", "-name", "x"), exitUsage, "no group named")
 	h.want(h.run("org", "", "vault", "create", gid, "-name", "x", "-anchor", "sometimes"), exitUsage, "-anchor is version or interval")
 	h.want(h.run("org", "", "vault", "create", gid, "-name", "x", "-labels", "Bad"), exitUsage, "-labels")
-	h.want(h.run("org", "", "vault", "create", gid), exitUsage, "-name")
+	h.want(h.run("org", "", "vault", "create", gid, "-name", strings.Repeat("n", 65)), exitUsage, "-name")
 	// Two vaults: a command names one.
 	h.must("org", "vault", "create", gid, "-name", "second")
 	h.want(h.run("org", "v", "put", "a"), exitUsage, "owns 2 vaults that match")
@@ -550,5 +550,30 @@ func TestTheNullDeviceIsNoTerminal(t *testing.T) {
 	var b bytes.Buffer
 	if isTerminal(&b) {
 		t.Fatal("a buffer is taken for a terminal")
+	}
+}
+
+// TestAVaultWithNoNameGetsADrawnOne: a display name is public, so a vault
+// created without -name gets one drawn at random, and says so.
+func TestAVaultWithNoNameGetsADrawnOne(t *testing.T) {
+	h := newHarness(t)
+	h.organisation()
+	h.identity("alice", false)
+	gid, err := h.borg.CreateGroup("engineering", h.keys["alice"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := h.must("org", "vault", "create", gid)
+	m := regexp.MustCompile(`(?m)^name    (vault_[a-z]{10})$`).FindStringSubmatch(r.stdout)
+	if m == nil {
+		t.Fatalf("no drawn display name:\n%s", r.stdout)
+	}
+	if !strings.Contains(r.stderr, "drawn at random") || !strings.Contains(r.stderr, m[1]) {
+		t.Fatalf("no note naming the drawn display name:\n%s", r.stderr)
+	}
+	// The drawn name selects the vault like any other.
+	h.mustIn("org", "v", "-vault", m[1], "put", "a")
+	if r := h.must("alice", "-vault", m[1], "get", "a"); r.stdout != "v" {
+		t.Fatalf("get by the drawn name: %q", r.stdout)
 	}
 }

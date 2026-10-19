@@ -43,7 +43,7 @@ this version chooses) or **the contract's** (a record bound).
 | Transitions per vault | one at a time | one a block | Each token spends the one before it, mined; the next is built only once the previous is proven in the tooling's own headers. Different vaults move in the same block | Same |
 | Vaults of an owner | as needed | none in the records; a client reads 256 pages of 64 a host | Each vault is its own chain; vaults do not slow each other. A vault costs one chain-tree output and one mined token to begin | Same |
 | Label set (`-labels`) | `confidential`, `internal`, `public`, `restricted` | 16 labels of 32 bytes (the record bound) | Fixed at the vault's first token. A label decides nothing about who reads | Same |
-| Display name of a vault | as needed | 64 bytes, one line of plain text (the record bound) | It is printed by every reader | Same |
+| Display name of a vault | drawn at random: `vault_` and ten letters | 64 bytes, one line of plain text (the record bound) | It is in every token and printed by every reader, so it is public | Same |
 | Anchor mode (`-anchor`) | per version | fixed at the first token | The interval mode is for machine-rotated credentials, and says so to every reader | Same |
 | Padding block | 256 bytes | a writer's | A ciphertext's length then says little about a short value's: a short credential is a 272-byte ciphertext | Same |
 | Segment size | 16384 bytes | 16 to 1048576 (the record bound) | An inline secret is one segment | Same |
@@ -231,6 +231,21 @@ not do, stated so that nobody finds it by accident.
    to write while the vault is behind its group; a host cannot. See
    [spec.md](spec.md) section 18 for this and for everything else the
    contract does not do.
+
+8. **A host answers anyone who reaches it, and the chain answers
+   everyone.** The free lookup classes need no key, so any client that
+   reaches a host can walk a vault's chain and fetch its carriers; a host
+   has no setting that limits its answers to chosen organizations or to a
+   group's members. An operator who wants that runs the crypt's hosts
+   behind its own network controls ([user-guide.md](user-guide.md) section
+   12). A vault's tokens are mined, so what they carry
+   ([spec.md](spec.md) section 3) is readable from the chain with no host.
+9. **Submissions are bounded by the operator.** Any key can publish
+   carriers for a vault that does not exist, kept for
+   `BSECRET_UNHELD_HOURS`, and funding does not bound what a key stores,
+   since a sweep returns the value. The module sets no submission rate of
+   its own: a host operator sets one in front of the host
+   ([host.md](host.md)).
 
 ## Where the numbers come from
 

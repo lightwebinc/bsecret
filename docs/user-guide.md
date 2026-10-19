@@ -64,10 +64,31 @@ value. **Give every credential a new value when you re-key, and disable
 the old one where it was accepted.** bsecret stores and distributes the new
 value; changing it at the service that takes it is yours to do.
 
-bsecret also does not hide names, sizes or timing (a secret's identifier is
-a hash of a guessable name), does not prove who read what, and does not
-erase: a sweep makes honest hosts stop answering a version, and a copy
-anyone kept stays a copy. [spec.md](spec.md) section 18 has the whole list.
+bsecret also does not prove who read what, and does not erase: a sweep
+makes honest hosts stop answering a version, and a copy anyone kept stays
+a copy. [spec.md](spec.md) section 18 has the whole list.
+
+### Who sees what
+
+| Who | Sees |
+| --- | --- |
+| Anyone who reads the chain | every vault token, since each is a mined transaction: the organization's key, the crypt, the vault's identifier and display name, its borg hall and group, the epoch it acknowledges, its labels and anchor mode, and for every change the identifiers of the secrets that entered, changed or left, how many it holds, how many are stale, and the block it mined in |
+| The crypt's hosts, and anyone who can ask them or follows the crypt's topic | all of that, and each version's record: its secret's identifier, its label, the padded length of its ciphertext, and when it was published |
+| The members of an epoch, and the owner | the name, value, media type and claims (`-not-after`, `-rotate-every`) of every version keyed under that epoch |
+| Nobody else | a name, a value or a content key |
+
+So the metadata is pseudonymous, not hidden. A key and an identifier name
+nobody by themselves; what ties them to a company is wherever the company
+says the key is its own. Three things are yours to keep that way:
+
+- **The display name is public.** Leave `-name` out of `vault create` and
+  one is drawn at random.
+- **Secret names should not describe what they protect.** An identifier is
+  a hash anyone who knows the vault can recompute from a guessed name.
+  `db/password` is guessed at once; `svc7/k2` is not.
+- **The hosts answer whoever reaches them.** Section 12 says how to keep a
+  crypt's hosts to your own members. Nothing a host does hides what the
+  chain carries.
 
 ## 3. Install
 
@@ -167,7 +188,10 @@ chose.
 
 A vault's label set (`-labels`) and anchor mode (`-anchor`) are fixed when
 it is created. A label is a classification the owner writes down
-(`confidential`, `restricted`); it decides nothing about who reads.
+(`confidential`, `restricted`); it decides nothing about who reads, and
+like the display name it is public. Without `-name`, `vault create` draws
+a display name at random (`vault_` and ten letters) and prints it; a
+command names the vault by its identifier or by that name.
 
 One coin is enough. A home's first vault made from a single coin takes one
 block more than later ones: a vault's first token may not pay its fee from
@@ -288,9 +312,30 @@ is behind or in debt. In the owner's own home it also lists secrets whose
 `-rotate-every` has elapsed and values whose `-not-after` has passed. Run
 it from a timer.
 
-## 10. Credentials that machines rotate
+## 10. Machines that read and rotate secrets
 
-A token rotated every few minutes cannot wait for a block. Create the
+**Reading.** A machine reads as any member does: it has an identity key of
+its own, made with `bsecret init` where it runs, whose public key the
+owner adds to the group with borg; its home needs no coin. Three shapes
+work with the command as it is:
+
+- **At start.** An entrypoint runs `bsecret get NAME -strict` and writes
+  the value to a file only the process reads (a tmpfs), or into its
+  environment. Any exit but 0 stops the start: 1 for an exposed value, 3
+  when nothing shows the token read is the vault's latest.
+- **On a timer.** `bsecret due` exits 3 when the vault is behind or in
+  debt, or a rotation it scheduled is due; a timer turns that into an
+  alert.
+- **From a configuration tool.** Anything that runs a command and reads
+  its output takes a value the same way.
+
+One command uses one home at a time, and each read walks what is new on
+the vault's chain, so a machine reads at start or on a timer, not on every
+request. Its identity file is a credential: whoever holds it opens every
+version keyed under an epoch that key is a member of.
+
+**Rotating faster than a block.** A token rotated every few minutes cannot
+wait for a block. Create the
 vault with `-anchor interval`. Then `put -defer` publishes a version
 without listing it: readers take it by its link to the last listed
 version, and are told it is **unanchored**. `bsecret anchor`, run at an
@@ -361,6 +406,16 @@ can be filled only while the node still serves its chain tree; otherwise
 | Object size | kept small: at most 4 packets at the defaults, with warnings above | one HTTP request an object, up to the record bounds |
 | Cost that grows with hosts | none | every object uploaded once per host |
 | Priced questions | not on the plane: the terms route is HTTP | the same |
+
+**Keeping a crypt's hosts to yourself.** A host answers every lookup it
+receives: the free questions need no key, which is what lets any member
+or auditor verify without asking anyone's leave. To keep outsiders from
+asking, run the crypt's hosts where only your members reach them (your own
+network, a VPN, or an access-controlled proxy in front of each host),
+publish to them with `mode = unicast`, and give an auditor you invite the
+same access. On a shared plane, a crypt's topic is delivered to every host
+subscribed to it. Either way the vault's tokens are mined, and what they
+carry (section 2) is readable from the chain by anyone.
 
 Either way a reader asks every host it names and compares the answers.
 Tokens and sweeps always need every host: if one is down, the command

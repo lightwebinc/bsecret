@@ -39,6 +39,10 @@ does anything else.
   checked by the members who open it.
 - **Hosts are replicas, not authorities.** A host can withhold; it cannot
   forge, alter or decrypt.
+- **Pseudonymous, not hidden.** Values, names and claims are inside the
+  ciphertext. The organization's key, the vault's and secrets' identifiers,
+  the display name, labels, sizes and timing are public: on chain, and at
+  the hosts ([who sees what](docs/user-guide.md#who-sees-what)).
 - **Honest about what removal does.** A removed member keeps everything it
   could read. Removal protects what is written after the vault re-keys.
 
@@ -70,7 +74,7 @@ fund address 1EUY…zipY (main)
 $ # send about 20,000 sat from your own wallet to the fund address
 $ bsecret fund -txid <txid of that payment>     # once mined; or fund -beef FILE at once
 $ bsecret crypt new example                     # give the printed BSECRET_CRYPTS line to your hosts
-$ bsecret vault create engineering -name ops    # a vault on a borg group
+$ bsecret vault create engineering              # a vault on a borg group; its display name is drawn at random
 $ bsecret put db/password < new-password.txt    # a version, listed in a mined token
 $ bsecret get db/password | psql ...            # a member reads, every check in order
 $ borg org remove <key> -group engineering      # the removal is borg's: a new epoch
@@ -99,6 +103,7 @@ coin is [QUICKSTART.md](QUICKSTART.md).
 | Know the defaults and caps, what was measured, and what things cost | [docs/limits.md](docs/limits.md) |
 | Implement a compatible owner, reader, auditor or host | [docs/spec.md](docs/spec.md) (the specification) |
 | Know what cannot change once published | [docs/frozen.md](docs/frozen.md) |
+| Know what comes next | [docs/roadmap.md](docs/roadmap.md) |
 
 ## Build and test
 
@@ -120,15 +125,6 @@ Go 1.27.2 or later, and Node 24 for the TypeScript package under `host/`
 dependencies are go-sdk v1.7.1, bcommon v0.24.0 and borg v0.7.1, and nothing
 else but bcommon's devkit v0.1.0, which only the tests and the devchain and
 vectors commands import.
-
-borg's tagged module archive is kept under `third_party/goproxy`, and the
-Makefile, the Dockerfile and CI serve it to the `go` command as a file
-proxy ahead of the public one, so a build needs no access to borg's
-repository; `go.sum` holds the tag's hashes and the `go` command checks the
-copy against them. Outside `make`, set the same `GOPROXY`, `GONOPROXY` and
-`GONOSUMDB` the Makefile sets, or set `GOPRIVATE=github.com/lightwebinc/*`
-with git access to borg's repository. `make borg-module` refreshes the copy after
-`go.mod` moves to another tag.
 
 The record layer exists twice, held to one set of vectors: `internal/secrec`
 in Go, and `host/` in TypeScript. Each reads what the other writes

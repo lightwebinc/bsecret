@@ -83,9 +83,11 @@ says the key is its own. Three things are yours to keep that way:
 
 - **The display name is public.** Leave `-name` out of `vault create` and
   one is drawn at random.
-- **Secret names should not describe what they protect.** An identifier is
-  a hash anyone who knows the vault can recompute from a guessed name.
-  `db/password` is guessed at once; `svc7/k2` is not.
+- **A name can be guessed from its identifier.** An identifier is a hash
+  anyone who knows the vault can recompute from a guessed name, so
+  `db/password` is confirmed at once and `svc7/k2` is not. Where which
+  secrets a vault holds is itself sensitive, use names that do not
+  describe them.
 - **The hosts answer whoever reaches them.** Section 12 says how to keep a
   crypt's hosts to your own members. Nothing a host does hides what the
   chain carries.

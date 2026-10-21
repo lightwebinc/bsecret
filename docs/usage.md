@@ -606,7 +606,7 @@ owner's key (`org`), the vault (`crypt` and `vault`, the configured or
 identity key, `-label` (a name for the machine, a claim, one line of
 plain text of at most 64 bytes), a random nonce and the time. It is
 signed by the key it names, through the home's wallet, under BRC-43
-protocol `[1, "bsecret enrollment"]`, key id `1`, counterparty anyone,
+protocol `[1, "bsecret"]`, key id `enroll`, counterparty anyone,
 over `bsecret enrollment request v1` and a line feed followed by the
 request's JSON without its signature, and printed as `bsecret-join-v1.`
 and the base64url of the JSON. The home keeps it as `enroll.json`, and

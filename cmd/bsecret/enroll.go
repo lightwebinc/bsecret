@@ -65,12 +65,13 @@ is a member and opens the group's current epoch key; then exits 0. It
 exits 3 when -timeout (10m by default; 0 asks once) passes first.`
 
 // enrollProtocol is the derivation a join request is signed under: the
-// requester's key, counterparty anyone, so that anyone verifies it from the
-// public key the request names.
-var enrollProtocol = wallet.Protocol{SecurityLevel: wallet.SecurityLevelEveryApp, Protocol: "bsecret enrollment"}
+// requester's key under bsecret's public protocol, key id enroll,
+// counterparty anyone, so that anyone verifies it from the public key the
+// request names.
+var enrollProtocol = wallet.Protocol{SecurityLevel: wallet.SecurityLevelEveryApp, Protocol: "bsecret"}
 
 const (
-	enrollKeyID  = "1"
+	enrollKeyID  = "enroll"
 	enrollDomain = "bsecret enrollment request v1\n"
 	enrollPrefix = "bsecret-join-v1."
 	// enrollFile is where a workload's home keeps the request it made last.

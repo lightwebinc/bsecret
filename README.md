@@ -17,6 +17,8 @@ the key is wrapped to the members of a group's current epoch; and when the
 group removes a member, the vault must re-key everything it holds before it
 does anything else.
 
+> **Frozen (2026-10-21).** `host/src` takes bug fixes only; new behavior goes to the Go core. The Go overlay engine (go-overlay-services on MongoDB) will replace this host module. Design: `1bsv-ops` `docs/integration/overlay/go-engine-migration.md`.
+
 ## How it works
 
 - **A secret is a keyed object.** Each version is encrypted under its own

@@ -189,6 +189,12 @@ export interface Options {
   headers?: ChainTracker
   /** The host's clock, Unix seconds. */
   now?: () => number
+  /**
+   * Refuses, by throwing, a question about a crypt that is not served to
+   * the asker (private.ts); unset, every crypt the host carries is served
+   * to everyone.
+   */
+  access?: (crypt: string) => void
 }
 
 const outpoint = (txid: string, vout: number): string => `${txid}.${vout}`
@@ -304,6 +310,7 @@ export class SecretLookupService implements LookupService {
   private readonly tableCap: number
   private readonly headers: ChainTracker | undefined
   private readonly now: () => number
+  private readonly access: ((crypt: string) => void) | undefined
 
   // What the journal holds.
   private readonly rows = new Map<string, Row>()
@@ -357,6 +364,7 @@ export class SecretLookupService implements LookupService {
     this.tableCap = cap
     this.headers = o.headers
     this.now = o.now ?? (() => Math.floor(Date.now() / 1000))
+    this.access = o.access
     for (const l of this.journal.load()) this.apply(l)
   }
 
@@ -1025,7 +1033,18 @@ export class SecretLookupService implements LookupService {
       throw e
     }
     if (!this.crypts.has(q.members['crypt']!)) throw new Error(`ls_bsecret: this host does not carry crypt ${q.members['crypt']}`)
+    this.access?.(q.members['crypt']!)
     return { q, priced: !q.class.free && this.priced.has(q.class.name) }
+  }
+
+  /** The halls the rooted tokens of org's vaults in crypt name, ascending. */
+  hallsOf(crypt: string, org: string): string[] {
+    const halls = new Set<string>()
+    for (const id of this.vaultsByOrg.get(`${crypt}|${org}`) ?? []) {
+      const v = this.vaults.get(this.vaultKey(crypt, org, id))
+      for (const ts of v?.bySeq.values() ?? []) for (const t of ts) if (t.rooted) halls.add(t.rec.hall)
+    }
+    return [...halls].sort(cmp)
   }
 
   /** The carriers held for one version of one secret whose status is one of want, by txid, at most 8. */

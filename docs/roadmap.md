@@ -39,20 +39,20 @@ block headers with nobody's cooperation.
   runs and asks to join with a signed request, the owner approves it in
   one step (bsecret checks it and runs borg's add), and the workload picks
   up its membership. No private key travels.
+- Private crypts: a host setting that serves a crypt only to the
+  organizations it names and their groups' members, every class through
+  the authenticated route the priced classes use, and readers that ask
+  that route as their own identity. What the tokens carry stays on the
+  chain.
 
 ## Next
 
 Ordered by what unblocks the most.
 
-1. **Private crypts.** A host setting that serves a crypt only to the
-   organizations it names and their groups' members, through the
-   authenticated route the priced classes already use, so that outsiders
-   cannot walk a vault's chain at the hosts. What the tokens carry stays on
-   the chain.
-2. **The organization's key in a wallet of its own.** Signing and wrapping
+1. **The organization's key in a wallet of its own.** Signing and wrapping
    through a BRC-100 wallet, so the key can live in a hardware module or a
    remote signer rather than a file in the home.
-3. **Large secrets through bstore**, in place of a local directory and a
+2. **Large secrets through bstore**, in place of a local directory and a
    `uhrp://` address.
 
 ## Later, and areas of exploration

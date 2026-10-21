@@ -72,6 +72,9 @@ type Host struct {
 	Down bool
 	// Priced refuses the priceable classes on /lookup.
 	Priced bool
+	// Private are the crypts whose questions /lookup refuses: they are
+	// asked over BRC-104 at a route (NewPrivate).
+	Private map[string]bool
 	// Drop, when set, is asked about each submission; true discards it
 	// unseen, as a plane that lost the object would.
 	Drop func(tx *transaction.Transaction) bool
@@ -118,6 +121,12 @@ type sweepRow struct {
 	crypt string
 	beef  []byte
 	spent []string
+}
+
+func (h *Host) isPrivate(crypt string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.Private[crypt]
 }
 
 // NewHost is a host whose engine checks proofs against chain.
@@ -385,7 +394,12 @@ func (h *Host) lookup(w http.ResponseWriter, r *http.Request) {
 		}
 		h.mu.Lock()
 		priced := h.Priced
+		private := h.Private[qq.Members["crypt"]]
 		h.mu.Unlock()
+		if private {
+			writeError(w, http.StatusBadRequest, "ls_bsecret: ask over BRC-104: crypt "+qq.Members["crypt"]+" is private on this host")
+			return
+		}
 		if !qq.Class.Free && priced {
 			writeError(w, http.StatusBadRequest, qq.Class.Name+" is priced; ask it at the host's terms route")
 			return

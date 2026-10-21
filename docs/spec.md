@@ -1092,7 +1092,7 @@ the transaction's current proof from a chain source by its txid (section
 
 A price attaches to a question class, never to part of an answer. The twelve
 free classes are answered at no price, without authentication, on every
-conforming host. No priced class is a superset of a free class: the priceable
+conforming host, about every crypt it does not make private (section 10.4). No priced class is a superset of a free class: the priceable
 classes carry `history` or `audit`, which no free class carries, and lack
 `org`, so no spelling turns a free question into a priced one; and an unknown
 member is refused, never ignored. Everything a reader needs to read a secret,
@@ -1121,6 +1121,34 @@ remote address, checked before any signature is made, and answers 429 with
 `Retry-After` over either; it caps the sessions it keeps and forgets idle
 ones. [limits.md](limits.md) gives the defaults. A 402 costs a host nothing
 it keeps.
+
+### 10.4 Private crypts
+
+A host MAY make a crypt it carries **private**: it names, for that crypt,
+the organizations it serves. Then:
+
+1. it answers no question that names the crypt, of any class, except over
+   BRC-104 on the route that serves its priced classes (section 10.3), to
+   an asker whose identity key is one of those organizations, or a current
+   member of a group of one of them;
+2. it refuses every such question on its other lookup routes, and over
+   BRC-104 to any other key, with an error, before any price is asked, so
+   that a refusal costs the asker nothing;
+3. it answers a key it serves exactly as it answers on its open route:
+   nothing in an answer, a record or the classes changes.
+
+Who is a member is borg's: a host takes it from the `member-of` class of
+`ls_borg` (borg's spec section 10.2) for the halls the organization's vaults
+in the crypt name, asked of hosts its operator names, and MAY keep an
+answer for a time it states. A reader asks a private crypt's hosts every
+question over BRC-104 as its own identity (configuration key
+`lookup_auth`); a writer's confirmations at the hosts are such questions,
+asked as the organization.
+
+A private crypt hides nothing the chain carries. Its tokens are mined, and
+their fields (section 3) are readable from the chain by anyone; submissions
+to its topic are not gated. What it closes is the walk of a vault's chain,
+carriers and sweeps at the hosts by anyone else.
 
 ## 11. The host
 

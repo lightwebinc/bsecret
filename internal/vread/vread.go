@@ -60,6 +60,10 @@ type Client struct {
 	// Source, when set, is a chain source that indexes spends: a sweep is
 	// also looked for there (Swept), by its proof.
 	Source ChainSource
+	// Auth, when set, asks every question over BRC-104 as the reader's own
+	// identity, as a private crypt's hosts require (spec section 10.4): it
+	// posts body to url and returns the answer's status and body.
+	Auth func(ctx context.Context, url string, body []byte) (status int, answer []byte, err error)
 }
 
 // ChainSource is a node's view of what spends an output, with the
@@ -91,6 +95,9 @@ func (c *Client) Ask(ctx context.Context, host string, q Query) ([]lookup.Output
 	if _, err := secrec.ParseQuery(raw); err != nil {
 		return nil, err
 	}
+	if c.Auth != nil {
+		return c.askAuth(ctx, host, q)
+	}
 	hs := &hostset.Client{Timeout: c.Timeout, HTTP: c.HTTP, MaxBody: limits.MaxAnswer}
 	res, err := lookup.Query(ctx, hs, host, lookup.Question{Service: secrec.LookupService, Query: q})
 	if err != nil {
@@ -109,12 +116,60 @@ func (c *Client) Ask(ctx context.Context, host string, q Query) ([]lookup.Output
 // Ping asks a host a question no class answers, which a live ls_bsecret
 // refuses with an error: the host is up and runs the service.
 func (c *Client) Ping(ctx context.Context, host string) error {
+	if c.Auth != nil {
+		_, err := c.askAuth(ctx, host, Query{})
+		if errors.Is(err, ErrHost) {
+			return nil
+		}
+		if err == nil {
+			return errors.New("the host answered a question no class has")
+		}
+		return err
+	}
 	hs := &hostset.Client{Timeout: c.Timeout, HTTP: c.HTTP, MaxBody: limits.MaxAnswer}
 	_, err := lookup.Query(ctx, hs, host, lookup.Question{Service: secrec.LookupService, Query: Query{}})
 	if err != nil && strings.Contains(err.Error(), "answered status 4") {
 		return nil
 	}
 	return err
+}
+
+// askAuth asks one question over Auth, at the host's /lookup.
+func (c *Client) askAuth(ctx context.Context, host string, q Query) ([]lookup.Output, error) {
+	body, _ := json.Marshal(lookup.Question{Service: secrec.LookupService, Query: q})
+	if c.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.Timeout)
+		defer cancel()
+	}
+	status, ans, err := c.Auth(ctx, strings.TrimRight(host, "/")+"/lookup", body)
+	if err != nil {
+		return nil, fmt.Errorf("%s over BRC-104: %w", host, err)
+	}
+	if len(ans) > limits.MaxAnswer {
+		return nil, fmt.Errorf("%s answered over %d bytes; it is not read", host, limits.MaxAnswer)
+	}
+	if status >= 400 && status < 500 {
+		return nil, fmt.Errorf("%w: %s answered status %d over BRC-104: %s", ErrHost, host, status, firstLine(string(ans)))
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("%s answered status %d over BRC-104", host, status)
+	}
+	var a lookup.Answer
+	if err := json.Unmarshal(ans, &a); err != nil || a.Type != lookup.TypeOutputList {
+		return nil, fmt.Errorf("%s over BRC-104: the answer is not an output-list", host)
+	}
+	return a.Outputs, nil
+}
+
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i]
+	}
+	if len(s) > 300 {
+		s = s[:300]
+	}
+	return s
 }
 
 // SubjectID is the txid of a BEEF's subject.

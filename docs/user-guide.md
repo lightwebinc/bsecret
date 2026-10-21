@@ -73,7 +73,7 @@ a copy. [spec.md](spec.md) section 18 has the whole list.
 | Who | Sees |
 | --- | --- |
 | Anyone who reads the chain | every vault token, since each is a mined transaction: the organization's key, the crypt, the vault's identifier and display name, its borg hall and group, the epoch it acknowledges, its labels and anchor mode, and for every change the identifiers of the secrets that entered, changed or left, how many it holds, how many are stale, and the block it mined in |
-| The crypt's hosts, and anyone who can ask them or follows the crypt's topic | all of that, and each version's record: its secret's identifier, its label, the padded length of its ciphertext, and when it was published |
+| The crypt's hosts, and anyone who can ask them or follows the crypt's topic (for a private crypt, only its organizations and their groups' members can ask) | all of that, and each version's record: its secret's identifier, its label, the padded length of its ciphertext, and when it was published |
 | The members of an epoch, and the owner | the name, value, media type and claims (`-not-after`, `-rotate-every`) of every version keyed under that epoch |
 | Nobody else | a name, a value or a content key |
 
@@ -426,15 +426,18 @@ can be filled only while the node still serves its chain tree; otherwise
 | Cost that grows with hosts | none | every object uploaded once per host |
 | Priced questions | not on the plane: the terms route is HTTP | the same |
 
-**Keeping a crypt's hosts to yourself.** A host answers every lookup it
-receives: the free questions need no key, which is what lets any member
-or auditor verify without asking anyone's leave. To keep outsiders from
-asking, run the crypt's hosts where only your members reach them (your own
-network, a VPN, or an access-controlled proxy in front of each host),
-publish to them with `mode = unicast`, and give an auditor you invite the
-same access. On a shared plane, a crypt's topic is delivered to every host
-subscribed to it. Either way the vault's tokens are mined, and what they
-carry (section 2) is readable from the chain by anyone.
+**Keeping a crypt's hosts to yourself.** By default a host answers every
+lookup it receives: the free questions need no key, which is what lets any
+member or auditor verify without asking anyone's leave. A host can make a
+crypt **private** instead (`BSECRET_PRIVATE`, [host.md](host.md#keeping-a-crypt-private)):
+it then answers questions about it only over BRC-104, to your organization
+and the members of its groups. Readers and the owner set
+`lookup_auth = on`, and every question is signed with the home's own key;
+an auditor you invite is given a key of a group, or the host names the
+auditor's organization too. Publish to such hosts with `mode = unicast`:
+on a shared plane, a crypt's topic is delivered to every host subscribed to
+it. Either way the vault's tokens are mined, and what they carry (section
+2) is readable from the chain by anyone.
 
 Either way a reader asks every host it names and compares the answers.
 Tokens and sweeps always need every host: if one is down, the command

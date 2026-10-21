@@ -441,6 +441,12 @@ reader, and the vault is held to it: its owner is the group's
 organization, and every epoch and epoch id a token or a record names is
 one the group's chain began.
 
+With `lookup_auth = on` every question to the crypt's hosts is asked over
+BRC-104 as this home's identity, which a private crypt's hosts require
+(spec section 10.4); a host that does not serve the crypt to this key
+answers an error, which reads as a host that could not be asked (exit 3).
+The hall's hosts are asked as before.
+
 A home keeps the chain of each vault it verified (`chains/` in the home:
 mined tokens with their proofs, nothing secret), so the next read starts
 from the token it remembers, held again to `header_url`, and asks the

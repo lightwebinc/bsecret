@@ -42,7 +42,9 @@ does anything else.
 - **Pseudonymous, not hidden.** Values, names and claims are inside the
   ciphertext. The organization's key, the vault's and secrets' identifiers,
   the display name, labels, sizes and timing are public: on chain, and at
-  the hosts ([who sees what](docs/user-guide.md#who-sees-what)).
+  the hosts unless a host makes the crypt private, answering only its
+  organizations and their groups' members
+  ([who sees what](docs/user-guide.md#who-sees-what)).
 - **Honest about what removal does.** A removed member keeps everything it
   could read. Removal protects what is written after the vault re-keys.
 

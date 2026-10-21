@@ -94,6 +94,10 @@ type Config struct {
 	// unicast they are every host a publisher submits to; in mode plane
 	// mined objects also go to each of them directly.
 	Hosts []string
+	// LookupAuth asks every ls_bsecret question over BRC-104 as this home's
+	// identity, at each host's base URL: what a private crypt's hosts
+	// require (spec section 10.4).
+	LookupAuth bool
 	// MaxFetch is the most ciphertext a reader fetches by hash, in bytes.
 	MaxFetch int
 	// Mode is how a publisher's objects reach the hosts: "plane" or
@@ -204,7 +208,7 @@ func Defaults() Config {
 // setting at its default with no sign that the file was ever read.
 var Keys = []string{"arcade_key", "asset", "chain", "chain_tree_count", "content", "crypt", "delay", "facade", "fee_dust",
 	"fee_floor", "fee_max_rate", "fee_max_tx", "fee_min_rate", "fee_policy_urls", "fee_rate", "fee_source", "freshness",
-	"fund_unmined", "hall", "hall_hosts", "header_token", "header_url", "home", "hosts", "max_fetch", "mode", "network",
+	"fund_unmined", "hall", "hall_hosts", "header_token", "header_url", "home", "hosts", "lookup_auth", "max_fetch", "mode", "network",
 	"object_bound", "org", "originator", "paid_host", "quorum", "rpc", "rpc_pass", "rpc_user", "settle", "timeout",
 	"tree_count", "vault", "woc_key", "woc_rate"}
 
@@ -422,6 +426,11 @@ func (c Config) Apply(vals map[string]string) (Config, error) {
 			if len(c.Hosts) > limits.MaxHosts {
 				return c, fmt.Errorf("config: hosts names %d hosts, over the limit of %d: a reader asks every host, and a unicast publisher uploads every object to each (docs/limits.md)", len(c.Hosts), limits.MaxHosts)
 			}
+		case "lookup_auth":
+			if v != "on" && v != "off" {
+				return c, fmt.Errorf("config: lookup_auth must be on or off, got %q", v)
+			}
+			c.LookupAuth = v == "on"
 		case "max_fetch":
 			c.MaxFetch, err = positiveInt(k, v, 1, limits.MaxFetch, "the record bound on a ciphertext")
 		case "mode":

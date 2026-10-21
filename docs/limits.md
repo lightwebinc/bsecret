@@ -117,6 +117,14 @@ this version chooses) or **the contract's** (a record bound).
 | `serve`'s walks on request (`POST /refresh`) | at most one in 5 s | fixed | A caller cannot make the daemon ask the hosts and the spend source without bound | Same |
 | What `fill` copies | every token, carrier of the set and sweep a host lacks and another answered | the reading caps | Each copy is one submit and one lookup at the host that lacks it. A first token also needs its chain tree: from the owner's home when `fill` runs there, else from the node; see the known limits | Off the plane, or a host a publisher missed |
 
+### Private crypts
+
+| Limit | Default | Hard cap | Why | Plane and unicast |
+| --- | --- | --- | --- | --- |
+| A membership answer kept (`BSECRET_MEMBER_TTL`) | 60 s | at least 1 s | Each asker not one of the organizations costs one `member-of` question per hall and borg host; a removal reaches the gate within this long | Same |
+| Askers whose membership is kept | 10000 | fixed | The oldest is forgotten first, and asked about again when it returns | Same |
+| A borg host's answer | 5 s, 16 MiB | fixed | A borg host that does not answer in time leaves the asker refused, not served | Same |
+
 ### Coins
 
 | Limit | Default | Hard cap | Why | Plane and unicast |
@@ -234,14 +242,16 @@ not do, stated so that nobody finds it by accident.
    [spec.md](spec.md) section 18 for this and for everything else the
    contract does not do.
 
-8. **A host answers anyone who reaches it, and the chain answers
-   everyone.** The free lookup classes need no key, so any client that
-   reaches a host can walk a vault's chain and fetch its carriers; a host
-   has no setting that limits its answers to chosen organizations or to a
-   group's members. An operator who wants that runs the crypt's hosts
-   behind its own network controls ([user-guide.md](user-guide.md) section
-   12). A vault's tokens are mined, so what they carry
-   ([spec.md](spec.md) section 3) is readable from the chain with no host.
+8. **A host answers anyone who reaches it unless the crypt is private,
+   and the chain answers everyone.** The free lookup classes need no key,
+   so any client that reaches a host can walk a vault's chain and fetch its
+   carriers, unless the host makes the crypt private (`BSECRET_PRIVATE`,
+   spec section 10.4): then it answers only the crypt's organizations and
+   their groups' members, over BRC-104. Membership is the word of the borg
+   hosts the operator names, kept for `BSECRET_MEMBER_TTL`, so a removed
+   member can still ask for that long. A vault's tokens are mined, so what
+   they carry ([spec.md](spec.md) section 3) is readable from the chain
+   with no host.
 9. **Submissions are bounded by the operator.** Any key can publish
    carriers for a vault that does not exist, kept for
    `BSECRET_UNHELD_HOURS`, and funding does not bound what a key stores,

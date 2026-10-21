@@ -62,6 +62,7 @@ services and no defaults.
 | `header_url` | `woc:<network>` on `main` and `test`; none on `regtest` | the header source every proof is checked against ([header sources](#header-sources)): `woc:main`, `woc:test`, `bhs:URL`, `arcade:URL`, `chaintracks:URL`, or an overlay bridge's base URL |
 | `home` | `~/.bsecret` | the identity's home |
 | `hosts` | none | the crypt's overlay hosts, comma separated, at most 16: every host a reader asks and compares; in mode `unicast` every host a publisher submits to; in mode `plane` the hosts every mined object is also sent to directly |
+| `lookup_auth` | `off` | `on` asks every question of the crypt's hosts over BRC-104 as this home's identity, at each host's base URL: what a private crypt's hosts require ([host.md](host.md#keeping-a-crypt-private)). Needs a home; a question is never paid for this way |
 | `max_fetch` | `16777216` | the most ciphertext a reader fetches by hash, in bytes; at most 134217728 |
 | `mode` | `plane` | `plane` or `unicast`: how a publisher's objects reach the hosts (spec section 13) |
 | `network` | `main` | `main`, `test` or `regtest`: the fund address prefix and the header source's proof-of-work floor |

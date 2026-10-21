@@ -76,6 +76,9 @@ it again. A crypt is joined by replay (below).
 | `BSECRET_HANDSHAKE_ADDR_BURST` | 4 | the most handshakes one remote address is answered at once |
 | `BSECRET_RESPONSES_PER_SEC` | 5 | signed responses a second one BRC-104 session is given; decimals allowed |
 | `BSECRET_RESPONSE_BURST` | 20 | the most signed responses one session is given at once |
+| `BSECRET_PRIVATE` | none | the private crypts and the organizations each is served to: `<crypt>=<org>[,<org>...]`, entries separated by `;`, each crypt one `BSECRET_CRYPTS` carries and each organization an identity key ([below](#keeping-a-crypt-private)) |
+| `BSECRET_HALL_URL` | none | the borg hosts asked who is a member of an organization's groups, a comma list of base URLs; required with `BSECRET_PRIVATE` |
+| `BSECRET_MEMBER_TTL` | 60 | seconds a membership answer is kept; at least 1 |
 | `BSECRET_ARCADE_URL` | none | arcade, which the host broadcasts each payment through before it answers (`POST /tx`, `GET /tx/<txid>`) |
 | `BSECRET_ASSET_URL` | none | the node's asset service: the spend view of a payment's inputs and the proof of a held or watched payment. Without both URLs every payment is held until it mines |
 | `BSECRET_ACCEPT_THRESHOLD_SATS` | 25000000 | the largest payment answered on the network's acceptance; above it a payment is held until it mines |
@@ -84,8 +87,9 @@ it again. A crypt is joined by replay (below).
 | `BSECRET_ACCEPT_WINDOW` | `1h` | how long a fast payment counts against the limits unless it mines first (`ms`, `s`, `m`, `h`) |
 | `BSECRET_ACCEPT_WATCH` | `0s` | how long the host keeps watching for a conflict after arcade's acceptance before it answers |
 
-A price needs `BSECRET_LISTEN` and `BSECRET_PAYEE_KEY`. Any mistake stops
-the host before its port opens.
+A price needs `BSECRET_LISTEN` and `BSECRET_PAYEE_KEY`, and so does a
+private crypt, with `BSECRET_HALL_URL`. Any mistake stops the host before
+its port opens.
 
 ### The header source
 
@@ -315,22 +319,65 @@ dropped carriers and sweeps (`evidence`, `retention`, `table`);
 
 ## Keeping a crypt private
 
-A host answers every lookup it receives, and the module has no list of the
-organizations or members it serves. An operator who carries a crypt for
-one organization keeps outsiders out around the host:
+`BSECRET_PRIVATE` names a crypt's organizations (spec section 10.4). From
+then on the host answers no question about that crypt on the overlay
+host's own `/lookup` (an error names the reason), and answers every class
+of it on the terms route (`BSECRET_LISTEN`) over BRC-104 only, to an asker
+whose identity key is one of the organizations or a current member of one
+of their groups. A refusal comes before any price, so a stranger pays for
+nothing. Other crypts the host carries are answered as before.
 
-- list only that crypt in `BSECRET_CRYPTS`;
-- let only the organization's members and invited auditors reach the
-  host's lookup and submit routes, at the network or in an
-  access-controlled proxy in front of it;
-- set a submission rate there too: the module sets none of its own, and
-  carriers of a vault that does not exist are kept for
-  `BSECRET_UNHELD_HOURS`;
+```text
+BSECRET_CRYPTS=example_abcdefghij
+BSECRET_PRIVATE=example_abcdefghij=02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
+BSECRET_HALL_URL=http://127.0.0.1:8080
+BSECRET_LISTEN=0.0.0.0:8443
+BSECRET_PAYEE_KEY=<64 hex characters: the route's BRC-104 identity>
+```
+
+Membership is borg's. For an asker that is not one of the organizations,
+the module asks each `BSECRET_HALL_URL` borg's `member-of` question for
+each hall the organization's vaults in the crypt name, as the host's index
+holds them; any host that answers a group is enough. The answer is kept for
+`BSECRET_MEMBER_TTL` seconds, so a member removed from every group is
+refused within that long. A borg host that does not answer leaves the asker
+refused, with a reason that says so, until one does. The borg host's word
+is taken as it answers, so name hosts you run: this host itself, when it
+loads borg's module and carries the hall, at its own base URL. An
+organization with no vault in the crypt yet is served, and its members are
+not, until the host holds a vault of it.
+
+Readers set `lookup_auth = on` and name the crypt's hosts at a base URL
+whose `/lookup` and `/.well-known/auth` reach the terms route. Put the
+route and the overlay host behind one origin with a proxy in front of
+both, which sends those two paths to `BSECRET_LISTEN` and the rest, the
+owner's `/submit` among them, to the overlay host:
+
+```text
+location = /lookup             { proxy_pass http://127.0.0.1:8443; }
+location = /.well-known/auth   { proxy_pass http://127.0.0.1:8443; }
+location /                     { proxy_pass http://127.0.0.1:8080; }
+```
+
+That way the open lookup is not reachable from outside at all. The rest
+is still the operator's:
+
+- set a submission rate at the proxy: the module sets none of its own,
+  submissions to a private crypt's topic are not gated, and carriers of a
+  vault that does not exist are kept for `BSECRET_UNHELD_HOURS`;
 - receive by unicast, not from a shared plane topic, whose objects reach
-  every host subscribed to it.
+  every host subscribed to it;
+- give an auditor you invite a key of one of the organizations' groups, or
+  name the auditor's organization in `BSECRET_PRIVATE`.
 
 None of this hides the vault's tokens, which are mined and readable from
 the chain by anyone ([limits.md](limits.md), known limit 8).
+
+`bsecret_private_total{result}` counts questions about a private crypt:
+`served`, `unauthenticated` (asked off the route, or without BRC-104),
+`refused` (a key the crypt is not served to) and `unknown` (no borg host
+could say). The gauges are `bsecret_private_crypts` and
+`bsecret_private_members_known`.
 
 ## What a host cannot tell
 

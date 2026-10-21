@@ -51,6 +51,17 @@
  *                            through, and the node's asset service (spend
  *                            view, proofs); without both every payment is
  *                            held until mined (accept.ts)
+ *   BSECRET_PRIVATE          the private crypts and the organizations each is
+ *                            served to: <crypt>=<org>[,<org>...];... Every
+ *                            question about one is answered only on the terms
+ *                            route over BRC-104, to those organizations and
+ *                            the members of their groups (private.ts); needs
+ *                            BSECRET_LISTEN, BSECRET_PAYEE_KEY (the route's
+ *                            identity) and BSECRET_HALL_URL
+ *   BSECRET_HALL_URL         the borg hosts asked who is a member, a comma
+ *                            list of base URLs
+ *   BSECRET_MEMBER_TTL       how long a membership answer is kept, seconds;
+ *                            default 60
  *   BSECRET_ACCEPT_THRESHOLD_SATS, BSECRET_ACCEPT_PAYER_LIMIT,
  *   BSECRET_ACCEPT_TOTAL_LIMIT, BSECRET_ACCEPT_WINDOW, BSECRET_ACCEPT_WATCH
  *                            the acceptance rule; default 25000000, one
@@ -84,6 +95,7 @@ import { HeaderTracker, isNativeSource } from '@lightwebinc/bcommon/host'
 import { FileJournal, type Journal } from './journal.js'
 import { FloorDays, FloorUnheldHours, MinSpendTable, SecretLookupService } from './ls_bsecret.js'
 import { Ledger, bsecretRoute, parsePrices } from './paid.js'
+import { DefaultMemberTTL, Members, MinMemberTTL, listenGated, parseHallURLs, parsePrivate } from './private.js'
 import { LookupService, TopicPrefix, checkCrypt, topic } from './secrec.js'
 import { AdmitKinds, Reasons, SecretTopicManager } from './tm_bsecret.js'
 
@@ -119,6 +131,12 @@ export interface Config {
   responses: ResponseBudgetConfig
   /** Payment acceptance; bcommon's DefaultPolicy with no arcade or node (every payment held) when unset. */
   accept?: AcceptConfig
+  /** The private crypts and the organizations each is served to (private.ts); none when unset. */
+  private?: Map<string, Set<string>>
+  /** The borg hosts asked who is a member of an organization's groups. */
+  hallURLs?: string[]
+  /** How long a membership answer is kept, seconds. */
+  memberTTL?: number
 }
 
 /** Parses BSECRET_CRYPTS. Throws on anything it cannot take exactly. */
@@ -209,6 +227,15 @@ export function parseConfig(env: NodeJS.ProcessEnv): Config {
     if (!/^[0-9a-f]{64}$/.test(key)) throw new Error('BSECRET_PAYEE_KEY is not 64 lowercase hex characters')
     c.payeeKey = PrivateKey.fromHex(key)
   }
+  c.private = parsePrivate(env['BSECRET_PRIVATE'], crypts)
+  c.hallURLs = parseHallURLs(env['BSECRET_HALL_URL'])
+  c.memberTTL = integer('BSECRET_MEMBER_TTL', env['BSECRET_MEMBER_TTL'], DefaultMemberTTL, MinMemberTTL)
+  if (c.private.size > 0) {
+    if (c.listen === undefined || c.payeeKey === undefined) {
+      throw new Error("BSECRET_PRIVATE makes crypts private: BSECRET_LISTEN (the terms route, where they are asked) and BSECRET_PAYEE_KEY (the route's BRC-104 identity) are required")
+    }
+    if (c.hallURLs.length === 0) throw new Error("BSECRET_PRIVATE serves the members of the named organizations' groups: BSECRET_HALL_URL names the borg hosts asked who they are")
+  }
   const charged = [...c.prices.values()].some((p) => p > 0)
   if (charged && (c.listen === undefined || c.payeeKey === undefined)) {
     throw new Error('BSECRET_PRICES prices a class: BSECRET_LISTEN and BSECRET_PAYEE_KEY are required')
@@ -220,6 +247,8 @@ export function parseConfig(env: NodeJS.ProcessEnv): Config {
 export interface Mounted {
   module: Module
   ls: SecretLookupService
+  /** Who the private crypts are served to, when there are any. */
+  members?: Members
   /** The terms route, when configured. */
   front?: LookupFront
   /** Starts the terms route (when configured) and retention; resolves when the route listens. */
@@ -248,7 +277,8 @@ export function secretModule(host: ModuleHost, c: Config, overlayTopics?: readon
   host.metrics.preset('bsecret_equivocations_total')
   const priced = new Set([...c.prices].filter(([, p]) => p > 0).map(([name]) => name))
   const tracker = headers ?? new HeaderTracker(c.headersURL)
-  const ls = new SecretLookupService({
+  let members: Members | undefined
+  const ls: SecretLookupService = new SecretLookupService({
     crypts: new Set(c.crypts),
     host,
     journal: journal ?? new FileJournal(c.stateDir),
@@ -258,7 +288,13 @@ export function secretModule(host: ModuleHost, c: Config, overlayTopics?: readon
     spendTable: c.spendTable,
     headers: tracker,
     now,
+    access: (crypt) => members?.check(crypt),
   })
+  if ((c.private?.size ?? 0) > 0) {
+    members = new Members({ crypts: c.private!, hallURLs: c.hallURLs ?? [], halls: (crypt, org) => ls.hallsOf(crypt, org), host, ttlSeconds: c.memberTTL })
+    host.metrics.gauge('bsecret_private_crypts', () => c.private!.size)
+    host.metrics.gauge('bsecret_private_members_known', () => members!.size)
+  }
   host.metrics.gauge('bsecret_crypts', () => c.crypts.length)
   host.metrics.gauge('bsecret_vaults', () => ls.vaultCount)
   host.metrics.gauge('bsecret_tokens', () => ls.tokenCount)
@@ -313,7 +349,7 @@ export function secretModule(host: ModuleHost, c: Config, overlayTopics?: readon
     }, TickEvery * 1000)
     timer.unref()
     if (front === undefined || c.listen === undefined) return undefined
-    const server = await front.listen(c.listen.port, c.listen.host)
+    const server = members === undefined ? await front.listen(c.listen.port, c.listen.host) : await listenGated(front, members, c.listen.port, c.listen.host)
     server.unref()
     return server
   }
@@ -327,10 +363,11 @@ export function secretModule(host: ModuleHost, c: Config, overlayTopics?: readon
     sessions: c.listen === undefined ? 'none' : `${c.sessions.max}, idle ${c.sessions.ttlSeconds}s`,
     handshakes: c.listen === undefined ? 'none' : `${c.handshakes.perSec}/s burst ${c.handshakes.burst}, per address ${c.handshakes.perAddressPerSec}/s burst ${c.handshakes.addressBurst}`,
     responses: c.listen === undefined ? 'none' : `${c.responses.perSec}/s burst ${c.responses.burst} a session`,
+    private: members === undefined ? 'none' : [...c.private!.keys()].join(','),
     payments: gate === undefined ? 'none' : gate.networked ? `fast to ${accept.policy.thresholdSats} sat, payer ${accept.policy.payerLimit}, total ${accept.policy.totalLimit}` : 'held until mined (no arcade or asset URL)',
     build,
   })
-  return { module: { topics, lookups: { [LookupService]: ls } }, ls, front, start }
+  return { module: { topics, lookups: { [LookupService]: ls } }, ls, members, front, start }
 }
 
 /**

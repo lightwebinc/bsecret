@@ -18,10 +18,12 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
+	clients "github.com/bsv-blockchain/go-sdk/auth/clients/authhttp"
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	base58 "github.com/bsv-blockchain/go-sdk/compat/base58"
 	ec "github.com/bsv-blockchain/go-sdk/primitives/ec"
 	"github.com/bsv-blockchain/go-sdk/transaction"
+	"github.com/bsv-blockchain/go-sdk/wallet"
 
 	"github.com/lightwebinc/bcommon/bwallet"
 	"github.com/lightwebinc/bcommon/feepolicy"
@@ -299,7 +301,50 @@ func (g *global) reader() (*vread.Client, error) {
 	if sp := g.spends(); sp != nil {
 		rd.Source = sp
 	}
+	if g.cfg.LookupAuth {
+		if rd.Auth, err = g.lookupAuth(); err != nil {
+			return nil, err
+		}
+	}
 	return rd, nil
+}
+
+// lookupAuth is how a reader asks a private crypt's hosts (config key
+// lookup_auth): every question over BRC-104 as this home's identity, with
+// the SDK's AuthFetch. A question is never paid for here: a host that
+// answers one 402 is refused.
+func (g *global) lookupAuth() (func(ctx context.Context, url string, body []byte) (int, []byte, error), error) {
+	e, err := g.openWallet()
+	if err != nil {
+		return nil, usage("lookup_auth asks the hosts as this home's identity: %v", err)
+	}
+	af := clients.New(noPay{e.Signer()}, clients.WithoutLogging(), clients.WithHttpClient(&http.Client{Timeout: g.cfg.Timeout, Transport: httpTransport()}))
+	return func(ctx context.Context, url string, body []byte) (int, []byte, error) {
+		resp, err := af.Fetch(ctx, url, &clients.SimplifiedFetchRequestOptions{
+			Method: http.MethodPost, Headers: map[string]string{"content-type": "application/json"}, Body: body})
+		if err != nil {
+			return 0, nil, err
+		}
+		defer resp.Body.Close()
+		b, err := io.ReadAll(io.LimitReader(resp.Body, limits.MaxAnswer+1))
+		return resp.StatusCode, b, err
+	}, nil
+}
+
+// noPay is a wallet that makes no payment: a lookup asked over BRC-104 is
+// free, and a host that prices it is answered with a refusal.
+type noPay struct{ *bwallet.Signer }
+
+func (noPay) CreateAction(context.Context, wallet.CreateActionArgs, string) (*wallet.CreateActionResult, error) {
+	return nil, errors.New("a free question is not paid for")
+}
+
+// httpTransport is the transport of httpClient, or the default one.
+func httpTransport() http.RoundTripper {
+	if httpClient != nil && httpClient.Transport != nil {
+		return httpClient.Transport
+	}
+	return http.DefaultTransport
 }
 
 // groups is borg's reader over the hosts of the group's hall and the same

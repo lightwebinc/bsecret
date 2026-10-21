@@ -330,11 +330,19 @@ work with the command as it is:
   alert.
 - **From a configuration tool.** Anything that runs a command and reads
   its output takes a value the same way.
+- **From a daemon.** `bsecret serve` holds the machine's home, walks the
+  vault on an interval and serves what it verified over HTTP: JSON with
+  each value's standing, and the shape of Vault's KV version 2, which a
+  Vault Agent template, a sidecar or the External Secrets Operator's
+  webhook provider reads with no code of its own
+  ([examples.md](examples.md), section 16). By default it refuses what
+  `get -strict` refuses, with a 409 that says why.
 
 One command uses one home at a time, and each read walks what is new on
-the vault's chain, so a machine reads at start or on a timer, not on every
-request. Its identity file is a credential: whoever holds it opens every
-version keyed under an epoch that key is a member of.
+the vault's chain, so a machine reads at start, on a timer or through the
+daemon, not with a command on every request. Its identity file is a
+credential: whoever holds it opens every version keyed under an epoch that
+key is a member of.
 
 **Rotating faster than a block.** A token rotated every few minutes cannot
 wait for a block. Create the

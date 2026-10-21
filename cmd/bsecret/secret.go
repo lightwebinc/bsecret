@@ -449,33 +449,18 @@ func cmdGet(ctx context.Context, g *global, args []string) error {
 	if err != nil {
 		return err
 	}
-	car, anchored, later, err := g.pick(ctx, o, id, name, *version)
+	rd, later, err := g.readOne(ctx, o, keys, id, name, *version)
 	if err != nil {
 		return err
 	}
-	rd, err := t.rd.Open(ctx, o.chain, o.group, car, anchored, keys, g.content())
-	if err != nil {
-		return failure(err)
-	}
+	car := rd.Car
 	head := o.chain.Head().Token.Vault
 	fmt.Fprintf(g.stderr, "vault   %s %s seq %d: %s\n", t.vaultHex(), field(head.Name), head.Seq, o.stand)
-	word, fresh, lerr := g.latest(ctx, o)
+	word, fresh, lerr := g.freshness(ctx, o)
 	if lerr != nil {
 		return lerr
 	}
 	fmt.Fprintf(g.stderr, "latest  %s\n", word)
-	// A version is current only while the group is where the hall's hosts
-	// say it is: a removal those hosts have not answered, or withhold,
-	// leaves the vault looking settled and the value looking current. The
-	// group's latest token is held to the spend source as the vault's is.
-	if fresh {
-		if sp := g.spends(); sp != nil {
-			if gerr := vread.GroupFresh(ctx, sp, sp.TxRaw, o.group, time.Now()); gerr != nil {
-				fresh = false
-				g.say("group   the latest token the hall's hosts answer for the group is not known to be its latest (%s): the group may have removed a member since, so the value is not reported current", firstLine(gerr.Error()))
-			}
-		}
-	}
 	rec := car.Carrier.Secret
 	state := "anchored"
 	switch {
@@ -521,6 +506,41 @@ func cmdGet(ctx context.Context, g *global, args []string) error {
 		return err
 	}
 	return o.problem
+}
+
+// readOne reads one secret of an opened vault: the carrier pick finds,
+// opened with every check in the signed order. later is set when a later
+// version exists that does not link to the listed one.
+func (g *global) readOne(ctx context.Context, o *opened, keys vread.Keys, id [32]byte, name string, version uint64) (rd *vread.Reading, later bool, err error) {
+	car, anchored, later, err := g.pick(ctx, o, id, name, version)
+	if err != nil {
+		return nil, false, err
+	}
+	rd, err = o.t.rd.Open(ctx, o.chain, o.group, car, anchored, keys, g.content())
+	if err != nil {
+		return nil, false, failure(err)
+	}
+	return rd, later, nil
+}
+
+// freshness is the evidence that what an opened vault answers is current:
+// that its head token is its latest (latest), and that the group's latest
+// token is the group's. A version is current only while the group is where
+// the hall's hosts say it is: a removal those hosts have not answered, or
+// withhold, leaves the vault looking settled and the value looking current.
+// The group's latest token is held to the spend source as the vault's is.
+func (g *global) freshness(ctx context.Context, o *opened) (string, bool, error) {
+	word, fresh, err := g.latest(ctx, o)
+	if err != nil || !fresh {
+		return word, fresh, err
+	}
+	if sp := g.spends(); sp != nil {
+		if gerr := vread.GroupFresh(ctx, sp, sp.TxRaw, o.group, time.Now()); gerr != nil {
+			g.say("group   the latest token the hall's hosts answer for the group is not known to be its latest (%s): the group may have removed a member since, so the value is not reported current", firstLine(gerr.Error()))
+			return word, false, nil
+		}
+	}
+	return word, true, nil
 }
 
 // pick finds the carrier to read for a secret: the listed version, or in

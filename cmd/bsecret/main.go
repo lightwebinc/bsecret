@@ -87,6 +87,9 @@ a member, or anyone reading:
   history <name>                a priced question: every version of a secret a
                                 host holds
   terms [URL]                   a host's terms document
+  serve                         a reader that stays running: verified values
+                                over HTTP, as JSON and shaped like Vault's KV
+                                version 2, walked again on an interval
   fill                          replay to each host what another host answered
                                 and it lacks: the chain and the set's carriers
 
@@ -223,6 +226,7 @@ func init() {
 		"put":     cmdPut,
 		"retire":  cmdRetire,
 		"rotate":  cmdRotate,
+		"serve":   cmdServe,
 		"sync":    cmdSync,
 		"terms":   cmdTerms,
 		"vault":   cmdVault,

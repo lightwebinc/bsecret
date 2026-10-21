@@ -263,7 +263,101 @@ $ docker run --rm -v bsecret-home:/home/nonroot/.bsecret \
     ghcr.io/lightwebinc/bsecret doctor
 ```
 
-## 16. Exit codes in scripts
+## 16. A reader that stays running, and Kubernetes
+
+`bsecret serve` holds a member's home, walks the vault on an interval and
+serves the values it verified over HTTP ([usage.md](usage.md#serving)).
+On one machine, beside the process that reads:
+
+```console
+$ bsecret serve                         # 127.0.0.1:8250, walked every minute
+$ curl -s 127.0.0.1:8250/secrets/db/password | jq -r .value
+$ curl -s 127.0.0.1:8250/v1/secret/data/db/password | jq -r .data.data.value
+```
+
+A Vault Agent template reads the second shape unchanged
+(`{{ with secret "secret/data/db/password" }}{{ .Data.data.value }}{{ end }}`,
+with the agent's address set to the daemon's).
+
+In Kubernetes, run it as a Deployment with one replica (one process holds
+one home), its home on a volume, the member's `identity.json` and a token
+from Secrets, and read it with the
+[External Secrets Operator](https://external-secrets.io/)'s webhook
+provider. `bsecret init -from identity.json`, run once in an init
+container, makes the home around the member's key from the Secret.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bsecret
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: bsecret } }
+  template:
+    metadata: { labels: { app: bsecret } }
+    spec:
+      containers:
+        - name: serve
+          image: ghcr.io/lightwebinc/bsecret:<version>
+          args: ["serve", "-listen", "0.0.0.0:8250", "-token-file", "/run/bsecret/token"]
+          envFrom: [{ configMapRef: { name: bsecret } }]   # BSECRET_NETWORK, _CRYPT, _ORG, _VAULT, _HOSTS
+          ports: [{ containerPort: 8250 }]
+          readinessProbe: { httpGet: { path: /healthz, port: 8250 }, periodSeconds: 30 }
+          volumeMounts:
+            - { name: home, mountPath: /home/nonroot/.bsecret }
+            - { name: token, mountPath: /run/bsecret, readOnly: true }
+      volumes:
+        - { name: home, persistentVolumeClaim: { claimName: bsecret-home } }
+        - { name: token, secret: { secretName: bsecret-serve, items: [{ key: token, path: token }] } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bsecret
+spec:
+  selector: { app: bsecret }
+  ports: [{ port: 8250, targetPort: 8250 }]
+---
+apiVersion: external-secrets.io/v1
+kind: SecretStore
+metadata:
+  name: bsecret
+spec:
+  provider:
+    webhook:
+      url: "http://bsecret:8250/secrets/{{ .remoteRef.key }}"
+      headers:
+        Authorization: "Bearer {{ print .auth.token }}"
+      result:
+        jsonPath: "$.value"
+      secrets:
+        - name: auth
+          secretRef: { name: bsecret-serve, key: token }
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: db
+spec:
+  refreshInterval: 5m
+  secretStoreRef: { name: bsecret, kind: SecretStore }
+  target: { name: db }
+  data:
+    - secretKey: password
+      remoteRef: { key: db/password }
+```
+
+The daemon answers 409 for a value its policy refuses (by default an
+exposed value, a vault behind or in debt, or one not known to be latest:
+what `get -strict` refuses), so the operator keeps the last value it
+synced and reports the sync as failed. For a value that is not UTF-8,
+use `$.value_base64` with the ExternalSecret's `decodingStrategy: Base64`.
+Keep the Service reachable only from the operator's namespace, with a
+network policy.
+
+## 17. Exit codes in scripts
 
 | Code | Meaning |
 | --- | --- |

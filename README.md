@@ -98,6 +98,7 @@ coin is [QUICKSTART.md](QUICKSTART.md).
 | Understand the ideas and use it day to day | [docs/user-guide.md](docs/user-guide.md) |
 | Set every key, flag and environment variable | [docs/configuration.md](docs/configuration.md) |
 | Look up a command or an exit code | [docs/usage.md](docs/usage.md) |
+| Serve secrets to a sidecar, Vault Agent or the External Secrets Operator | [docs/usage.md](docs/usage.md#serving), [docs/examples.md](docs/examples.md) |
 | See how the pieces fit | [docs/architecture.md](docs/architecture.md) |
 | Run an overlay host that carries a crypt | [docs/host.md](docs/host.md) |
 | Know the defaults and caps, what was measured, and what things cost | [docs/limits.md](docs/limits.md) |

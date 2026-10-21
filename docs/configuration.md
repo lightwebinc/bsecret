@@ -225,6 +225,12 @@ headers     woc:main tip 970084
 | `get` | `-show` | off | write the value to standard output although it is a terminal |
 | `get` | `-version N` | the latest | read this version, as history |
 | `get` | `-strict` | off | refuse an exposed value, a vault not settled, or a state that may be stale |
+| `serve` | `-listen ADDR` | `127.0.0.1:8250` | host:port to serve on; not loopback only with `-token-file` |
+| `serve` | `-interval DUR` | `1m` | how often each vault's chain is walked; at least `1s` |
+| `serve` | `-refuse LIST` | `exposed,unsettled,stale` | what is not served: `exposed`, `unsettled`, `stale`, `unanchored`, `incomplete`, or `none` |
+| `serve` | `-token-file FILE` | none | the token every request but `/healthz` must carry |
+| `serve` | `-vault V` | `vault` | a vault to serve, by identifier or display name; repeatable |
+| `serve` | `-once` | off | walk once, print the status and exit |
 | `due` | `-within DUR` | `720h` | list values that stop being usable within this long |
 | `audit` | `-free` | off | read the trail through the free class, paying nothing |
 | `audit` | `-at URL` | `paid_host` | the host's terms route |

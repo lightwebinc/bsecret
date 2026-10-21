@@ -29,32 +29,31 @@ block headers with nobody's cooperation.
   default, every proof checked; your own node where you have one.
 - The kill switch, the host module with its priced terms route, and the
   payee.
+- A reader that stays running (`bsecret serve`): one member home held,
+  verified values kept and walked again on an interval, served over HTTP
+  as JSON with each value's standing (settled, behind or in debt; anchored;
+  exposed or current) and in the shape of Vault's KV version 2, with the
+  conditions it refuses as a policy and metrics. A sidecar, a Vault Agent
+  template and the External Secrets Operator's webhook provider read it.
 
 ## Next
 
 Ordered by what unblocks the most.
 
-1. **A reader that stays running.** A daemon that holds one member home,
-   keeps verified values, walks the vault's chain on an interval and serves
-   them locally over HTTP: JSON with each value's standing (settled, in
-   debt, exposed, anchored), and a path shaped like Vault's KV version 2.
-   It is what a sidecar, a Vault Agent template and the External Secrets
-   Operator's webhook provider read, so Kubernetes and most deployment
-   tools take secrets from bsecret without code of their own.
-2. **Private crypts.** A host setting that serves a crypt only to the
+1. **Private crypts.** A host setting that serves a crypt only to the
    organizations it names and their groups' members, through the
    authenticated route the priced classes already use, so that outsiders
    cannot walk a vault's chain at the hosts. What the tokens carry stays on
    the chain.
-3. **Machine enrolment.** `init` already makes a key where a workload runs,
+2. **Machine enrolment.** `init` already makes a key where a workload runs,
    so no private key need travel. Next is the enrolment around it: the
    workload asks to join, the owner approves the request in one step, and
    the workload picks up its membership, instead of a public key copied to
    the owner by hand.
-4. **The organization's key in a wallet of its own.** Signing and wrapping
+3. **The organization's key in a wallet of its own.** Signing and wrapping
    through a BRC-100 wallet, so the key can live in a hardware module or a
    remote signer rather than a file in the home.
-5. **Large secrets through bstore**, in place of a local directory and a
+4. **Large secrets through bstore**, in place of a local directory and a
    `uhrp://` address.
 
 ## Later, and areas of exploration

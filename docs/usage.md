@@ -119,6 +119,7 @@ both the hall and the crypt.
 | `kill -confirm KILL [-yes]` | yes, the owner's | with `-yes` a publisher's | the kill switch: one sweep per secret tree the home holds, published in every crypt the tree funded a version in. Every version it published is retracted. Without `-yes` it lists the sweeps and sends nothing |
 | `get <name>` | yes (the key that reads) | a reader's settings; `content` for a large secret | reads a secret's value, every check in the signed order; the value raw on standard output, only when it is not a terminal or with `-show`. `-version N` reads history; `-strict` refuses an exposed or possibly stale value |
 | `list` | yes (the key that reads) | a reader's settings | the vault's secrets by name, each host's answer compared with the set's root; no value is printed |
+| `serve` | yes (the key that reads), held for the daemon's life | a reader's settings | a reader that stays running: walks each vault on `-interval` and serves the values it verified over HTTP, as JSON with their standing and in Vault's KV version 2 shape; `-refuse` sets what is not served ([Serving](#serving)) |
 | `due` | optional | a reader's settings | what the vault owes: an acknowledgement, re-keyings, and for the owner the rotations it scheduled and the values whose `-not-after` falls within `-within` (720h). Exit 3 when anything is due |
 | `audit` | no; one with coin to pay | a reader's settings; `paid_host`, `chain`, `settle` to pay | verifies the vault's trail from headers and prints the exposure window of every epoch the group began. Paid through the 402 when a paid host is named, at most `-max-sats` a page and `-budget` in all; `-free` walks the free class. `-json` prints the report alone on standard output, and a payment made on standard error |
 | `history <name>` | yes, funded | a reader's settings, `paid_host`, `chain`, `settle` | the priced question: pays the host's 402 and prints every version of a secret the host holds, 16 a page; `-after VERSION` asks for the next page |
@@ -517,6 +518,71 @@ between the first and the last, in blocks, with each secret's own
 re-keying or retirement. A window still open at the end of the trail is
 said to be open. The report ends with the token it ends at: an audit covers
 nothing after it.
+
+## Serving
+
+`bsecret serve` is a reader that stays running. It takes the home's lock
+for its whole life (no other command uses the home meanwhile), and on
+every `-interval` (default `1m`) it walks each vault it serves as `get`
+does, from the chain the home remembers, and reads every secret of the
+vault's set with the checks of `get`, in their order. What it verified is
+kept in its memory, and nowhere else, and served over HTTP on `-listen`
+(default `127.0.0.1:8250`). No value is ever logged.
+
+| Route | Answers |
+| --- | --- |
+| `GET /secrets/<name>` | the first vault's secret as JSON: `value` (when it is UTF-8), `value_base64`, `name`, `vault_id`, `version`, `secret_epoch`, `label`, `type`, `not_after`, `read_at`, and `standing` |
+| `GET /vaults/<vault>/secrets/<name>` | the same for a vault served, by identifier or display name |
+| `GET /v1/<mount>/data/<name>` | the same in the shape of Vault's KV version 2 read: `data.data.value` (and `value_base64`), `data.metadata.version`, and the standing as strings in `data.metadata.custom_metadata`. The mount is `secret` for the first vault, or a vault's identifier or display name |
+| `GET /status` | each vault's last walk: its standing, the names read, the secrets it could not read and why; no value |
+| `GET /healthz` | 200 while every vault's last walk established it within three intervals, else 503; needs no token |
+| `GET /metrics` | Prometheus text (below) |
+| `POST /refresh` | walk now; at most once in 5 seconds (429 otherwise) |
+
+`standing` is `vault` (`settled`, `behind`, `in-debt` or
+`behind-in-debt`), `settled`, `epoch` and `group_epoch`, `stale` (the
+count), `seq` (the token read), `latest` (a spend source says that token is
+the vault's latest and the group's latest token is the group's),
+`anchored`, `exposed`, `current` (latest and not exposed) and `incomplete`
+(a host disagreed, refused or could not be asked during the walk).
+
+`-refuse` names what is not served: `exposed`, `unsettled` (the vault is
+behind or in debt), `stale` (not `latest`, which includes a walk that
+failed), `unanchored` and `incomplete`; `none` serves every value it
+verified. The default, `exposed,unsettled,stale`, is what `get -strict`
+refuses. A refused value is answered 409 with its standing and the
+conditions it met, and no value. A vault that is ahead of its group,
+broken, terminated or rolled back serves nothing (503). A walk that fails
+for another reason (a host or the header source down) leaves the values
+the last walk verified, marked not `latest` and `incomplete`, so the
+default policy refuses them and `-refuse none` serves them. A name the
+vault's set does not hold is 404; one it holds and the walk could not read
+is 503 with the reason (for a key that is not a member of the epoch, the
+`undecryptable` check). The KV shape answers errors as Vault does,
+`{"errors": [...]}`.
+
+`-token-file FILE` makes every route but `/healthz` require the file's
+token (16 bytes at least), as `Authorization: Bearer <token>` or
+`X-Vault-Token: <token>`; a `-listen` address that is not loopback is
+refused without one. `-vault V` (repeatable) names the vaults served, by
+identifier or display name; the default is the configured vault. `-once`
+walks once, prints the status as JSON and exits 0 when every secret was
+read and none is refused, else 3.
+
+Metrics, each labeled by `vault` (its identifier):
+`bsecret_serve_vault_usable`, `bsecret_serve_vault_settled`,
+`bsecret_serve_vault_latest`, `bsecret_serve_vault_seq`,
+`bsecret_serve_secrets`, `bsecret_serve_secrets_unread`,
+`bsecret_serve_secrets_exposed`,
+`bsecret_serve_last_walk_ok_timestamp_seconds` and
+`bsecret_serve_walk_seconds` (gauges); `bsecret_serve_walks_total{result}`
+(`ok`, `incomplete`, `failed`); and `bsecret_serve_requests_total{route,code}`
+and `bsecret_serve_refused_total{condition}`.
+
+A value served keeps the age of the walk that read it: `read_at` says
+when. For a vault rotated faster than blocks (an interval vault), each
+walk takes the newest version that links to the listed one, marked not
+`anchored`; refuse `unanchored` where only a listed version will do.
 
 ## Filling a host
 

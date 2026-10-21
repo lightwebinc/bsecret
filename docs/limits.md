@@ -113,6 +113,8 @@ this version chooses) or **the contract's** (a record bound).
 | Rollback memory of a reader | the latest token of each vault and of each vault's group this home verified | the reader's storage | A reader that keeps it refuses an older state from any host. A reader with no home has none: it relies on `WITHHELD`, on the node, and on naming more than one host | Same |
 | Writer freshness (`freshness`) | 60 s | 600 s | The age of the evidence that the vault's and the group's latest tokens are unspent when a version is published; every token retakes it as it is built | Same |
 | Reader freshness, for a value it acts on | taken at the read | none: a reader that keeps a value keeps its age | The same evidence, for a reader; `get -strict` refuses a value without it | Same |
+| `serve`'s walk (`-interval`) | 1 min | at least 1 s | Each walk asks every host for the vault's new tokens and every secret of its set, and a spend source for the latest; a value served is as old as the walk that read it (`read_at`) | Same |
+| `serve`'s walks on request (`POST /refresh`) | at most one in 5 s | fixed | A caller cannot make the daemon ask the hosts and the spend source without bound | Same |
 | What `fill` copies | every token, carrier of the set and sweep a host lacks and another answered | the reading caps | Each copy is one submit and one lookup at the host that lacks it. A first token also needs its chain tree: from the owner's home when `fill` runs there, else from the node; see the known limits | Off the plane, or a host a publisher missed |
 
 ### Coins

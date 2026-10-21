@@ -77,6 +77,7 @@ services and no defaults.
 | `timeout` | `15s` | bounds each request; `1s` to `5m` |
 | `tree_count` | `32` | outputs of a new secret tree, 1 to 1000 |
 | `vault` | none | the vault a command uses: its identifier, or its display name when that names one vault |
+| `wallet` | `embedded` | where the identity key is held: `embedded` (`identity.json` in the home) or `wire:<URL>`, a BRC-100 wallet reached over the wallet wire at a loopback URL: a hardware module's endpoint, or a remote signer's tunnel ([usage.md](usage.md#the-identity-key-in-a-wallet-of-its-own)) |
 | `woc_key` | none | a WhatsOnChain API key, for a `woc:` chain view |
 | `woc_rate` | `3` | the WhatsOnChain requests a second the chain view paces itself to: 3 is the free tier; raise it to a key's plan |
 
@@ -188,6 +189,7 @@ headers     woc:main tip 970084
 | `-network NET` | `network` | `main`, `test` or `regtest` |
 | `-quorum Q` | `quorum` | `all`, `majority`, `one` or N |
 | `-timeout DUR` | `timeout` | per request |
+| `-wallet SPEC` | `wallet` | where the identity key is held: `embedded` or `wire:<URL>` |
 | `-v` | none | verbose; also accepted after the command |
 | `-version` | none | print the version and exit |
 

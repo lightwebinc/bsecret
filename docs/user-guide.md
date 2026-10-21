@@ -158,7 +158,17 @@ $ bsecret vault create engineering -name ops
 
 `init -borg` copies the identity file and nothing else. The two homes keep
 separate coin, state and locks, and bsecret never writes into the borg
-home. Put the addresses in `~/.bsecret/config`
+home.
+
+The organization's key is the root of everything: it writes every vault
+and opens every self wrap. To keep it out of the bsecret home, hold it in
+a BRC-100 wallet of its own, a hardware module or a remote signer reached
+on this machine, and make the home with `bsecret -wallet
+wire:http://127.0.0.1:<port> init` instead of `init -borg`: every
+signature and decryption is then asked of that wallet
+([usage.md](usage.md#the-identity-key-in-a-wallet-of-its-own) lists each
+call, for its permission policy). borg still reads the key from its own
+home, so keep that home with the wallet. Put the addresses in `~/.bsecret/config`
 ([configuration.md](configuration.md) has examples): the crypt's hosts, the
 hall's hosts when they are others, and on a multicast plane the facade.
 

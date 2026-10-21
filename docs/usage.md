@@ -186,6 +186,46 @@ home verified before.
 
 A member's home needs no coin unless it asks a priced question.
 
+### The identity key in a wallet of its own
+
+With `wallet = wire:<URL>` (or `-wallet`), the home holds no key: every
+signature, derivation and decryption of the identity key is asked of a
+BRC-100 wallet over the wallet wire, the binary substrate both SDKs speak,
+at a loopback URL. That wallet is a hardware module's local endpoint, or a
+remote signer reached through a tunnel; the wire carries no
+authentication, so a URL that is not loopback is refused, and a wallet
+that is not on this machine is tunneled to it, not exposed.
+
+```console
+$ bsecret -wallet wire:http://127.0.0.1:3321 init     # pins the wallet's identity key
+created /home/owner/.bsecret around the identity key of the wallet at http://127.0.0.1:3321
+identity     02c6…9a1e
+fund address 1EUY…zipY (main)
+```
+
+`init` writes `keyholder.json` (the setting and the identity key the
+wallet answered) and an empty pool; every later command asks the wallet
+for its identity key and refuses (exit 1) one that answers another. The
+home's coin pool, state and chains stay in the home, and its fund key is
+derived and signed for inside the wallet. What the wallet is asked, so
+that its permission policy can be set:
+
+| Call | Protocol and key id | Counterparty | For |
+| --- | --- | --- | --- |
+| `getPublicKey`, `createSignature` | `[1, "bsecret"]`, `vault`, `secret`, `chain` | anyone | every vault token, carrier and funding tree output |
+| `getPublicKey`, `createSignature` | `[1, "bsecret"]`, `fund` | self | the fund address, and spending the pool |
+| `encrypt`, `decrypt` | `[2, "bsecret self"]`, a content id | self | the self wrap of every content key, and reading it back |
+| `decrypt` | `[2, "keyed content release"]`, borg's key id | the organization's signer key | opening each epoch's key from borg's wrap to the signer key: the wallet released that wrap, so it opens it from the releaser's side, and no private key leaves it |
+| `createSignature` | `[1, "bsecret"]`, `enroll` | anyone | a member's join request (`enroll request`) |
+
+Two things still need an embedded wallet in this version: a priced
+question and `payee settle`, which pay and take through the home's own
+wallet (ask a priced question from a member's or an auditor's home; a
+payee's key is the host's, and the host holds it as a file anyway). And
+borg reads the organization's key from its own home: a key held only by a
+wallet needs borg to sign through one too, so until it does, keep the borg
+home with the wallet, offline between borg commands.
+
 ## A funding tree a run left
 
 A funding tree's fee coin leaves the pool when the tree is signed, and the

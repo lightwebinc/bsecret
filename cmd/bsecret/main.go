@@ -137,6 +137,10 @@ global flags:
                       published: all (default), majority, one or N; tokens
                       and sweeps always need every host
   -timeout DUR        per request (default 15s)
+  -wallet SPEC        where the identity key is held: embedded (the default,
+                      in the home) or wire:URL, a BRC-100 wallet on this
+                      machine (a hardware module or a remote signer's
+                      tunnel)
   -v                  verbose
   -version            print the version and exit
 
@@ -291,6 +295,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		network   = fs.String("network", "", "")
 		quorum    = fs.String("quorum", "", "")
 		timeout   = fs.String("timeout", "", "")
+		walletF   = fs.String("wallet", "", "")
 		verbose   = fs.Bool("v", false, "")
 		showVer   = fs.Bool("version", false, "")
 	)
@@ -332,7 +337,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	for k, v := range map[string]string{"home": *home, "crypt": *crypt, "org": *org, "vault": *vault, "hosts": *hosts,
 		"hall_hosts": *hallHosts, "header_url": *headerURL, "chain": *chain, "settle": *settle, "fee_rate": *feeRate,
 		"fee_source": *feeSource, "fee_floor": *feeFloor, "fee_max_rate": *feeMax, "fee_max_tx": *feeMaxTx, "mode": *mode,
-		"network": *network, "quorum": *quorum, "timeout": *timeout} {
+		"network": *network, "quorum": *quorum, "timeout": *timeout, "wallet": *walletF} {
 		if v != "" {
 			over[k] = v
 		}

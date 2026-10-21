@@ -258,6 +258,16 @@ not do, stated so that nobody finds it by accident.
    since a sweep returns the value. The module sets no submission rate of
    its own: a host operator sets one in front of the host
    ([host.md](host.md)).
+10. **A key in a wallet of its own stops at two places.** With `wallet =
+    wire:<URL>` a priced question and `payee settle` are refused: they pay
+    and take through an embedded wallet. And borg, which signs the
+    organization's group tokens and wraps, reads the key from its own home
+    ([usage.md](usage.md#the-identity-key-in-a-wallet-of-its-own)).
+11. **A machine's join request is admitted on the owner's word.** Its
+    signature proves only that it was made by the key it names; `enroll
+    approve` admits whoever holds that key, so the channel the request
+    came by, and the fingerprint both sides print, are what tie the key
+    to the machine.
 
 ## Where the numbers come from
 

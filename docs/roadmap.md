@@ -44,15 +44,16 @@ block headers with nobody's cooperation.
   the authenticated route the priced classes use, and readers that ask
   that route as their own identity. What the tokens carry stays on the
   chain.
+- The organization's key in a wallet of its own (`wallet = wire:<URL>`):
+  every signature, derivation and decryption asked of a BRC-100 wallet
+  over the wallet wire, so the key can live in a hardware module or a
+  remote signer rather than a file in the home.
 
 ## Next
 
 Ordered by what unblocks the most.
 
-1. **The organization's key in a wallet of its own.** Signing and wrapping
-   through a BRC-100 wallet, so the key can live in a hardware module or a
-   remote signer rather than a file in the home.
-2. **Large secrets through bstore**, in place of a local directory and a
+1. **Large secrets through bstore**, in place of a local directory and a
    `uhrp://` address.
 
 ## Later, and areas of exploration

@@ -37,6 +37,9 @@ import (
 // the header source: what a priced question and payee settle pay and take
 // through.
 func (g *global) purse(ctx context.Context, h *home, hc chaintracker.ChainTracker, maxPay uint64) (*purse.Purse, error) {
+	if h.e.Embedded == nil {
+		return nil, usage("a priced question and payee settle pay and take through the home's embedded wallet, and this home's key is in a wallet of its own (config key wallet): ask from a member's or an auditor's home")
+	}
 	chain, err := g.chainView()
 	if err != nil {
 		return nil, err
@@ -84,7 +87,7 @@ func (g *global) purse(ctx context.Context, h *home, hc chaintracker.ChainTracke
 		return &producer.Payer{Pool: h.e.Pool, Tip: tip, Keys: map[string]*bwallet.Signer{s.IdentityHex(): s},
 			Kept: kept, Allow: allow, Settler: settler, Chain: chain, Fees: fees, Poll: poll, Note: g.say}
 	}
-	return &purse.Purse{Embedded: h.e, NewPayer: newPayer, Fees: fees, MaxPay: maxPay,
+	return &purse.Purse{Embedded: h.e.Embedded, NewPayer: newPayer, Fees: fees, MaxPay: maxPay,
 		Settler: settler, Chain: chain, Headers: hc, Wait: 10 * time.Minute, Poll: poll}, nil
 }
 

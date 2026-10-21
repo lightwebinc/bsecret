@@ -33,6 +33,7 @@ import (
 	"github.com/lightwebinc/bcommon/payee"
 	"github.com/lightwebinc/bcommon/publish"
 	"github.com/lightwebinc/bcommon/termsafe"
+	"github.com/lightwebinc/bcommon/wirewallet"
 
 	"github.com/lightwebinc/borg/reader"
 
@@ -56,15 +57,104 @@ var sampleHook func() ([32]byte, [secrec.SaltLen]byte, error)
 // poll paces proof waits; tests shorten it.
 var poll = 2 * time.Second
 
-// openWallet opens the home's embedded wallet.
-func (g *global) openWallet() (*bwallet.Embedded, error) {
-	e, err := bwallet.Open(g.cfg.Home, engine.Profile)
-	if err != nil {
-		return nil, fmt.Errorf("open the home %s: %w (run `bsecret init`)", g.cfg.Home, err)
+// homeWallet is a home's identity and coin: the identity key's wallet as a
+// Signer, and the home's pool. The wallet is the home's embedded one, or a
+// BRC-100 wallet of its own (config key wallet) that holds the key, a
+// hardware module or a remote signer reached over the wallet wire.
+type homeWallet struct {
+	signer *bwallet.Signer
+	Pool   *bwallet.Pool
+	// Embedded is the home's embedded wallet; nil when the key is held by
+	// a wallet of its own.
+	Embedded *bwallet.Embedded
+	// Wire is the wallet's URL when it is reached over the wallet wire.
+	Wire string
+}
+
+// Signer is the identity key's wallet.
+func (w *homeWallet) Signer() *bwallet.Signer { return w.signer }
+
+// FundAddress is the home's fund address.
+func (w *homeWallet) FundAddress(mainnet bool) (string, error) { return w.signer.FundAddress(mainnet) }
+
+// keyholderFile is where a home whose key is held by a wallet of its own names
+// that wallet and pins its identity key.
+const keyholderFile = "keyholder.json"
+
+// walletPin is keyholderFile.
+type walletPin struct {
+	Wallet   string `json:"wallet"`
+	Identity string `json:"identity"`
+}
+
+// hasHome reports whether the home exists: an embedded identity, or a
+// wallet of its own named.
+func (g *global) hasHome() bool {
+	for _, f := range []string{"identity.json", keyholderFile} {
+		if _, err := os.Stat(filepath.Join(g.cfg.Home, f)); err == nil {
+			return true
+		}
 	}
-	e.Originator = g.cfg.Originator
-	e.Mainnet = g.cfg.Network == "main"
-	return e, nil
+	return false
+}
+
+// dialWallet reaches the wallet config key wallet names, and asks it for
+// its identity key.
+func (g *global) dialWallet(ctx context.Context) (wallet.Interface, *ec.PublicKey, error) {
+	url, ok := strings.CutPrefix(g.cfg.Wallet, "wire:")
+	if !ok {
+		return nil, nil, usage("wallet %q is neither embedded nor wire:<URL>", termsafe.Abbrev(g.cfg.Wallet))
+	}
+	w, err := wirewallet.Dial(g.cfg.Originator, url, g.cfg.Timeout)
+	if err != nil {
+		return nil, nil, usage("wallet %s: %v", url, err)
+	}
+	id, err := wirewallet.IdentityKeyOf(ctx, w, g.cfg.Originator)
+	if err != nil {
+		return nil, nil, fmt.Errorf("the wallet at %s: %w", url, err)
+	}
+	return w, id, nil
+}
+
+// openWallet opens the home's wallet: the embedded one, or the wallet
+// config key wallet names, held to the identity key the home pinned when it
+// was made.
+func (g *global) openWallet() (*homeWallet, error) {
+	if g.cfg.Wallet == "" || g.cfg.Wallet == config.WalletEmbedded {
+		if _, err := os.Stat(filepath.Join(g.cfg.Home, keyholderFile)); err == nil {
+			return nil, usage("the home %s keeps its key in a wallet of its own (%s): set wallet to that wallet", g.cfg.Home, keyholderFile)
+		}
+		e, err := bwallet.Open(g.cfg.Home, engine.Profile)
+		if err != nil {
+			return nil, fmt.Errorf("open the home %s: %w (run `bsecret init`)", g.cfg.Home, err)
+		}
+		e.Originator = g.cfg.Originator
+		e.Mainnet = g.cfg.Network == "main"
+		return &homeWallet{signer: e.Signer(), Pool: e.Pool, Embedded: e}, nil
+	}
+	b, err := os.ReadFile(filepath.Join(g.cfg.Home, keyholderFile))
+	if err != nil {
+		return nil, fmt.Errorf("open the home %s: %w (run `bsecret init` with wallet set)", g.cfg.Home, err)
+	}
+	var pin walletPin
+	if err := json.Unmarshal(b, &pin); err != nil {
+		return nil, fmt.Errorf("%s: %w", keyholderFile, err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), g.cfg.Timeout)
+	defer cancel()
+	w, id, err := g.dialWallet(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if got := hex.EncodeToString(id.Compressed()); got != pin.Identity {
+		return nil, refused("the wallet at %s answers identity key %s, and this home was made around %s: it is not this home's wallet", strings.TrimPrefix(g.cfg.Wallet, "wire:"), got, pin.Identity)
+	}
+	pool, err := bwallet.OpenPool(g.cfg.Home, engine.Profile)
+	if err != nil {
+		return nil, fmt.Errorf("open the home %s: %w", g.cfg.Home, err)
+	}
+	s := &bwallet.Signer{Interface: w, Identity: id, Originator: g.cfg.Originator, Mainnet: g.cfg.Network == "main", Profile: engine.Profile}
+	return &homeWallet{signer: s, Pool: pool, Wire: strings.TrimPrefix(g.cfg.Wallet, "wire:")}, nil
 }
 
 // lockHome takes the home's lock: one command that spends from the pool or
@@ -79,7 +169,7 @@ func (g *global) lockHome() (func(), error) {
 
 // home is an open, locked home: its wallet and its state.
 type home struct {
-	e     *bwallet.Embedded
+	e     *homeWallet
 	st    *state.State
 	close func()
 }
@@ -89,9 +179,9 @@ type home struct {
 // opened and written back whole when it changes, so a pool read before the
 // lock is one another command may change in between, and saving it would
 // put back coins that command spent.
-func (g *global) lockedWallet() (*bwallet.Embedded, func(), error) {
-	if _, err := os.Stat(filepath.Join(g.cfg.Home, "identity.json")); err != nil {
-		return nil, nil, fmt.Errorf("open the home %s: %w (run `bsecret init`)", g.cfg.Home, err)
+func (g *global) lockedWallet() (*homeWallet, func(), error) {
+	if !g.hasHome() {
+		return nil, nil, fmt.Errorf("open the home %s: %w (run `bsecret init`)", g.cfg.Home, os.ErrNotExist)
 	}
 	unlock, err := g.lockHome()
 	if err != nil {
@@ -124,7 +214,7 @@ func (g *global) openHome() (*home, error) {
 // no home, and an error when there is one that cannot be opened (another
 // command is using it, or it does not read).
 func (g *global) readerHome() (*home, error) {
-	if _, err := os.Stat(filepath.Join(g.cfg.Home, "identity.json")); errors.Is(err, os.ErrNotExist) {
+	if !g.hasHome() {
 		return nil, nil
 	}
 	return g.openHome()
@@ -523,7 +613,12 @@ func (g *global) openWriterFor(ctx context.Context, lenient bool) (*writer, erro
 	}
 	eng.Note, eng.Verbose, eng.Sample = g.say, g.verbose, sampleHook
 	w.eng = eng
-	if eng.Key, err = g.identityKey(); err != nil {
+	if h.e.Embedded == nil {
+		// The organization's key is in a wallet of its own: an epoch's key
+		// is opened through it, as the releaser of the wrap to the signer
+		// key.
+		eng.Release = h.e.Signer()
+	} else if eng.Key, err = g.identityKey(); err != nil {
 		w.close(ctx, g)
 		return nil, err
 	}
@@ -615,6 +710,9 @@ func cmdInit(_ context.Context, g *global, args []string) error {
 	if *from != "" && *borg != "" {
 		return usage("-from and -borg are exclusive")
 	}
+	if (*from != "" || *borg != "") && g.cfg.Wallet != "" && g.cfg.Wallet != config.WalletEmbedded {
+		return usage("-from and -borg copy a key into the home, and wallet names a wallet that holds it: a home's key is in one place")
+	}
 	if *borg != "" {
 		*from = filepath.Join(*borg, "identity.json")
 	}
@@ -634,7 +732,15 @@ func cmdInit(_ context.Context, g *global, args []string) error {
 		return err
 	}
 	defer unlock()
-	e, err := bwallet.Create(g.cfg.Home, engine.Profile)
+	if g.cfg.Wallet != "" && g.cfg.Wallet != config.WalletEmbedded {
+		return g.initWallet()
+	}
+	created, err := bwallet.Create(g.cfg.Home, engine.Profile)
+	var e *homeWallet
+	if err == nil {
+		created.Originator, created.Mainnet = g.cfg.Originator, g.cfg.Network == "main"
+		e = &homeWallet{signer: created.Signer(), Pool: created.Pool, Embedded: created}
+	}
 	if errors.Is(err, bwallet.ErrIdentityExists) {
 		if e, err = g.openWallet(); err != nil {
 			return err
@@ -652,8 +758,53 @@ func cmdInit(_ context.Context, g *global, args []string) error {
 	if err := os.Chmod(g.cfg.Home, 0o700); err != nil {
 		return err
 	}
-	e.Mainnet = g.cfg.Network == "main"
-	addr, err := e.FundAddress(e.Mainnet)
+	addr, err := e.FundAddress(g.cfg.Network == "main")
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(g.stdout, "identity     %s\nfund address %s (%s)\n", e.Signer().IdentityHex(), addr, g.cfg.Network)
+	return nil
+}
+
+// initWallet makes a home whose key is held by the wallet config key wallet
+// names: no key is written, the wallet's identity key is pinned, and the
+// pool is the home's own. It is called with the home's lock held.
+func (g *global) initWallet() error {
+	if _, err := os.Stat(filepath.Join(g.cfg.Home, "identity.json")); err == nil {
+		return usage("the home %s holds an embedded key (identity.json): a home's key is in one place", g.cfg.Home)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), g.cfg.Timeout)
+	defer cancel()
+	_, id, err := g.dialWallet(ctx)
+	if err != nil {
+		return err
+	}
+	pin := walletPin{Wallet: g.cfg.Wallet, Identity: hex.EncodeToString(id.Compressed())}
+	path := filepath.Join(g.cfg.Home, keyholderFile)
+	if b, err := os.ReadFile(path); err == nil {
+		var was walletPin
+		if json.Unmarshal(b, &was) == nil && was.Identity != pin.Identity {
+			return refused("the wallet answers identity key %s, and this home was made around %s", pin.Identity, was.Identity)
+		}
+		g.say("the home %s exists; left as it is", g.cfg.Home)
+	} else {
+		b, _ := json.MarshalIndent(pin, "", "  ")
+		if err := writeFileAtomic(path, append(b, '\n')); err != nil {
+			return err
+		}
+		fmt.Fprintln(g.stdout, "created", g.cfg.Home, "around the identity key of the wallet at", strings.TrimPrefix(g.cfg.Wallet, "wire:"))
+	}
+	e, err := g.openWallet()
+	if err != nil {
+		return err
+	}
+	if err := e.Pool.Save(); err != nil {
+		return err
+	}
+	if err := os.Chmod(g.cfg.Home, 0o700); err != nil {
+		return err
+	}
+	addr, err := e.FundAddress(g.cfg.Network == "main")
 	if err != nil {
 		return err
 	}
@@ -751,7 +902,7 @@ func cmdFund(ctx context.Context, g *global, args []string) error {
 		return err
 	}
 	defer unlock()
-	addr, err := e.FundAddress(e.Mainnet)
+	addr, err := e.FundAddress(g.cfg.Network == "main")
 	if err != nil {
 		return err
 	}
@@ -845,7 +996,7 @@ func (g *global) importPayment(ctx context.Context, txid, beefPath string, refus
 	if err != nil {
 		return err
 	}
-	addr, _ := e.FundAddress(e.Mainnet)
+	addr, _ := e.FundAddress(g.cfg.Network == "main")
 	var im *bwallet.Import
 	if txid != "" {
 		chain, cerr := g.chainView()
@@ -936,7 +1087,7 @@ func cmdCrypt(_ context.Context, g *global, args []string) error {
 		if err != nil {
 			return err
 		}
-		if _, serr := os.Stat(filepath.Join(g.cfg.Home, "identity.json")); serr == nil {
+		if g.hasHome() {
 			e, unlock, err := g.lockedWallet()
 			if err != nil {
 				return err

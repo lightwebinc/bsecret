@@ -67,6 +67,9 @@ func cmdDoctor(ctx context.Context, g *global, args []string) error {
 		fmt.Fprintf(out, "identity    absent (%v)\n", err)
 	} else {
 		fmt.Fprintf(out, "identity    %s\n", e.Signer().IdentityHex())
+		if e.Wire != "" {
+			fmt.Fprintf(out, "wallet      %s: a wallet of its own holds the key, and answers\n", e.Wire)
+		}
 		fmt.Fprintf(out, "pool        %d output(s), %d sat", e.Pool.Count(), e.Pool.Balance())
 		if tip > 0 {
 			// Coinbase short of its maturity. Change held until its

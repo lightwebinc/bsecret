@@ -53,6 +53,7 @@ import (
 	"github.com/bsv-blockchain/go-sdk/script"
 	"github.com/bsv-blockchain/go-sdk/transaction"
 	"github.com/bsv-blockchain/go-sdk/transaction/chaintracker"
+	"github.com/bsv-blockchain/go-sdk/wallet"
 
 	"github.com/lightwebinc/bcommon/bwallet"
 	"github.com/lightwebinc/bcommon/carrier"
@@ -157,10 +158,14 @@ type Engine struct {
 	// Key is the organisation's identity private key. It derives the
 	// signer key, the member of the vault's group through which the
 	// organisation opens an epoch's key (vread.SignerWallet).
-	Key  *ec.PrivateKey
-	Pool *bwallet.Pool
-	Legs Legs
-	Opts Options
+	Key *ec.PrivateKey
+	// Release, when Key is nil, is the wallet that holds the
+	// organisation's identity key: an epoch's key is opened through it, as
+	// the releaser of borg's wrap to the signer key (vread.ReleaserWallet).
+	Release wallet.Interface
+	Pool    *bwallet.Pool
+	Legs    Legs
+	Opts    Options
 	// Now is the clock records are stamped with; Sleep waits.
 	Now   func() time.Time
 	Sleep func(ctx context.Context, d time.Duration) error

@@ -12,6 +12,7 @@ import (
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	"github.com/bsv-blockchain/go-sdk/transaction"
 	"github.com/bsv-blockchain/go-sdk/transaction/chaintracker"
+	"github.com/bsv-blockchain/go-sdk/wallet"
 
 	"github.com/lightwebinc/bcommon/bwallet"
 	"github.com/lightwebinc/bcommon/funding"
@@ -260,10 +261,17 @@ func (e *Engine) group(ctx context.Context, v *state.Vault) (*vread.Group, error
 // organisation: through the wrap borg made to the organisation's signer
 // key, by borg's member checks.
 func (e *Engine) EpochKey(ctx context.Context, g *vread.Group, epoch uint64) ([32]byte, error) {
-	if e.Key == nil {
+	var w wallet.Interface
+	var pub []byte
+	var err error
+	switch {
+	case e.Key != nil:
+		w, pub, err = vread.SignerWallet(e.Key)
+	case e.Release != nil:
+		w, pub, err = vread.ReleaserWallet(e.Release, e.OrgKey())
+	default:
 		return [32]byte{}, errors.New("the organisation's identity key is not open: the signer key cannot be derived")
 	}
-	w, pub, err := vread.SignerWallet(e.Key)
 	if err != nil {
 		return [32]byte{}, err
 	}

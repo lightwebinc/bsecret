@@ -246,6 +246,49 @@ func SignerWallet(orgKey *ec.PrivateKey) (wallet.Interface, []byte, error) {
 	return w, k.PubKey().Compressed(), nil
 }
 
+// ReleaserWallet is the organisation's own wallet acting for its signer key:
+// the wallet that holds the organisation's identity key, wherever that is (a
+// hardware module, a remote signer), opening the wrap borg made to the signer
+// key from the releaser's side. A wrap is a BRC-2 ciphertext between the
+// organisation and the member under BRC-42 child keys, so the organisation,
+// which released it, derives the same key the member does: decrypting with
+// the member as counterparty opens it. The returned wallet answers borg's
+// member checks (reader.Open) as the signer key would, with no private key
+// leaving the organisation's wallet. orgKey is the organisation's identity
+// key; it returns the wallet and the signer's public key.
+func ReleaserWallet(org wallet.Interface, orgKey []byte) (wallet.Interface, []byte, error) {
+	signer, err := borgrec.SignerKey(orgKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	op, err := ec.PublicKeyFromBytes(orgKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	sp, err := ec.PublicKeyFromBytes(signer)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &releaser{Interface: org, org: op, signer: sp}, signer, nil
+}
+
+// releaser is ReleaserWallet's wallet: a decryption whose counterparty is
+// the organisation is asked of the organisation's wallet with the signer key
+// as counterparty. Everything else is the organisation's wallet's.
+type releaser struct {
+	wallet.Interface
+	org, signer *ec.PublicKey
+}
+
+func (r *releaser) Decrypt(ctx context.Context, args wallet.DecryptArgs, originator string) (*wallet.DecryptResult, error) {
+	cp := args.Counterparty
+	if cp.Type != wallet.CounterpartyTypeOther || cp.Counterparty == nil || !cp.Counterparty.IsEqual(r.org) {
+		return nil, errors.New("vread: the releaser opens only the organisation's wraps to its signer key")
+	}
+	args.Counterparty = wallet.Counterparty{Type: wallet.CounterpartyTypeOther, Counterparty: r.signer}
+	return r.Interface.Decrypt(ctx, args, originator)
+}
+
 // WrapsMissing are the members of the group's latest token that no host
 // answers a wrap of epoch for: a version keyed under a new epoch is
 // published only after borg's wraps of the epoch's key are (spec section

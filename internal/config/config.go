@@ -30,6 +30,7 @@ import (
 	"github.com/lightwebinc/bcommon/feepolicy"
 	"github.com/lightwebinc/bcommon/mint"
 	"github.com/lightwebinc/bcommon/publish"
+	"github.com/lightwebinc/bcommon/wirewallet"
 
 	"github.com/lightwebinc/borg/borgrec"
 
@@ -135,11 +136,18 @@ type Config struct {
 	// Vault is the vault a command uses when it names none: its
 	// identifier, 64 lowercase hex digits, or its display name.
 	Vault string
+	// Wallet is where the home's identity key is held: "embedded" (the
+	// default, identity.json in the home) or wire:<URL>, a BRC-100 wallet
+	// reached over the wallet wire at a loopback URL.
+	Wallet string
 	// WoCKey is a WhatsOnChain API key, and WoCRate the requests a second
 	// its plan allows (zero is the free rate, 3).
 	WoCKey  string
 	WoCRate float64
 }
+
+// WalletEmbedded is the wallet key's default: the home's own identity file.
+const WalletEmbedded = "embedded"
 
 // The modes and the named quorums.
 const (
@@ -210,7 +218,7 @@ var Keys = []string{"arcade_key", "asset", "chain", "chain_tree_count", "content
 	"fee_floor", "fee_max_rate", "fee_max_tx", "fee_min_rate", "fee_policy_urls", "fee_rate", "fee_source", "freshness",
 	"fund_unmined", "hall", "hall_hosts", "header_token", "header_url", "home", "hosts", "lookup_auth", "max_fetch", "mode", "network",
 	"object_bound", "org", "originator", "paid_host", "quorum", "rpc", "rpc_pass", "rpc_user", "settle", "timeout",
-	"tree_count", "vault", "woc_key", "woc_rate"}
+	"tree_count", "vault", "wallet", "woc_key", "woc_rate"}
 
 // ErrUnknownKey reports a key the grammar does not define.
 var ErrUnknownKey = errors.New("config: unknown key")
@@ -480,6 +488,17 @@ func (c Config) Apply(vals map[string]string) (Config, error) {
 			c.TreeCount, err = positiveInt(k, v, 1, limits.MaxTreeCount, "every carrier's BEEF carries its whole funding tree")
 		case "vault":
 			c.Vault = v
+		case "wallet":
+			if v != "" && v != WalletEmbedded {
+				url, ok := strings.CutPrefix(v, "wire:")
+				if !ok {
+					return c, fmt.Errorf("config: wallet must be embedded or wire:<URL>, got %q", v)
+				}
+				if werr := wirewallet.CheckURL(url); werr != nil {
+					return c, fmt.Errorf("config: wallet %q: %w", v, werr)
+				}
+			}
+			c.Wallet = v
 		case "woc_key":
 			c.WoCKey = v
 		case "woc_rate":

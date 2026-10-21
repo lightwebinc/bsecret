@@ -179,6 +179,14 @@ func TestServeServesVerifiedValues(t *testing.T) {
 	if cm, _ := meta["custom_metadata"].(map[string]any); cm["vault_standing"] != "settled" || cm["exposed"] != "false" {
 		t.Fatalf("KV custom metadata: %s", body)
 	}
+	// What a Vault client asks first: the mount is KV version 2.
+	c, m, body = d.do("GET", "/v1/sys/internal/ui/mounts/secret/db/password", nil)
+	if md, _ := m["data"].(map[string]any); c != 200 || md["type"] != "kv" || md["path"] != "secret/" || md["options"].(map[string]any)["version"] != "2" {
+		t.Fatalf("mounts: %d %s", c, body)
+	}
+	if c, _, _ := d.do("GET", "/v1/sys/internal/ui/mounts/nope/x", nil); c != 404 {
+		t.Fatalf("an unknown mount: %d", c)
+	}
 	// A value that is not UTF-8 is given in base64 only.
 	c, m, body = d.do("GET", "/vaults/ops/secrets/tls/key", nil)
 	if _, has := m["value"]; c != http.StatusOK || has || m["value_base64"] != "/wBiaW5hcnk=" {

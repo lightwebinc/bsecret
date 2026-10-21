@@ -442,7 +442,8 @@ member or auditor verify without asking anyone's leave. A host can make a
 crypt **private** instead (`BSECRET_PRIVATE`, [host.md](host.md#keeping-a-crypt-private)):
 it then answers questions about it only over BRC-104, to your organization
 and the members of its groups. Readers and the owner set
-`lookup_auth = on`, and every question is signed with the home's own key;
+`lookup_auth = on`, and every question is signed with the home's own key
+(the hall's questions, which are borg's, go to `hall_hosts` as before);
 an auditor you invite is given a key of a group, or the host names the
 auditor's organization too. Publish to such hosts with `mode = unicast`:
 on a shared plane, a crypt's topic is delivered to every host subscribed to

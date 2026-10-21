@@ -583,6 +583,7 @@ kept in its memory, and nowhere else, and served over HTTP on `-listen`
 | `GET /secrets/<name>` | the first vault's secret as JSON: `value` (when it is UTF-8), `value_base64`, `name`, `vault_id`, `version`, `secret_epoch`, `label`, `type`, `not_after`, `read_at`, and `standing` |
 | `GET /vaults/<vault>/secrets/<name>` | the same for a vault served, by identifier or display name |
 | `GET /v1/<mount>/data/<name>` | the same in the shape of Vault's KV version 2 read: `data.data.value` (and `value_base64`), `data.metadata.version`, and the standing as strings in `data.metadata.custom_metadata`. The mount is `secret` for the first vault, or a vault's identifier or display name |
+| `GET /v1/sys/internal/ui/mounts/<mount>` | the mount's KV version (`2`), which a Vault client asks before it reads, so that a Vault Agent template, consul-template or `vault kv get` reads the mount as KV version 2 |
 | `GET /status` | each vault's last walk: its standing, the names read, the secrets it could not read and why; no value |
 | `GET /healthz` | 200 while every vault's last walk established it within three intervals, else 503; needs no token |
 | `GET /metrics` | Prometheus text (below) |

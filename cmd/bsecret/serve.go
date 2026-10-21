@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +39,9 @@ address by default:
                                        version 2; the mount is "secret" for
                                        the first vault, or a vault's
                                        identifier or display name
+  GET /v1/sys/internal/ui/mounts/<mount>
+                                       the mount's KV version, as a Vault
+                                       client asks it first
   GET /status                          each vault's standing and the names
                                        read, no value
   GET /healthz                         200 while every vault's last walk
@@ -602,6 +606,18 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		code = s.secret(w, s.find(vault), name, false)
+	case strings.HasPrefix(path, "/v1/sys/internal/ui/mounts/"):
+		// What a Vault client asks first to learn a mount's KV version.
+		route = "kv"
+		mount, _, _ := strings.Cut(strings.TrimPrefix(path, "/v1/sys/internal/ui/mounts/"), "/")
+		if s.find(mount) == nil {
+			code = http.StatusNotFound
+			writeJSON(w, code, map[string]any{"errors": []string{"no mount " + strconvQuote(mount)}})
+			return
+		}
+		code = http.StatusOK
+		writeJSON(w, code, map[string]any{"request_id": "", "lease_id": "", "renewable": false, "lease_duration": 0, "wrap_info": nil, "warnings": nil, "auth": nil,
+			"data": map[string]any{"path": mount + "/", "type": "kv", "description": "bsecret serve", "options": map[string]string{"version": "2"}}})
 	case strings.HasPrefix(path, "/v1/"):
 		route = "kv"
 		mount, name, ok := strings.Cut(strings.TrimPrefix(path, "/v1/"), "/data/")
@@ -706,6 +722,8 @@ func (s *server) secret(w http.ResponseWriter, snap *vaultSnap, name string, kv 
 	})
 	return http.StatusOK
 }
+
+func strconvQuote(s string) string { return strconv.Quote(termsafe.Abbrev(s)) }
 
 func mustHex32(s string) [32]byte {
 	v, _ := vread.Hex32(s)

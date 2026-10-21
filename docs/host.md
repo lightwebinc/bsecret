@@ -359,8 +359,11 @@ location = /.well-known/auth   { proxy_pass http://127.0.0.1:8443; }
 location /                     { proxy_pass http://127.0.0.1:8080; }
 ```
 
-That way the open lookup is not reachable from outside at all. The rest
-is still the operator's:
+That way the open lookup is not reachable from outside at all. The terms
+route answers only `ls_bsecret`, so a reader's questions about the group's
+hall, which are borg's, go to an origin that reaches the overlay host's own
+`/lookup` (or another hall host): name it in the readers' `hall_hosts`.
+The rest is still the operator's:
 
 - set a submission rate at the proxy: the module sets none of its own,
   submissions to a private crypt's topic are not gated, and carriers of a

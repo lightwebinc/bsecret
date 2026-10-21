@@ -35,6 +35,10 @@ block headers with nobody's cooperation.
   exposed or current) and in the shape of Vault's KV version 2, with the
   conditions it refuses as a policy and metrics. A sidecar, a Vault Agent
   template and the External Secrets Operator's webhook provider read it.
+- Machine enrollment (`bsecret enroll`): a workload makes its key where it
+  runs and asks to join with a signed request, the owner approves it in
+  one step (bsecret checks it and runs borg's add), and the workload picks
+  up its membership. No private key travels.
 
 ## Next
 
@@ -45,15 +49,10 @@ Ordered by what unblocks the most.
    authenticated route the priced classes already use, so that outsiders
    cannot walk a vault's chain at the hosts. What the tokens carry stays on
    the chain.
-2. **Machine enrolment.** `init` already makes a key where a workload runs,
-   so no private key need travel. Next is the enrolment around it: the
-   workload asks to join, the owner approves the request in one step, and
-   the workload picks up its membership, instead of a public key copied to
-   the owner by hand.
-3. **The organization's key in a wallet of its own.** Signing and wrapping
+2. **The organization's key in a wallet of its own.** Signing and wrapping
    through a BRC-100 wallet, so the key can live in a hardware module or a
    remote signer rather than a file in the home.
-4. **Large secrets through bstore**, in place of a local directory and a
+3. **Large secrets through bstore**, in place of a local directory and a
    `uhrp://` address.
 
 ## Later, and areas of exploration

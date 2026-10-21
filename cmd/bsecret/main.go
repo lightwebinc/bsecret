@@ -58,6 +58,11 @@ identity (a home):
                                 and the BSECRET_CRYPTS line a host takes
   crypt list                    the crypts this home created
   doctor                        local state, what is owed and reachability; reads only
+  enroll request                a machine asks to join a vault's group with a key
+                                made where it runs: one line for the owner
+  enroll approve <REQUEST>      the owner approves it in one step: checked, then
+                                borg adds the key to the group
+  enroll wait                   the machine waits until its membership opens
 
 the owner (this home's identity key is a borg organization's):
   vault create <group> -name N  a vault keyed to a group of the organization
@@ -215,6 +220,7 @@ func init() {
 		"crypt":   cmdCrypt,
 		"doctor":  cmdDoctor,
 		"due":     cmdDue,
+		"enroll":  cmdEnroll,
 		"fill":    cmdFill,
 		"fund":    cmdFund,
 		"get":     cmdGet,

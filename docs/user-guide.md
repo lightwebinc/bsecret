@@ -266,6 +266,14 @@ engineering`). Nothing changes in the vault: borg wraps the current
 epoch's key to the new member, who then opens every version keyed under
 that epoch, including the ones written before they joined.
 
+For a machine, `enroll` does it in three commands, one on each side:
+the machine runs `bsecret init` and `bsecret enroll request`, which prints
+one line; you run `bsecret enroll approve '<line>'`, which checks the
+request and runs the `borg org add` for you; the machine runs `bsecret
+enroll wait` until its membership opens. Only the public key travels.
+Approving admits whoever holds that key, so take requests only through a
+channel you trust, and compare the fingerprint both sides print.
+
 ## 9. Taking access away
 
 Three steps, in this order.
@@ -318,7 +326,8 @@ it from a timer.
 
 **Reading.** A machine reads as any member does: it has an identity key of
 its own, made with `bsecret init` where it runs, whose public key the
-owner adds to the group with borg; its home needs no coin. Three shapes
+owner adds to the group (`bsecret enroll`, section 8); its home needs no
+coin. Three shapes
 work with the command as it is:
 
 - **At start.** An entrypoint runs `bsecret get NAME -strict` and writes

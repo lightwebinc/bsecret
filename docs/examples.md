@@ -283,8 +283,10 @@ In Kubernetes, run it as a Deployment with one replica (one process holds
 one home), its home on a volume, the member's `identity.json` and a token
 from Secrets, and read it with the
 [External Secrets Operator](https://external-secrets.io/)'s webhook
-provider. `bsecret init -from identity.json`, run once in an init
-container, makes the home around the member's key from the Secret.
+provider. The workload's key is made in its own home and enrolled
+([section 17](#17-enrolling-a-machine)), so no private key is copied in;
+where a key was made elsewhere, `bsecret init -from identity.json`, run
+once in an init container, makes the home around it from a Secret.
 
 ```yaml
 apiVersion: apps/v1
@@ -357,7 +359,33 @@ use `$.value_base64` with the ExternalSecret's `decodingStrategy: Base64`.
 Keep the Service reachable only from the operator's namespace, with a
 network policy.
 
-## 17. Exit codes in scripts
+## 17. Enrolling a machine
+
+```console
+machine$ bsecret init                     # a key of its own; no coin
+machine$ bsecret enroll request -label web-1
+key          03a1…
+fingerprint  4f2c-9b1e-07d3-a6c8   (the owner compares this before approving)
+give the owner the line below; they run: bsecret enroll approve '<line>'; then: bsecret enroll wait
+bsecret-join-v1.eyJ2IjoxLCJuZXR3b3JrIjoibWFpbiIs…
+
+owner$ bsecret enroll approve 'bsecret-join-v1.eyJ2IjoxLCJuZXR3b3JrIjoibWFpbiIs…'
+request     03a1… joins vault 5d0c… vault_qhzkwbmrtp (group 9e41…) in hall example_abcdefghij
+fingerprint 4f2c-9b1e-07d3-a6c8
+label       web-1 (a claim)
+running     borg -hall example_abcdefghij org add 03a1… -group 9e41…
+approved    the machine picks up its membership with: bsecret enroll wait
+
+machine$ bsecret enroll wait
+enrolled    a member of group 9e41… in hall example_abcdefghij, epoch 0's key opens with this key
+```
+
+In Kubernetes, the Deployment of section 16 does the machine's side in an
+init container (`bsecret init` when the home is empty, then `bsecret
+enroll request`, whose line is in the pod's log, then `bsecret enroll
+wait`), and the owner approves the line from the log.
+
+## 18. Exit codes in scripts
 
 | Code | Meaning |
 | --- | --- |

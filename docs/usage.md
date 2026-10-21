@@ -109,6 +109,9 @@ both the hall and the crypt.
 | `crypt new <name>` | optional | nothing | draws the 10-letter random suffix; prints the crypt, its topic, and the host's `BSECRET_CRYPTS` line |
 | `crypt list` | yes | nothing | the crypts this home created |
 | `vault create <group> [-name N]` | yes, the owner's, funded | `crypt`, `hall`, a publisher's settings (below) | a vault keyed to a group of the organization (its id, or its name in the hall): a chain tree, and the vault's first token naming the group's current epoch. `-anchor version` (default) or `interval`; `-labels a,b,c`. The name is one line of plain text and public; without `-name` one is drawn at random (`vault_` and ten letters) |
+| `enroll request [-label L]` | yes, a machine's own (a plain `init`) | a reader's settings | a join request for the vault's group naming this home's key, signed by it, printed as one line for the owner ([Enrolling a machine](#enrolling-a-machine)) |
+| `enroll approve <REQUEST>` | yes, the owner's | the borg command and the organization's borg home | checks the request and runs `borg org add` for its key and the vault's group: the one step the owner takes. `-print` prints the borg command instead |
+| `enroll wait` | yes, the machine's | a reader's settings | waits until the machine's key is a member of the group and opens its current epoch's key; exit 3 at `-timeout` |
 | `vault list` | optional | a reader's settings | the owner's vaults the hosts answer |
 | `vault show` | optional | a reader's settings | one vault's chain token by token as verified here, its standing against its group, whether its last token is the latest, and its set |
 | `put <name>` | yes, the owner's | a publisher's | the next version of a secret, its value from standard input or `-file`: sealed, wrapped, its carrier published, and listed in the vault's next token. `-label`, `-type`, `-not-after`, `-rotate-every`; `-defer` (interval vaults) |
@@ -583,6 +586,62 @@ A value served keeps the age of the walk that read it: `read_at` says
 when. For a vault rotated faster than blocks (an interval vault), each
 walk takes the newest version that links to the listed one, marked not
 `anchored`; refuse `unanchored` where only a listed version will do.
+
+## Enrolling a machine
+
+A machine that reads makes its key where it runs, and the owner adds that
+key to the vault's group; only the public key travels. `enroll` puts the
+three steps in one command each:
+
+```console
+machine$ bsecret init                                  # its own key, no coin
+machine$ bsecret enroll request -label web-1           # prints one line
+owner$   bsecret enroll approve 'bsecret-join-v1.…'    # checks it, then borg org add
+machine$ bsecret enroll wait                           # until its membership opens
+```
+
+`enroll request` writes a join request: version 1, the network, the
+owner's key (`org`), the vault (`crypt` and `vault`, the configured or
+`-vault` one) or a group and its hall (`-group`, `-hall`), this home's
+identity key, `-label` (a name for the machine, a claim, one line of
+plain text of at most 64 bytes), a random nonce and the time. It is
+signed by the key it names, through the home's wallet, under BRC-43
+protocol `[1, "bsecret enrollment"]`, key id `1`, counterparty anyone,
+over `bsecret enrollment request v1` and a line feed followed by the
+request's JSON without its signature, and printed as `bsecret-join-v1.`
+and the base64url of the JSON. The home keeps it as `enroll.json`, and
+standard error prints the key's fingerprint (the first 16 hex digits of
+its SHA-256). The request is not secret.
+
+`enroll approve` takes the line, a file holding it, or `-` for standard
+input, in the owner's home. It refuses (exit 1) a request whose signature
+does not verify under the key it names, that names another organization
+or another network, that is older than `-max-age` (24h), or that names a
+vault this home does not own; it prints the key, its fingerprint and the
+label; then it runs
+
+```text
+borg [-home DIR] -hall HALL org add <key> -group <group> [-expiry DUR]
+```
+
+with `-borg-cmd` (default `borg` on `PATH`), `-borg-home` and `-expiry`
+passed through. borg grants the key a membership and wraps the group's
+current epoch key to it; nothing changes in the vault. borg's exit code is
+the command's. `-print` prints that command and runs nothing, for a borg
+home on another machine.
+
+Approving admits whoever holds the key. A signature proves only that the
+request was made by that key and not altered: approve a request that
+reached you through a channel you trust (your deployment's log, a ticket
+the workload opened), and compare the fingerprint with the one the machine
+printed.
+
+`enroll wait` reads the group the kept request names (for a vault, the
+group its token names), every token checked against this home's headers,
+until this key is one of its members and opens its current epoch's key,
+asking again every `-poll` (10s) until `-timeout` (10m; 0 asks once). A
+daemon needs no wait: `serve` reads a secret it cannot open as unread, and
+serves it once a walk opens it.
 
 ## Filling a host
 

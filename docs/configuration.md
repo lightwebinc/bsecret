@@ -225,6 +225,16 @@ headers     woc:main tip 970084
 | `get` | `-show` | off | write the value to standard output although it is a terminal |
 | `get` | `-version N` | the latest | read this version, as history |
 | `get` | `-strict` | off | refuse an exposed value, a vault not settled, or a state that may be stale |
+| `enroll request` | `-label L` | none | a name for the machine the owner sees; a claim |
+| `enroll request` | `-group G`, `-hall H` | the vault's group | join a group by its identifier, when no vault is named |
+| `enroll request` | `-out FILE` | none | also write the request to this file |
+| `enroll approve` | `-borg-cmd PATH` | `borg` | the borg command run |
+| `enroll approve` | `-borg-home DIR` | borg's own | the organization's borg home, passed as borg's `-home` |
+| `enroll approve` | `-expiry DUR` | borg's, one year | the machine's grant expiry, passed to borg |
+| `enroll approve` | `-max-age DUR` | `24h` | the oldest request approved |
+| `enroll approve` | `-print` | off | print the borg command and run nothing |
+| `enroll wait` | `-timeout DUR` | `10m` | how long to wait; `0` asks once |
+| `enroll wait` | `-poll DUR` | `10s` | how often the group is read again |
 | `serve` | `-listen ADDR` | `127.0.0.1:8250` | host:port to serve on; not loopback only with `-token-file` |
 | `serve` | `-interval DUR` | `1m` | how often each vault's chain is walked; at least `1s` |
 | `serve` | `-refuse LIST` | `exposed,unsettled,stale` | what is not served: `exposed`, `unsettled`, `stale`, `unanchored`, `incomplete`, or `none` |

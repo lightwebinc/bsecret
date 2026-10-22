@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   go:
-    runs-on: [self-hosted, lax]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -51,7 +51,7 @@ jobs:
   # class, the index rules, restore, and the terms route with a paying
   # client.
   ts:
-    runs-on: [self-hosted, lax]
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: host
@@ -76,7 +76,7 @@ jobs:
   # newcomer runs. It needs borg's command and host images at the tag go.mod
   # pins, built from borg's repository at that tag.
   quickstart:
-    runs-on: [self-hosted, lax]
+    runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -94,9 +94,8 @@ jobs:
         run: |
           make docker-build
           make docker-build-host BORG_HOST_IMAGE=ghcr.io/lightwebinc/borg-host:latest
-      # The self-hosted runners share one Docker daemon, and this stack
-      # publishes fixed host ports. The lock serializes this repository's
-      # quickstarts; holding it, any bsecret-quickstart-check-* stack left is an
+      # The stack publishes fixed host ports, so one quickstart runs at a
+      # time on a runner; any bsecret-quickstart-check-* stack left is an
       # orphan of a cancelled run (cancel skips the script's teardown), so it
       # is removed first.
       - name: the quickstart, as written

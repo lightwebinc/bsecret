@@ -1,6 +1,6 @@
 {
   "name": "@lightwebinc/bsecret-host",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "description": "The bsecret record layer in TypeScript and the host module for an overlay host: vault and secret records, crypt, label and name grammars, lookup questions, the set root and inclusion contexts, the topic manager's transaction rules and the index's chain rules, held to the Go codec's vectors, and tm_bsecret with ls_bsecret as a module the host loads by path",
   "license": "Apache-2.0",

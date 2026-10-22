@@ -602,3 +602,34 @@ func TestContextRoundTrip(t *testing.T) {
 		t.Error("the empty root is not SHA-256 of nothing")
 	}
 }
+
+// The second record version's magics are reserved: they share this
+// version's prefix and type letter, differ in the version byte alone, and
+// every version-1 decoder refuses them as `magic` before any other rule.
+func TestVersionTwoMagicsAreReservedAndRefused(t *testing.T) {
+	pairs := []struct {
+		v1, v2 []byte
+		decode func([]byte) error
+	}{
+		{MagicVault, MagicVaultV2, func(b []byte) error { _, err := DecodeVault(b); return err }},
+		{MagicSecret, MagicSecretV2, func(b []byte) error { _, err := DecodeSecret(b); return err }},
+		{MagicPayload, MagicPayloadV2, func(b []byte) error { _, err := DecodePayload(b); return err }},
+	}
+	for _, p := range pairs {
+		if !bytes.Equal(p.v1[:3], p.v2[:3]) || p.v1[3] != 0x01 || p.v2[3] != 0x02 {
+			t.Fatalf("magic %x and %x: want the same prefix and type letter, versions 1 and 2", p.v1, p.v2)
+		}
+		b, err := cbor.Encode(cbor.Map{{Key: uint64(0), Val: p.v2}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := p.decode(b); !errors.Is(err, ErrMagic) {
+			t.Fatalf("magic %x: want ErrMagic, got %v", p.v2, err)
+		}
+	}
+	for _, d := range []string{DomainVaultIDV2, DomainSecretIDV2, DomainEpochWrapV2} {
+		if !strings.HasSuffix(d, " v2") || d == DomainVaultID || d == DomainSecretID || d == DomainEpochWrap {
+			t.Fatalf("domain %q: want a v2 domain distinct from every v1 domain", d)
+		}
+	}
+}

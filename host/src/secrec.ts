@@ -43,6 +43,17 @@ export const TagFunding = Uint8Array.of(0x73, 0x65, 0x02)
 export const MagicVault = Uint8Array.of(0x73, 0x65, 0x76, 0x01)
 export const MagicSecret = Uint8Array.of(0x73, 0x65, 0x73, 0x01)
 export const MagicPayload = Uint8Array.of(0x73, 0x65, 0x70, 0x01)
+/**
+ * Reserved for a second record version: written by nothing, and refused as
+ * `magic` by every version-1 decoder (refusal-v1.json). No identifier or key
+ * is derived under the v2 domains.
+ */
+export const MagicVaultV2 = Uint8Array.of(0x73, 0x65, 0x76, 0x02)
+export const MagicSecretV2 = Uint8Array.of(0x73, 0x65, 0x73, 0x02)
+export const MagicPayloadV2 = Uint8Array.of(0x73, 0x65, 0x70, 0x02)
+export const DomainVaultIDV2 = 'bsecret vault id v2'
+export const DomainSecretIDV2 = 'bsecret secret id v2'
+export const DomainEpochWrapV2 = 'bsecret epoch wrap v2'
 
 /** Bounds. A reader accepts every record within them. */
 export const MaxSafe = Number.MAX_SAFE_INTEGER

@@ -39,6 +39,7 @@ basket starts with `bsecret`.
 | Record magic | `sev` `0x01` | vault record, version 1 | signed |
 | Record magic | `ses` `0x01` | secret record, version 1 | signed |
 | Record magic | `sep` `0x01` | payload (the plaintext inside a secret's ciphertext), version 1 | signed |
+| Record magic, reserved | `sev` `0x02`, `ses` `0x02`, `sep` `0x02` | a second record version's vault, secret and payload; written by nothing, refused as `magic` by every version-1 reader (`refusal-v1.json`) | reserved |
 | Topics | `tm_bsecret_<name>_<suffix>` | one topic per crypt: a readable `<name>` of at most 28 characters and a 10-letter random `<suffix>` fixed at the crypt's creation (spec section 10.1); the `tm_bsecret_` namespace belongs to bsecret | signed |
 | Lookup service | `ls_bsecret` | one per host, all crypts; every question names its crypt | signed |
 | Host route | `<base>/ls_bsecret/terms` | the host terms document (spec section 10.3) | signed |
@@ -46,6 +47,7 @@ basket starts with `bsecret`.
 | Domain string | `bsecret vault id v1` | hashed into a vault identifier (spec section 3.3). The registry has no row kind for domain strings; a note under the application | signed |
 | Domain string | `bsecret secret id v1` | hashed into a secret identifier (spec section 5.2) | signed |
 | Domain string | `bsecret epoch wrap v1` | hashed into the key that wraps a content key under an epoch (spec section 6.3) | signed |
+| Domain strings, reserved | `bsecret vault id v2`, `bsecret secret id v2`, `bsecret epoch wrap v2` | a second record version's identifiers and epoch wrap; nothing of this version derives under them, so the next version's identifiers cannot collide with this one's | reserved |
 | Borrowed, not registered | `metanet keyed content symmetric v1`, `metanet keyed content commitment v1` | BRC-369 section 2's domain strings, used as written | signed (as a note in the registry) |
 | Used through borg, not registered | `[2, "keyed content release"]` | BRC-369's release derivation. bsecret derives nothing under it: the epoch keys it uses were released under it by borg | signed (as a note in the registry) |
 

@@ -108,7 +108,9 @@ no delegated writer.
 
 ## 3. The vault record
 
-Magic `"sev"` `0x01`. The second field of a vault token.
+Magic `"sev"` `0x01`. The second field of a vault token. `"sev"` `0x02` is
+reserved for a second record version and is written by nothing: a reader of
+this version refuses it as `magic` (section 3.1, step 5).
 
 | Key | Field | Type and bounds | Rule |
 | --- | --- | --- | --- |
@@ -365,6 +367,8 @@ for that identifier, a retired identifier's included.
 ## 5. The secret record
 
 Magic `"ses"` `0x01`. The payload of a secret carrier's one output.
+`"ses"` `0x02` is reserved for a second record version and is written by
+nothing: a reader of this version refuses it as `magic`.
 
 | Key | Field | Type and bounds | Rule |
 | --- | --- | --- | --- |
@@ -572,7 +576,9 @@ the identity key; the content key is random.
 
 ### 6.5 The payload
 
-Magic `"sep"` `0x01`. The plaintext the ciphertext holds.
+Magic `"sep"` `0x01`. The plaintext the ciphertext holds. `"sep"` `0x02` is
+reserved for a second record version and is written by nothing: a reader of
+this version refuses it as `magic`.
 
 | Key | Field | Type and bounds | Rule |
 | --- | --- | --- | --- |

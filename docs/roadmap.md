@@ -63,6 +63,9 @@ Ordered by what unblocks the most.
   fields sealed under a key the crypt's members hold, so the chain shows
   that a vault moved and not what it holds. It trades the audit anyone can
   run for an audit the organization's members and invited auditors run.
+  Its magics (`sev`, `ses`, `sep` with version byte `0x02`) and domain
+  strings (`... v2`) are reserved now and written by nothing, and this
+  version refuses the magics, so the two versions can never be confused.
 - **A secret name that cannot be guessed from its identifier**, by a
   per-vault value folded into the identifier. It changes how a reader
   checks an identifier, so it waits for the same record version.

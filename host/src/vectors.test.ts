@@ -20,13 +20,19 @@ import {
   DefaultLabels,
   DomainCommitment,
   DomainEpochWrap,
+  DomainEpochWrapV2,
   DomainSecretID,
+  DomainSecretIDV2,
   DomainSymmetric,
   DomainVaultID,
+  DomainVaultIDV2,
   LookupService,
   MagicPayload,
+  MagicPayloadV2,
   MagicSecret,
+  MagicSecretV2,
   MagicVault,
+  MagicVaultV2,
   MaxLength,
   MaxPayload,
   Protocol,
@@ -96,6 +102,13 @@ test('derivation-v1: the registry values, every derived key and every identifier
   assert.equal(r.domainSecretId, DomainSecretID)
   assert.equal(r.domainEpochWrap, DomainEpochWrap)
   assert.deepEqual(r.defaultLabels, DefaultLabels)
+  const v2 = derivation.reserved
+  assert.equal(v2.magicVault, hex(MagicVaultV2))
+  assert.equal(v2.magicSecret, hex(MagicSecretV2))
+  assert.equal(v2.magicPayload, hex(MagicPayloadV2))
+  assert.equal(v2.domainVaultId, DomainVaultIDV2)
+  assert.equal(v2.domainSecretId, DomainSecretIDV2)
+  assert.equal(v2.domainEpochWrap, DomainEpochWrapV2)
   for (const d of derivation.derivedKeys) {
     for (const k of ['vault', 'secret', 'chain']) assert.equal(readerLockingKey(Protocol, k, d.identityKey).toString(), d[k], `${d.party} ${k}`)
   }

@@ -77,6 +77,24 @@ var (
 	MagicPayload = []byte{'s', 'e', 'p', 0x01}
 )
 
+// Reserved for a second record version (docs/roadmap.md): the magics and
+// domain strings a version-2 vault, secret and payload would carry. Nothing
+// writes them. Every version-1 decoder refuses the magics as `magic`
+// (refusal-v1.json), and no identifier or key is derived under the domains,
+// so a record of the next version can never be read as one of this version
+// and the next version's identifiers can never collide with this version's.
+var (
+	MagicVaultV2   = []byte{'s', 'e', 'v', 0x02}
+	MagicSecretV2  = []byte{'s', 'e', 's', 0x02}
+	MagicPayloadV2 = []byte{'s', 'e', 'p', 0x02}
+)
+
+const (
+	DomainVaultIDV2   = "bsecret vault id v2"
+	DomainSecretIDV2  = "bsecret secret id v2"
+	DomainEpochWrapV2 = "bsecret epoch wrap v2"
+)
+
 // Derivations under [1, "bsecret"], each with counterparty anyone, so a
 // reader derives the key from the identity key alone.
 var (

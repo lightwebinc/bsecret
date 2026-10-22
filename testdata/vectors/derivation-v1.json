@@ -175,6 +175,15 @@
     "tagVault": "736501",
     "topicPrefix": "tm_bsecret_"
   },
+  "reserved": {
+    "domainEpochWrap": "bsecret epoch wrap v2",
+    "domainSecretId": "bsecret secret id v2",
+    "domainVaultId": "bsecret vault id v2",
+    "magicPayload": "73657002",
+    "magicSecret": "73657302",
+    "magicVault": "73657602",
+    "note": "a second record version's magics and domain strings, reserved and unused: a version-1 reader refuses the magics as magic (refusal-v1.json) and derives nothing under the domains"
+  },
   "selfWrap": {
     "contentId": "4d8c1a10ef5bbde5bf4433ef5a62ce62d34aa93e4680e734014b1bbf97f3485b",
     "counterparty": "self",

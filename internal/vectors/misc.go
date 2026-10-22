@@ -566,6 +566,7 @@ func genRefusal(s *Scenario, files map[string][]byte) error {
 			return b
 		}(), "key-type"},
 		{"vault", "the secret magic", mutate(vault, 0, secrec.MagicSecret), "magic"},
+		{"vault", "the reserved version-2 vault magic", mutate(vault, 0, secrec.MagicVaultV2), "magic"},
 		{"vault", "crypt missing", mutate(vault, 1, deleted{}), "missing"},
 		{"vault", "crypt as bytes", mutate(vault, 1, []byte(Crypt)), "type"},
 		{"vault", "crypt without a suffix", mutate(vault, 1, "example_crypt"), "crypt"},
@@ -626,6 +627,7 @@ func genRefusal(s *Scenario, files map[string][]byte) error {
 
 		{"secret", "over the bound", mutate(sec.Raw, 40, bytes.Repeat([]byte{0}, secrec.MaxSecretRecord)), "too-large"},
 		{"secret", "the vault magic", mutate(sec.Raw, 0, secrec.MagicVault), "magic"},
+		{"secret", "the reserved version-2 secret magic", mutate(sec.Raw, 0, secrec.MagicSecretV2), "magic"},
 		{"secret", "owner key alias (02 || p+1)", mutate(sec.Raw, 2, aliasKey()), "identity"},
 		{"secret", "id of 31 bytes", mutate(sec.Raw, 4, bytes.Repeat([]byte{1}, 31)), "range"},
 		{"secret", "version 0", mutate(sec.Raw, 5, uint64(0)), "range"},
@@ -660,6 +662,7 @@ func genRefusal(s *Scenario, files map[string][]byte) error {
 		}(), "range"},
 
 		{"payload", "the secret magic", mutate(sec.Plain, 0, secrec.MagicSecret), "magic"},
+		{"payload", "the reserved version-2 payload magic", mutate(sec.Plain, 0, secrec.MagicPayloadV2), "magic"},
 		{"payload", "a name with an upper-case letter", mutate(sec.Plain, 1, "DB/password"), "name"},
 		{"payload", "a name with an empty segment", mutate(sec.Plain, 1, "db//password"), "name"},
 		{"payload", "a name that ends with a slash", mutate(sec.Plain, 1, "db/"), "name"},

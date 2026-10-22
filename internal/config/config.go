@@ -5,7 +5,7 @@
 // The overlay addresses have no default: the overlay hosts of the crypt and
 // of the hall, the facade, where large ciphertexts are kept, and the host a
 // priced question goes to. A default there would quietly send an
-// organisation's records, or a member's questions, to somebody else's
+// organization's records, or a member's questions, to somebody else's
 // server, so a command that needs one and finds none is a usage error.
 //
 // The chain services do, on mainnet and testnet, so that a home needs no
@@ -109,7 +109,7 @@ type Config struct {
 	// ObjectBound is the largest object the plane takes, in bytes.
 	ObjectBound int
 	// Org is the owner a reader's command reads when it names none: the
-	// organisation's identity key, 66 lowercase hex digits.
+	// organization's identity key, 66 lowercase hex digits.
 	Org string
 	// Originator is the BRC-100 originator presented to the wallet.
 	Originator string

@@ -1,6 +1,6 @@
-// Command bsecret keeps an organisation's secrets on overlay hosts, and
+// Command bsecret keeps an organization's secrets on overlay hosts, and
 // reads them as a member of the group a vault is keyed to: it creates an
-// identity home around a borg organisation's key, creates crypts and
+// identity home around a borg organization's key, creates crypts and
 // vaults, writes each version of a secret under a fresh content key wrapped
 // to the group's current epoch, acknowledges a new epoch of the group and
 // re-keys everything the vault held, retires and retracts, reads a secret

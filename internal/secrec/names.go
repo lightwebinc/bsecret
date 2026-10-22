@@ -15,7 +15,7 @@ import (
 // CheckIdentity refuses anything but a canonical compressed secp256k1 key
 // (bcommon guard.ParsePubKey): 33 bytes, prefix 0x02 or 0x03, an x-coordinate
 // below the field prime, and a point on the curve. Accepting an alias would
-// let two byte strings name one organisation.
+// let two byte strings name one organization.
 func CheckIdentity(k []byte) error {
 	if _, err := guard.ParsePubKey(k); err != nil {
 		return ErrIdentity

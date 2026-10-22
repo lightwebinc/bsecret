@@ -22,9 +22,8 @@ GorillaPool's public arcade, each checked as
 your own (`chain = asset:<URL>`) is the better option where you have one.
 
 There is no coinbase on mainnet or testnet for you to mine: a home is
-funded by a payment you send from your own wallet. `bsecret fund` without
-`-txid` or `-beef` is for a regtest chain you run (coinbase: only on a
-regtest chain you run, for development and tests).
+funded by a payment you send from your own wallet. `bsecret fund` with
+neither flag mines coinbase, which only a regtest chain you run allows.
 
 ## 2. Check the network from your machine
 
@@ -146,10 +145,10 @@ group   5a0c4d…9d12 in hall example_qzxkvbmwtr
 epoch   0
 anchor  version
 labels  confidential,internal,public,restricted
-token   seq 0 9c41…e2d0 mined at height 912410
+token   seq 0 9c41…e2d0 mined at height 970095
 $ bsecret put db/password < db-password.txt
 secret  db/password version 1 label confidential epoch 0: carrier 41f0…b7a3 (created)
-token   seq 1 0e6d…58c1 mined at height 912412: 1 secret(s), 0 stale, epoch 0
+token   seq 1 0e6d…58c1 mined at height 970097: 1 secret(s), 0 stale, epoch 0
 $ bsecret put api/token -file token.txt -label restricted -not-after 2027-01-01T00:00:00Z
 ```
 
@@ -189,10 +188,10 @@ $ printf 'correct horse' | bsecret rotate -check -set db/password=- -same-all
 ready   3 secret(s) owe a re-keying or a retirement (were the group to begin a new epoch now), and each has a choice: a revoke can be finished in 1 token(s)
 $ borg org remove $BOB -group engineering
 $ printf 'correct horse' | bsecret rotate -set db/password=- -same-all
-epoch   1 acknowledged: the group began it at height 912417 (a removal)
+epoch   1 acknowledged: the group began it at height 970102 (a removal)
 rekeyed api/token: the same value under epoch 1
 rekeyed db/password: a new value under epoch 1
-token   seq 4 5d77…90be mined at height 912418: 3 secret(s), 0 stale, epoch 1
+token   seq 4 5d77…90be mined at height 970103: 3 secret(s), 0 stale, epoch 1
 swept   3 version(s) keyed under epochs that have ended, or never listed: retracted at every honest host
 vault   7b1e…04aa settled at epoch 1
 ```
@@ -216,7 +215,7 @@ Anyone, with no home and no coin:
 $ bsecret -network main -header-url woc:main -hosts https://host-a.example.com,https://host-b.example.com \
     -crypt example_hmqzvtkwrx -org 02c6…9a1e -vault 7b1e…04aa audit -free
 …
-epoch   1 began at height 912417 (a member removed): acknowledged at height 912418, settled at height 912418
+epoch   1 began at height 970102 (a member removed): acknowledged at height 970103, settled at height 970103
 window  epoch 1: 1 block(s) from the block that began it to the token after which nothing was listed under an earlier epoch
 audit   OK: 6 token(s) mined, the owner's, linked from the first, lawful, consistent and keyed to the group
 ```
@@ -370,14 +369,14 @@ give the owner the line below; they run: bsecret enroll approve '<line>'; then: 
 bsecret-join-v1.eyJ2IjoxLCJuZXR3b3JrIjoibWFpbiIs…
 
 owner$ bsecret enroll approve 'bsecret-join-v1.eyJ2IjoxLCJuZXR3b3JrIjoibWFpbiIs…'
-request     03a1… joins vault 5d0c… vault_qhzkwbmrtp (group 9e41…) in hall example_abcdefghij
+request     03a1… joins vault 7b1e…04aa ops (group 5a0c4d…9d12) in hall example_qzxkvbmwtr
 fingerprint 4f2c-9b1e-07d3-a6c8
 label       web-1 (a claim)
-running     borg -hall example_abcdefghij org add 03a1… -group 9e41…
+running     borg -hall example_qzxkvbmwtr org add 03a1… -group 5a0c4d…9d12
 approved    the machine picks up its membership with: bsecret enroll wait
 
 machine$ bsecret enroll wait
-enrolled    a member of group 9e41… in hall example_abcdefghij, epoch 0's key opens with this key
+enrolled    a member of group 5a0c4d…9d12 in hall example_qzxkvbmwtr, epoch 0's key opens with this key
 ```
 
 In Kubernetes, the Deployment of section 16 does the machine's side in an

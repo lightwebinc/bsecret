@@ -36,10 +36,10 @@ type SyncReport struct {
 }
 
 // Sync catches this home up with the hosts (spec section 8.5): every vault
-// of the organisation in crypt, its chain from seq 0 read as any reader
+// of the organization in crypt, its chain from seq 0 read as any reader
 // reads it, against the home's own headers, and folded; every current
 // secret's record, and each one's name and claims through its self wrap,
-// which needs only the organisation's identity key; and every commitment
+// which needs only the organization's identity key; and every commitment
 // any token listed, so that none is ever published again. The funding tree
 // of every carrier the hosts answer is recorded, spent, so that a sweep or
 // the kill switch reaches versions another instance published; this home

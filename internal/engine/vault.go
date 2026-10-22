@@ -212,7 +212,7 @@ func (e *Engine) refresh(ctx context.Context, w *Writer) error {
 
 // tokenTx rebuilds a mined token of the home's own under a proof that
 // verifies against the publisher's headers, replacing a kept proof a
-// reorganisation left stale with the node's current one, in the home too.
+// reorganization left stale with the node's current one, in the home too.
 func (e *Engine) tokenTx(ctx context.Context, t *state.Token) (*transaction.Transaction, error) {
 	tx, err := rebuild(t)
 	if err != nil {
@@ -258,7 +258,7 @@ func (e *Engine) group(ctx context.Context, v *state.Vault) (*vread.Group, error
 }
 
 // EpochKey opens the symmetric key of one epoch of the group as the
-// organisation: through the wrap borg made to the organisation's signer
+// organization: through the wrap borg made to the organization's signer
 // key, by borg's member checks.
 func (e *Engine) EpochKey(ctx context.Context, g *vread.Group, epoch uint64) ([32]byte, error) {
 	var w wallet.Interface
@@ -270,7 +270,7 @@ func (e *Engine) EpochKey(ctx context.Context, g *vread.Group, epoch uint64) ([3
 	case e.Release != nil:
 		w, pub, err = vread.ReleaserWallet(e.Release, e.OrgKey())
 	default:
-		return [32]byte{}, errors.New("the organisation's identity key is not open: the signer key cannot be derived")
+		return [32]byte{}, errors.New("the organization's identity key is not open: the signer key cannot be derived")
 	}
 	if err != nil {
 		return [32]byte{}, err
@@ -285,15 +285,15 @@ func (e *Engine) EpochKey(ctx context.Context, g *vread.Group, epoch uint64) ([3
 		}
 	}
 	if errors.Is(err, vread.ErrNoWrap) {
-		return [32]byte{}, fmt.Errorf("the organisation's signer key %s: %w; a borg command run in the organisation's borg home publishes the wraps it still owes", hex.EncodeToString(pub), err)
+		return [32]byte{}, fmt.Errorf("the organization's signer key %s: %w; a borg command run in the organization's borg home publishes the wraps it still owes", hex.EncodeToString(pub), err)
 	}
 	if err != nil {
-		return [32]byte{}, fmt.Errorf("the organisation's signer key %s opens no wrap of epoch %d of the group: %w; run `borg org signer` in the organisation's borg home, which makes the signer key a member of every group so that the organisation's tooling holds each epoch's key (docs/usage.md)", hex.EncodeToString(pub), epoch, err)
+		return [32]byte{}, fmt.Errorf("the organization's signer key %s opens no wrap of epoch %d of the group: %w; run `borg org signer` in the organization's borg home, which makes the signer key a member of every group so that the organization's tooling holds each epoch's key (docs/usage.md)", hex.EncodeToString(pub), epoch, err)
 	}
 	return sym, nil
 }
 
-// CreateVault creates a vault keyed to a group of the organisation (spec
+// CreateVault creates a vault keyed to a group of the organization (spec
 // section 8.1): a chain tree, mined; vault token seq 0 spending one of its
 // outputs, with the vault identifier that outpoint gives, the group and its
 // latest epoch, the label set and the anchor mode; once it is mined, the
@@ -316,7 +316,7 @@ func (e *Engine) CreateVault(ctx context.Context, crypt, name, hall string, grou
 		return nil, fmt.Errorf("%w: the group: %v", ErrStale, err)
 	}
 	cur := g.Current()
-	// The organisation must be able to write under the epoch it names.
+	// The organization must be able to write under the epoch it names.
 	if _, err := e.EpochKey(ctx, g, cur.Epoch); err != nil {
 		return nil, err
 	}
@@ -938,7 +938,7 @@ func (e *Engine) publishToken(ctx context.Context, v *state.Vault, txid string) 
 		return err
 	}
 	// A token just mined waits for its block to reach the header source;
-	// one whose kept proof a reorganisation left stale takes the node's
+	// one whose kept proof a reorganization left stale takes the node's
 	// current proof.
 	tx, err := e.tokenTx(ctx, t)
 	if err != nil {

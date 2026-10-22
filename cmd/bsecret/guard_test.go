@@ -45,7 +45,7 @@ func TestAnAuditThatStopsEarlyListsItsTokens(t *testing.T) {
 	}
 }
 
-// sweepVersion retracts one version of the organisation's only vault, as
+// sweepVersion retracts one version of the organization's only vault, as
 // its owner: a sweep of the funding output its carrier spent.
 func (h *harness) sweepVersion(version uint64) { h.sweepVersionAs("org", version) }
 
@@ -161,7 +161,7 @@ func TestAHostAnsweringJunkDoesNotFailTheRead(t *testing.T) {
 	}
 }
 
-// A second home of the organisation learns, by sync, the versions an
+// A second home of the organization learns, by sync, the versions an
 // interval vault's other home published and did not list yet: its next
 // version follows them, and is not a second record at a version they hold.
 func TestSyncLearnsUnlistedVersions(t *testing.T) {
@@ -409,7 +409,7 @@ func TestALostTransitionDoesNotStopOtherWork(t *testing.T) {
 	other := vaultLine.FindStringSubmatch(h.must("org", "vault", "create", h.group, "-name", "other").stdout)[1]
 	h.mustIn("org", "one", "-vault", one, "put", "db/password")
 	h.mustIn("org", "tok", "-vault", other, "put", "api/token")
-	// A second home of the organisation, with coin and funding trees of
+	// A second home of the organization, with coin and funding trees of
 	// its own, caught up by sync.
 	h.identity("org2", true, "-borg", h.borg.Home)
 	h.must("org2", "sync")
@@ -590,7 +590,7 @@ func TestAPaymentIsRecordedBeforeItIsSent(t *testing.T) {
 	}
 }
 
-// namedVault creates a vault of the organisation under a display name this
+// namedVault creates a vault of the organization under a display name this
 // command would not write, as tooling that checks only the record's rule
 // would, and returns its identifier.
 func (h *harness) namedVault(group, name string) (string, error) {

@@ -136,7 +136,7 @@ func TestFillTakesAPrunedChainTreeFromTheOwnerHome(t *testing.T) {
 
 // A chain tree in the home is held to what the node's answer would be: a
 // record whose bytes are another transaction is refused, and a kept proof
-// a reorganisation left stale is replaced by the node's current one, or
+// a reorganization left stale is replaced by the node's current one, or
 // named when the node gives none.
 func TestFillChecksTheHomeChainTree(t *testing.T) {
 	t.Parallel()
@@ -161,7 +161,7 @@ func TestFillChecksTheHomeChainTree(t *testing.T) {
 	h.prune(tree)
 	h.forgetTokens()
 	r = h.run("org", "", "fill")
-	h.want(r, exitIncomplete, "its kept proof does not verify against the header source (a reorganisation, or no proof kept), and the node gives no current one")
+	h.want(r, exitIncomplete, "its kept proof does not verify against the header source (a reorganization, or no proof kept), and the node gives no current one")
 
 	h.editChainTrees("org", func(tr map[string]any) {
 		raw := tr["rawHex"].(string)

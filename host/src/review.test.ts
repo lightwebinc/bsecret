@@ -3,7 +3,7 @@
  * against the module on the real engine: a second, rootless chain under a
  * vault's identifier; a wrap under another epoch's key than the one its
  * record names; a rollback by an old inclusion path; storage that funding
- * does not bound; and two rooted tokens at one seq after a reorganisation.
+ * does not bound; and two rooted tokens at one seq after a reorganization.
  * The rest are where their own subject is tested:
  *
  *   suppression by a worse BEEF; headers that lag     engine.test.ts
@@ -255,7 +255,7 @@ test('storage: what funding does not bound is bounded by the rows, the floors an
   assert.deepEqual(again.outpointRow(`${owner.secretTree.id('hex')}.${a1.vout}`), s.ls.outpointRow(`${owner.secretTree.id('hex')}.${a1.vout}`))
 })
 
-test('a reorganisation: two rooted tokens at one seq are both answered, each branch folded on its own, and the set is that of the one the host\'s headers hold', async () => {
+test('a reorganization: two rooted tokens at one seq are both answered, each branch folded on its own, and the set is that of the one the host\'s headers hold', async () => {
   const chain = new Chain(90000)
   const s = await setup({ chain })
   const owner = new OwnerSim(crypt, 'reorg owner', chain)

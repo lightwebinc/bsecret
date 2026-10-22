@@ -221,10 +221,10 @@ async function main(): Promise<void> {
   const chain = new Chain(30000)
   const group = goldenGroup()
   const derivation = readVectors<{ group: { epochs: Array<{ epoch: number; symmetricKey: string; epochId: string }> } }>('derivation-v1.json')
-  // The group's epochs as the organisation that sampled their keys holds them.
+  // The group's epochs as the organization that sampled their keys holds them.
   const epochs: EpochRef[] = derivation.group.epochs.map((e) => ({ epoch: e.epoch, id: fromHex(e.epochId), symmetric: fromHex(e.symmetricKey) }))
   // The owner's trees are mined before the host starts, so its header source has a tip.
-  const owner = new OwnerSim(crypt, 'the organisation', chain, { key: identity('org') })
+  const owner = new OwnerSim(crypt, 'the organization', chain, { key: identity('org') })
   const [alice, bob, carol] = [identity('alice'), identity('bob'), identity('carol')]
   // The group's own tokens are borg's; the blocks stand for where an auditor finds them.
   const began = [chain.mine(fromNowhere([])).merklePath!.blockHeight]

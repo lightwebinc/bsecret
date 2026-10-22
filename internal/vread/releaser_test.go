@@ -11,7 +11,7 @@ import (
 	"github.com/lightwebinc/borg/borgrec"
 )
 
-// The organisation's own wallet opens borg's wrap to its signer key, as the
+// The organization's own wallet opens borg's wrap to its signer key, as the
 // releaser, and gets the key the signer key's own wallet gets; it opens
 // nothing else.
 func TestTheReleaserOpensTheWrapToTheSignerKey(t *testing.T) {

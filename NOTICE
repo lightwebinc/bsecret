@@ -3,7 +3,7 @@ Copyright 2026 Lightweb Inc. (https://lightweb.net)
 
 =========================================================================
 
-bsecret keeps an organisation's secrets on the BSV blockchain's overlay
+bsecret keeps an organization's secrets on the BSV blockchain's overlay
 hosts, which hold ciphertext and never a key. A secret is encrypted once
 under a random content key that is committed to before anyone holds it;
 the key is wrapped to the owner's own wallet and under the key of one
@@ -88,11 +88,12 @@ this notice does not modify those licenses.
   golang.org/x/crypto                          BSD License
   golang.org/x/net                             BSD License
 
-Three DIRECT dependencies, github.com/bsv-blockchain/go-sdk,
-github.com/lightwebinc/bcommon and github.com/lightwebinc/borg, are a
-rule this repository enforces in CI. bcommon is Lightweb Inc.'s library
+bsecret has three direct dependencies, github.com/bsv-blockchain/go-sdk,
+github.com/lightwebinc/bcommon and github.com/lightwebinc/borg (plus
+bcommon's devkit module, imported only by tests and tooling); CI enforces
+that set. bcommon is Lightweb Inc.'s library
 of the generic building blocks bsecret is made from, and borg is
-Lightweb Inc.'s organisation and group contract, whose reader packages
+Lightweb Inc.'s organization and group contract, whose reader packages
 bsecret imports; both are Apache-2.0. go-sdk brings the other six with
 it, and a statically linked binary contains them whether they were asked
 for directly or not.
@@ -108,7 +109,7 @@ that package. @bsv/sdk is not in it. The file imports @bsv/sdk by bare
 specifier from the overlay host's own installation, so the obligation for
 @bsv/sdk belongs to whoever installs it, which is the host operator. The
 host image built from host/Dockerfile adds the file to an overlay host
-image that already carries the borg module, whose own licence files
+image that already carries the borg module, whose own license files
 travel in that image.
 
 The npm @bsv packages are under the Open BSV License Version 6, whose

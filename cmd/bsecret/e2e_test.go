@@ -296,17 +296,17 @@ func TestClientE2E(t *testing.T) {
 	}
 	step("two reference hosts, each loading the borg module and the bsecret module, each carrying the hall and the crypt, each pricing audit and history")
 
-	// The organisation and the group are borg's.
-	r = borg.must("org", "org", "create", "Example Organisation", "-member", keys["alice"], "-member", keys["bob"], "-member", keys["carol"])
+	// The organization and the group are borg's.
+	r = borg.must("org", "org", "create", "Example Organization", "-member", keys["alice"], "-member", keys["bob"], "-member", keys["carol"])
 	if strings.Count(r.stdout, "grant   ") != 3 {
 		t.Fatalf("borg org create:\n%s\n%s", r.stdout, r.stderr)
 	}
 	r = borg.must("org", "group", "create", "engineering", "-member", keys["alice"], "-member", keys["bob"], "-member", keys["carol"])
 	group := borgGroupLine.FindStringSubmatch(r.stdout)[1]
-	// Without the signer key the organisation's tooling holds no epoch key.
+	// Without the signer key the organization's tooling holds no epoch key.
 	h.want(h.run("org", "", "vault", "create", group, "-name", "ops"), exitUsage, "borg org signer")
 	borg.must("org", "org", "signer")
-	step("borg: org create, three grants; group create; org signer, so the organisation's tooling opens each epoch's key")
+	step("borg: org create, three grants; group create; org signer, so the organization's tooling opens each epoch's key")
 
 	r = h.must("org", "vault", "create", "engineering", "-name", "ops")
 	vault := vaultLine.FindStringSubmatch(r.stdout)[1]

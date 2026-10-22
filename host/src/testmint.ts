@@ -2,7 +2,7 @@
  * Test helpers that make fresh bsecret objects the golden vectors do not
  * hold: funding trees and vault tokens mined on a local chain, secrets
  * sealed and wrapped by the TypeScript SDK, carriers and sweeps. OwnerSim
- * and VaultSim are a minimal stand-in for an organisation's tooling: they
+ * and VaultSim are a minimal stand-in for an organization's tooling: they
  * keep each vault's set and build every transition the way spec section 7.1
  * says, or, on request, the way it says not to. Every key is drawn from a
  * fixed label, so a party is the same on every run. Nothing here is part of
@@ -81,7 +81,7 @@ export class Chain {
     this.roots.set(height, a.merklePath.computeRoot(a.id('hex')))
   }
 
-  /** Takes the block at height out of the best chain: a reorganisation orphaned it. */
+  /** Takes the block at height out of the best chain: a reorganization orphaned it. */
   orphan(height: number): void {
     this.roots.delete(height)
   }
@@ -203,7 +203,7 @@ export async function sweep(tree: Transaction, vouts: number[], owner: Party, ch
 export const commitment = (tx: Transaction): Uint8Array => Uint8Array.from(tx.hash() as number[])
 export const cHex = (tx: Transaction): string => toHex(commitment(tx))
 
-/** One epoch of the vault's group, as the organisation that sampled its key holds it. */
+/** One epoch of the vault's group, as the organization that sampled its key holds it. */
 export interface EpochRef {
   epoch: number
   id: Uint8Array

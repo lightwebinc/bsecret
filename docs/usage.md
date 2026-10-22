@@ -115,7 +115,7 @@ both the hall and the crypt.
 | `vault list` | optional | a reader's settings | the owner's vaults the hosts answer |
 | `vault show` | optional | a reader's settings | one vault's chain token by token as verified here, its standing against its group, whether its last token is the latest, and its set |
 | `put <name>` | yes, the owner's | a publisher's | the next version of a secret, its value from standard input or `-file`: sealed, wrapped, its carrier published, and listed in the vault's next token. `-label`, `-type`, `-not-after`, `-rotate-every`; `-defer` (interval vaults) |
-| `anchor` | yes, the owner's | a publisher's | an interval vault: one token listing the latest deferred version of each secret |
+| `anchor` | yes, the owner's | a publisher's | an interval vault: one token listing the latest deferred version of each secret, and a sweep of the versions published between two anchors |
 | `retire <name>...` | yes, the owner's | a publisher's | one token retiring the secrets, then a sweep of every version of them (`-keep` leaves them answered) |
 | `rotate` | yes, the owner's | a publisher's | acknowledges the group's new epoch and re-keys or retires everything stale, 64 secrets a token, then sweeps what the ended epochs held. Each stale secret needs `-set NAME=FILE`, `-same NAME` (or `-same-all`) or `-retire NAME`. `-check` builds nothing; `-keep`; `-unwrapped` |
 | `sync` | yes, the owner's, funded to go on | a publisher's, `crypt` | rebuilds the home's record of its vaults from the hosts: chains, current records, names (through the self wraps), commitments, and the funding trees of the carriers answered |
@@ -220,8 +220,9 @@ that its permission policy can be set:
 
 Two things still need an embedded wallet in this version: a priced
 question and `payee settle`, which pay and take through the home's own
-wallet (ask a priced question from a member's or an auditor's home; a
-payee's key is the host's, and the host holds it as a file anyway). And
+wallet (a priced question needs a funded home, a member's or an auditor's;
+a home with no coin cannot ask one. A payee's key is the host's, and the
+host holds it as a file anyway). And
 borg reads the organization's key from its own home: a key held only by a
 wallet needs borg to sign through one too, so until it does, keep the borg
 home with the wallet, offline between borg commands.
@@ -294,13 +295,12 @@ unspent too. The evidence is taken again as each token is built. Without
 it nothing is written (exit 1): a vault's tip spent by something this home
 does not know means another home moved the vault (`bsecret sync`), or the
 vault is terminated. Only a positive "unspent" counts: a node's status
-`OK`, or WhatsOnChain's "known output, no spend" (404). A source that
-answers anything else (a node's `NOT_FOUND`, which it also answers for an
-output it pruned or could not read, `IMMATURE`, `FROZEN`, a `SPENT` naming
-no spender; WhatsOnChain's "unknown output" (400)) or cannot be read is no
-evidence either, and the message says
-`the node could not say whether ... is spent`; run the command again once
-the node answers.
+`OK`, or WhatsOnChain's "known output, no spend" (404). Any other answer
+(a node's `NOT_FOUND`, which it also gives for an output it pruned or could
+not read, `IMMATURE`, `FROZEN`, a `SPENT` naming no spender; WhatsOnChain's
+"unknown output", 400), or none, is no evidence: the command says
+`the node could not say whether ... is spent`; run it again once the node
+answers.
 
 **A version.** `put` draws a content key and a salt at random, pads the
 payload (the name, the value, the claims) to a multiple of 256 bytes, seals
@@ -600,7 +600,8 @@ the vault's latest and the group's latest token is the group's),
 behind or in debt), `stale` (not `latest`, which includes a walk that
 failed), `unanchored` and `incomplete`; `none` serves every value it
 verified. The default, `exposed,unsettled,stale`, is what `get -strict`
-refuses. A refused value is answered 409 with its standing and the
+refuses; `get -strict` does not refuse an unanchored value, only `-refuse
+unanchored` does. A refused value is answered 409 with its standing and the
 conditions it met, and no value. A vault that is ahead of its group,
 broken, terminated or rolled back serves nothing (503). A walk that fails
 for another reason (a host or the header source down) leaves the values
@@ -743,14 +744,16 @@ host's terms route (`paid_host`, or `-at`) over BRC-104; the host answers
 402 with its price, and the question is asked again with a BRC-29 payment
 from this home's pool (BRC-105) as output 0, which the host records and its
 payee settles. One payment buys one page, and one question is paid for
-once: a host that asks again is refused. A payment is recorded in the home
+once: a host that asks again is refused. A host may hold the payment
+until it is accepted before it answers; in testing a paid audit took
+about a minute. A payment is recorded in the home
 before it is sent, and from then on it is made: its coin is not reused,
 whatever the host answers. A price over `-max-sats` (default 1000) is not
 paid, and `audit` pays at most `-budget` (default 16000) over all its
 pages: a page it may not pay ends the command (exit 2), with the trail not
 complete and what was paid for the pages before spent. A page that repeats
-tokens of an earlier one is refused. The change of an unmined payment is spendable by this
-home's next payment at once, up to 16 in a row. Everything a priced class
+tokens of an earlier one is refused. The change of an unmined payment is
+spendable by this home's next payment at once, up to 16 in a row. Everything a priced class
 answers is also reachable free, one item at a time: `audit -free`, and `get
 -version N`.
 

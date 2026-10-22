@@ -227,7 +227,7 @@ func genVault(s *Scenario, files map[string][]byte) error {
 	}{
 		{"seq skips", 0, func(v *secrec.Vault) { v.Seq = 2 }, secrec.ErrTransition},
 		{"prev names another transaction", 0, func(v *secrec.Vault) { v.Prev = label("txid/elsewhere") }, secrec.ErrTransition},
-		{"another organisation", 0, func(v *secrec.Vault) { v.Org = Alice.Pub() }, secrec.ErrTransition},
+		{"another organization", 0, func(v *secrec.Vault) { v.Org = Alice.Pub() }, secrec.ErrTransition},
 		{"another crypt", 0, func(v *secrec.Vault) { v.Crypt = "example_crypt_qzxkvbmwtr" }, secrec.ErrTransition},
 		{"another vault id", 0, func(v *secrec.Vault) { v.Vault = label("vault/other") }, secrec.ErrTransition},
 		{"another group", 0, func(v *secrec.Vault) { v.Group[0] ^= 1 }, secrec.ErrTransition},

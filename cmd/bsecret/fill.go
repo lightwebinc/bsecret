@@ -200,7 +200,7 @@ func (f *filler) nodeTree(ctx context.Context, v *vread.ChainView, tok *transact
 // homeTree is the chain tree id as the home's record keeps it, held to
 // what the node's answer would be held to: its bytes are the transaction
 // the token spends, and its proof verifies against this home's headers. A
-// kept proof that no longer verifies (a reorganisation) is replaced by the
+// kept proof that no longer verifies (a reorganization) is replaced by the
 // node's current one when the node answers; the home is not written.
 func (f *filler) homeTree(ctx context.Context, id string, rec *funding.Tree) (*transaction.Transaction, error) {
 	tx, err := funding.Rebuild(rec.RawHex, rec.BumpHex, rec.BeefHex)
@@ -220,11 +220,11 @@ func (f *filler) homeTree(ctx context.Context, id string, rec *funding.Tree) (*t
 		}
 	}
 	if f.asset == nil {
-		return nil, errors.New("its kept proof does not verify against the header source (a reorganisation, or no proof kept), and no chain view is configured (config key chain) to give a current one")
+		return nil, errors.New("its kept proof does not verify against the header source (a reorganization, or no proof kept), and no chain view is configured (config key chain) to give a current one")
 	}
 	mp, err := f.asset.MerkleProof(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("its kept proof does not verify against the header source (a reorganisation, or no proof kept), and the node gives no current one: %w", err)
+		return nil, fmt.Errorf("its kept proof does not verify against the header source (a reorganization, or no proof kept), and the node gives no current one: %w", err)
 	}
 	if ok, err := mp.Verify(ctx, tx.TxID(), f.t.rd.Headers); err != nil || !ok {
 		return nil, errors.New("neither its kept proof nor the node's current one verifies against the header source")

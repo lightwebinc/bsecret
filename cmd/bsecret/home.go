@@ -234,7 +234,7 @@ func (g *global) peekState() *state.State {
 	return st
 }
 
-// identityKey is the home's identity private key: an organisation's when
+// identityKey is the home's identity private key: an organization's when
 // this home owns vaults, from which its signer key is derived.
 func (g *global) identityKey() (*ec.PrivateKey, error) {
 	return payee.HomeKey(g.cfg.Home, "bsecret")

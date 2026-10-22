@@ -11,7 +11,7 @@
 #
 # No ENV defaults are baked in. The hosts, the header source, the node and
 # the settlement leg are addresses of somebody's deployment and have no
-# default anywhere: a default would send an organisation's records, or a
+# default anywhere: a default would send an organization's records, or a
 # member's questions, to a server nobody configured. Pass them as
 # BSECRET_<KEY> variables or in a config file (docs/usage.md).
 #
@@ -76,7 +76,7 @@ COPY --from=builder --chown=65532:65532 --chmod=0700 /state/.bsecret /home/nonro
 # BSECRET_CONTENT names it: ciphertext is public, so others may read it.
 COPY --from=builder --chown=65532:65532 --chmod=0755 /state/content /var/lib/bsecret-content
 
-# The licences travel with the image. The binary statically contains
+# The licenses travel with the image. The binary statically contains
 # go-sdk and the other modules LICENSE-THIRD-PARTY lists, whose licences
 # require their text in any copy, and static linking leaves those files
 # behind.

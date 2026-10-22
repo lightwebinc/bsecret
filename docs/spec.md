@@ -51,7 +51,7 @@ secret record is a fact about one version, ordered by the token that lists
 it.
 
 ```text
- owner (the organisation's wallet)
+ owner (the organization's wallet)
     │
     ├── secret carriers S (one per version) ──▶ plane ──▶ hosts     ciphertext, wraps; no key
     │

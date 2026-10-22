@@ -415,7 +415,7 @@ type Seen struct {
 }
 
 // SeenGroup is the latest token of one group's chain this identity
-// verified: borg's hall, the organisation, and the chain borg's reader
+// verified: borg's hall, the organization, and the chain borg's reader
 // names (a group id).
 type SeenGroup struct {
 	Hall  string `json:"hall"`
@@ -602,7 +602,7 @@ func (s *State) See(v Seen) {
 }
 
 // Forget drops what was seen of a vault: the token remembered is no longer
-// mined, so a reorganisation displaced it (spec section 14).
+// mined, so a reorganization displaced it (spec section 14).
 func (s *State) Forget(crypt, org, vault string) {
 	s.Seen = slices.DeleteFunc(s.Seen, func(x Seen) bool { return x.Crypt == crypt && x.Org == org && x.Vault == vault })
 }
@@ -632,7 +632,7 @@ func (s *State) SeeGroup(v SeenGroup) {
 }
 
 // ForgetGroup drops what was seen of a group's chain: the token remembered
-// is no longer mined, so a reorganisation displaced it.
+// is no longer mined, so a reorganization displaced it.
 func (s *State) ForgetGroup(hall, org, chain string) {
 	s.SeenGroups = slices.DeleteFunc(s.SeenGroups, func(x SeenGroup) bool { return x.Hall == hall && x.Org == org && x.Chain == chain })
 }

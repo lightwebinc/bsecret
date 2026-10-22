@@ -324,7 +324,7 @@ const (
 	// verified before stays its floor.
 	MemoryUnknown
 	// MemoryDisplaced: the last token's stored proof does not verify and
-	// the chain source says the transaction is not mined: a reorganisation
+	// the chain source says the transaction is not mined: a reorganization
 	// displaced it. The reader forgets it and reads the chain again (spec
 	// section 14).
 	MemoryDisplaced
@@ -340,7 +340,7 @@ const (
 // proof no longer does, the chain source is asked for the transaction's
 // current proof (spec section 14): one that verifies replaces the stored
 // one; only the source's word that the transaction is not mined is a
-// reorganisation. A header source or chain source that fails proves
+// reorganization. A header source or chain source that fails proves
 // nothing, and nothing is forgotten on its account: forgetting would let a
 // host that rolled the vault back be believed by a reader whose header
 // source blinked. The tokens before the last are held to it by spends when

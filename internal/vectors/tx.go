@@ -194,7 +194,7 @@ func params(d pushdrop.Derivation) carrier.Params {
 // transactions, so that every txid a record names is a transaction's.
 type txEnv struct {
 	ctx  context.Context
-	o, d *actor // the organisation, and a stranger
+	o, d *actor // the organization, and a stranger
 	c    *chain
 	coin *transaction.Transaction
 	sec  *transaction.Transaction // the secret tree, funding carriers
@@ -314,7 +314,7 @@ func (e *txEnv) next(epoch uint64, create, update []*Version, retire []string, h
 }
 
 func (e *txEnv) build(s *Scenario) error {
-	// The coin: outputs paying the organisation's fund key, from nowhere,
+	// The coin: outputs paying the organization's fund key, from nowhere,
 	// mined.
 	e.coin = transaction.NewTransaction()
 	e.coin.AddInput(&transaction.TransactionInput{SourceTXID: fixedHash(0x11), UnlockingScript: &script.Script{},

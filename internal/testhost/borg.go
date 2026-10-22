@@ -71,7 +71,7 @@ func (x *borgIndex) admit(hall, id string, beef []byte, tx *transaction.Transact
 }
 
 // answer answers the ls_borg classes a vault's reader asks: a group's
-// latest token and its token at a seq, the organisation's groups, and the
+// latest token and its token at a seq, the organization's groups, and the
 // wraps of an epoch.
 func (x *borgIndex) answer(q *borgrec.Question) ([]Output, error) {
 	m := q.Members
@@ -173,13 +173,13 @@ func (h *Host) Take(topic string, beef []byte) (bool, error) {
 	return !bytes.Contains(rec.body.Bytes(), []byte(`"outputsToAdmit":[]`)), nil
 }
 
-// Borg is an organisation's borg tooling reduced to what a vault needs of
+// Borg is an organization's borg tooling reduced to what a vault needs of
 // it: a hall, groups whose tokens are real mined transactions under borg's
 // own derivations and records (borgrec), epoch keys sampled at random and
-// wrapped to each member and to the organisation's signer key, and
+// wrapped to each member and to the organization's signer key, and
 // removals that begin a new epoch. Its home holds an identity.json as a
 // borg home does, which is what a bsecret home is made around. It issues no
-// grant and keeps no organisation chain: neither a host's admission of a
+// grant and keeps no organization chain: neither a host's admission of a
 // group token nor a vault's reader looks at one.
 type Borg struct {
 	Home  string
@@ -192,7 +192,7 @@ type Borg struct {
 	// NoWraps holds back the wraps of every epoch begun while it is set,
 	// until Wrap is called: a new epoch whose key is not yet released.
 	NoWraps bool
-	// NoSigner leaves the organisation's signer key out of new groups.
+	// NoSigner leaves the organization's signer key out of new groups.
 	NoSigner bool
 	rec      *transaction.Transaction
 	recNext  uint32
@@ -215,7 +215,7 @@ func borgParams(d pushdrop.Derivation) carrier.Params {
 	return carrier.Params{Derivation: d, FundingTag: borgrec.TagFunding, ValidatePayload: func([]byte) error { return nil }, ErrIdentity: borgrec.ErrIdentity}
 }
 
-// NewBorg makes an organisation whose home is dir, funded from the chain
+// NewBorg makes an organization whose home is dir, funded from the chain
 // served at chainURL, in a new hall the hosts carry.
 func NewBorg(dir, chainURL string, hosts ...*Host) (*Borg, error) {
 	e, err := bwallet.Create(dir, borgProfile)
@@ -238,13 +238,13 @@ func NewBorg(dir, chainURL string, hosts ...*Host) (*Borg, error) {
 	return b, nil
 }
 
-// Identity is the organisation's identity key, hex.
+// Identity is the organization's identity key, hex.
 func (b *Borg) Identity() string { return b.e.Signer().IdentityHex() }
 
-// Key is the organisation's identity key, compressed.
+// Key is the organization's identity key, compressed.
 func (b *Borg) Key() []byte { return b.e.Signer().Identity.Compressed() }
 
-// Signer is the organisation's signer key, compressed.
+// Signer is the organization's signer key, compressed.
 func (b *Borg) Signer() []byte {
 	k, err := borgrec.SignerKey(b.Key())
 	if err != nil {
@@ -375,7 +375,7 @@ func (b *Borg) token(g *borgGroup, rec *borgrec.Group, parent *transaction.Trans
 }
 
 // CreateGroup creates a group of members (identity keys, compressed), with
-// the organisation's signer key among them, and wraps epoch 0's key to
+// the organization's signer key among them, and wraps epoch 0's key to
 // each. It returns the group's identifier, hex.
 func (b *Borg) CreateGroup(name string, members ...[]byte) (string, error) {
 	gid, err := borgrec.NewGroupID(rand.Reader)

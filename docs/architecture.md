@@ -107,8 +107,8 @@ the fund address `init` prints and imports it with `bsecret fund -txid`, or
 hands over the BEEF its wallet made with `bsecret fund -beef`. No node is
 needed. Fees are the network's 100 sat per 1000 bytes with a 100-sat floor;
 a version costs about 107 sat ([limits.md](limits.md)). Members and free
-audits need no coin. `fund` without `-txid` or `-beef` mines coinbase (coinbase: only on a regtest chain you run,
-for development and tests).
+audits need no coin. On a regtest chain you run, `fund` with neither flag
+mines coinbase for development and tests.
 
 ## Trust
 

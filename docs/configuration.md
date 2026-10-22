@@ -216,7 +216,7 @@ headers     woc:main tip 970084
 | `put` | `-type` | none | a media type, kept inside the ciphertext |
 | `put` | `-not-after` | none | when the value stops being usable, RFC 3339 (a claim) |
 | `put` | `-rotate-every DUR` | none | how often the owner intends to rotate (a claim, reported by `due`) |
-| `put` | `-defer` | off | an interval vault: publish the version and list nothing yet |
+| `put` | `-defer` | off | an interval vault: publish the version and list nothing yet; refused for a secret's first version |
 | `retire` | `-keep` | off | do not sweep the retired secrets' versions |
 | `rotate` | `-set NAME=FILE` | none | a new value for a stale secret; repeatable |
 | `rotate` | `-same NAME` | none | re-key a stale secret with the value it holds; repeatable |
@@ -227,7 +227,7 @@ headers     woc:main tip 970084
 | `rotate` | `-unwrapped` | off | go on although some member holds no wrap of the new epoch's key |
 | `get` | `-show` | off | write the value to standard output although it is a terminal |
 | `get` | `-version N` | the latest | read this version, as history |
-| `get` | `-strict` | off | refuse an exposed value, a vault not settled, or a state that may be stale |
+| `get` | `-strict` | off | refuse an exposed value, a vault not settled, or a state that may be stale; an unanchored value is not refused (see `serve -refuse`) |
 | `enroll request` | `-label L` | none | a name for the machine the owner sees; a claim |
 | `enroll request` | `-group G`, `-hall H` | the vault's group | join a group by its identifier, when no vault is named |
 | `enroll request` | `-out FILE` | none | also write the request to this file |
@@ -252,7 +252,7 @@ headers     woc:main tip 970084
 | `audit` | `-json` | off | print the report as JSON |
 | `history` | `-at URL` | `paid_host` | the host's terms route |
 | `history` | `-after VERSION` | none | the page after this version |
-| `history` | `-max-sats N` | `1000` | the most one question is paid |
+| `history` | `-max-sats N` | `1000` | the most one page is paid |
 | `payee key` | `-out FILE` | none | the file to write `BSECRET_PAYEE_KEY` to (`-` for standard output) |
 | `payee settle` | `-in-flight N` | `16` | the most payments broadcast and not yet mined at once |
 | `kill` | `-confirm KILL` | none | must be the literal `KILL` |
@@ -275,7 +275,7 @@ An owner on mainnet with no node, publishing to two hosts in unicast
 ```text
 # ~/.bsecret/config
 network      = main
-crypt        = example_crypt_hmqzvtkwrx
+crypt        = example_hmqzvtkwrx
 hall         = example_hall_vkqzmtrwxp
 mode         = unicast
 hosts        = https://host-a.example.com,https://host-b.example.com
@@ -298,7 +298,7 @@ A member on testnet:
 
 ```text
 network      = test
-crypt        = example_crypt_hmqzvtkwrx
+crypt        = example_hmqzvtkwrx
 org          = 02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
 vault        = ops
 hosts        = https://host-a.example.com,https://host-b.example.com

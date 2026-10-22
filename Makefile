@@ -32,8 +32,8 @@ verify: fmt-check vet deps-check licences ts-check vectors-check test
 # -race and run once without it.
 test: go-test ts-test
 
-# cmd/bsecret takes ~5m under -race -count=2 on an idle runner; on the shared
-# self-hosted pool it passed Go's 10m default when PR runs overlapped.
+# cmd/bsecret takes ~5m under -race -count=2 on an idle runner and passed
+# Go's 10m default on a shared runner when runs overlapped.
 go-test:
 	GOWORK=off go test -race -count=2 -timeout 20m ./...
 	GOWORK=off go test -count=1 -run 'TestABudgetRunsOutBetweenPages$$' ./cmd/bsecret/
@@ -51,7 +51,7 @@ devchain:
 	GOWORK=off go build -o bin/devchain ./cmd/devchain
 
 # The borg command, built from the borg module at the tag go.mod pins: the
-# organisation, its members and its groups are borg's, so trying bsecret
+# organization, its members and its groups are borg's, so trying bsecret
 # and its end to end need it. Nothing of borg is copied here: the build
 # reads the module the go command resolved and verified.
 borg:
@@ -88,7 +88,7 @@ deps-check:
 	if [ "$$sdk" != "$(DEPS_SDK)" ]; then echo "deps-check: go-sdk must resolve to exactly $(lastword $(DEPS_SDK)), found: $$sdk"; exit 1; fi
 
 # LICENSE-THIRD-PARTY is generated from what the binaries link, so a new
-# dependency brings its licence obligation into the file rather than
+# dependency brings its license obligation into the file rather than
 # leaving it undischarged. licences fails when the file is stale.
 licences:
 	python3 scripts/gen-third-party-licenses.py . --check
@@ -136,7 +136,7 @@ e2e: ts-build
 # The bsecret command end to end against two local reference hosts, each
 # loading the borg module and the bsecret module, over a local chain
 # (bcommon's testchain) serving the node's API and the header source, with
-# the borg command built from the module go.mod pins: an organisation,
+# the borg command built from the module go.mod pins: an organization,
 # three members and a group (borg); a crypt and a vault on the group; three
 # secrets every member reads; a removal, which begins a new epoch; the
 # acknowledgement and the re-keying, after which the removed member reads

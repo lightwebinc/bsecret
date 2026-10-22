@@ -16,7 +16,7 @@ const MaxContext = 2048
 
 // InclusionContext is the BRC-24 context a secret answer carries (docs/spec.md
 // section 10.2): the vault token whose set was used, by its seq and its
-// txid (hash byte order; two tokens can share a seq after a reorganisation),
+// txid (hash byte order; two tokens can share a seq after a reorganization),
 // the secret's leaf index and the set's size, and the RFC 6962 inclusion
 // path.
 type InclusionContext struct {

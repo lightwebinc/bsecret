@@ -18,7 +18,7 @@ import (
 	"github.com/lightwebinc/bsecret/internal/vread"
 )
 
-// The stand-in organisation makes what borg's own reader accepts: a group
+// The stand-in organization makes what borg's own reader accepts: a group
 // chain it verifies and folds, and wraps a member opens by borg's checks.
 func TestBorgStandInSatisfiesBorgsReader(t *testing.T) {
 	chain := NewChain(700)
@@ -68,7 +68,7 @@ func TestBorgStandInSatisfiesBorgsReader(t *testing.T) {
 	if op := open(bob, 1); op.Label == "" {
 		t.Fatal("bob opened the epoch that began with his removal")
 	}
-	// The organisation's signer key is a member, and opens both.
+	// The organization's signer key is a member, and opens both.
 	orgKey, err := identityKey(org.Home)
 	if err != nil {
 		t.Fatal(err)
@@ -169,14 +169,14 @@ func TestReadGroupHoldsTheFloor(t *testing.T) {
 	rolled("a chain source that fails")
 	rd.Source = proofs{}
 	rolled("a chain source that holds the token mined")
-	// A reorganisation displaced the removal: the node says it is not
+	// A reorganization displaced the removal: the node says it is not
 	// mined, the floor forgets it, and the group is read as it now stands.
 	rd.Source = proofs{err: nodeapi.ErrNotMined}
 	g, err = vread.ReadGroup(ctx, rd, org.Hall, org.Key(), id)
 	if err != nil || g.Current().Epoch != 0 || fl.forgot != 1 {
-		t.Fatalf("after a reorganisation: %v, forgot %d", err, fl.forgot)
+		t.Fatalf("after a reorganization: %v, forgot %d", err, fl.forgot)
 	}
 	if s, _, ok := fl.Seen(org.Hall, hex.EncodeToString(org.Key()), gid); !ok || s != 0 {
-		t.Fatalf("the floor after the reorganisation: seq %d %v", s, ok)
+		t.Fatalf("the floor after the reorganization: seq %d %v", s, ok)
 	}
 }

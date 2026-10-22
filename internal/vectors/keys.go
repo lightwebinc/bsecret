@@ -38,7 +38,7 @@ func party(name string, b byte) Party {
 	return Party{Name: name, Priv: k}
 }
 
-// The parties: the organisation that owns the vault, three members of its
+// The parties: the organization that owns the vault, three members of its
 // group, and a key that is never a member. They are the identities the
 // group substrate's own vectors use, so the two vector sets describe one
 // scenario.
@@ -93,7 +93,7 @@ func displayHex(h [32]byte) string {
 }
 
 // GroupEpoch is one epoch of the vectors' group, as the group substrate's
-// own golden vectors give it: the key the organisation sampled, the BRC-369
+// own golden vectors give it: the key the organization sampled, the BRC-369
 // symmetric key and commitment it derives, and the epoch id. Holders is who
 // was a member during the epoch and so holds its key.
 type GroupEpoch struct {

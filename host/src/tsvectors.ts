@@ -40,7 +40,7 @@ export const file = new URL('../../testdata/ts/ts-v1.json', import.meta.url)
 
 const sha = (s: string): Uint8Array => sha256(utf8(s))
 
-/** The organisation's test key of the Go vectors: 32 bytes of 0x51. */
+/** The organization's test key of the Go vectors: 32 bytes of 0x51. */
 const orgKey = PrivateKey.fromHex('51'.repeat(32))
 const org = Uint8Array.from(orgKey.toPublicKey().encode(true) as number[])
 const orgWallet = new CompletedProtoWallet(orgKey)

@@ -607,7 +607,7 @@ func (e *Engine) Rotate(ctx context.Context, w *Writer, plan map[string]Choice, 
 			who = append(who, hex.EncodeToString(m))
 		}
 		if !allow {
-			return nil, fmt.Errorf("%w: epoch %d, %d member(s) (%v): a version keyed under it now could not be opened by them; run a borg command so the organisation's home publishes them, or pass -unwrapped to go on (a member in rotation debt is never wrapped to)", ErrUnwrapped, target.Epoch, len(missing), who)
+			return nil, fmt.Errorf("%w: epoch %d, %d member(s) (%v): a version keyed under it now could not be opened by them; run a borg command so the organization's home publishes them, or pass -unwrapped to go on (a member in rotation debt is never wrapped to)", ErrUnwrapped, target.Epoch, len(missing), who)
 		}
 		e.note("warning: %d member(s) hold no wrap of epoch %d and cannot open what is keyed under it: %v", len(missing), target.Epoch, who)
 	}

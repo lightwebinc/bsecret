@@ -17,7 +17,7 @@ the key is wrapped to the members of a group's current epoch; and when the
 group removes a member, the vault must re-key everything it holds before it
 does anything else.
 
-> **Frozen (2026-10-21).** `host/src` takes bug fixes only; new behavior goes to the Go core. The Go overlay engine (go-overlay-services on MongoDB) will replace this host module. Design: `1bsv-ops` `docs/integration/overlay/go-engine-migration.md`.
+> The TypeScript host module under `host/` is frozen: bug fixes only. A Go overlay engine will take its place; new behavior goes to the Go core.
 
 ## How it works
 
@@ -63,19 +63,18 @@ image `ghcr.io/lightwebinc/bsecret` (`make docker-build`).
 
 ## Example: a vault on mainnet
 
-The owner is a borg organization with a group (see
-[borg](https://github.com/lightwebinc/borg)), and has run `borg org signer`
-once. No node is needed: headers, transactions, proofs and spends come
-from WhatsOnChain and broadcasts go through GorillaPool's public arcade by
-default, every proof checked against the headers; a node of your own is the
-better option where you have one. Nothing is mined for you: the bsecret
-home is funded with a payment you send from your own wallet.
+The owner is a borg organization with a group that has run `borg org
+signer` once ([borg](https://github.com/lightwebinc/borg)). No node is
+needed: by default bsecret reads from WhatsOnChain and broadcasts through
+GorillaPool's public arcade, checking every proof against the headers; use
+your own node where you have one. Nothing is mined for you: fund the
+bsecret home with a payment from your own wallet.
 
 ```console
 $ bsecret -network main init -borg ~/.borg      # a home around the organization's identity
 identity     02c6…9a1e
 fund address 1EUY…zipY (main)
-$ # send about 20,000 sat from your own wallet to the fund address
+$ # send about 20,000 sat from your own wallet to the fund address (a vault and ninety versions cost under 10,000)
 $ bsecret fund -txid <txid of that payment>     # once mined; or fund -beef FILE at once
 $ bsecret crypt new example                     # give the printed BSECRET_CRYPTS line to your hosts
 $ bsecret vault create engineering              # a vault on a borg group; its display name is drawn at random
@@ -89,9 +88,9 @@ $ bsecret -org <key> -vault <id> audit -free    # anyone: the trail, from header
 The owner's bsecret home is made around the identity of its borg home and
 shares nothing else with it: the group's chain and its epoch keys are read
 from the hall's hosts by borg's own packages. Members and auditors need no
-coin. The full walk, on mainnet or testnet,
-is [docs/examples.md](docs/examples.md); a private sandbox that needs no
-coin is [QUICKSTART.md](QUICKSTART.md).
+coin. The full walk on mainnet or testnet is
+[docs/examples.md](docs/examples.md); a sandbox on one machine that needs
+no coin is [QUICKSTART.md](QUICKSTART.md).
 
 ## Documentation
 
@@ -134,7 +133,7 @@ vectors commands import.
 The record layer exists twice, held to one set of vectors: `internal/secrec`
 in Go, and `host/` in TypeScript. Each reads what the other writes
 (`testdata/vectors`, `testdata/ts`). `host/` is also the host module: the
-topic manager `tm_bsecret_<name>_<suffix>` and the lookup service
+topic manager `tm_bsecret_<crypt>` and the lookup service
 `ls_bsecret`, bundled into one file an overlay host loads by path.
 
 ## License

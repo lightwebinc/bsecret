@@ -35,14 +35,14 @@ type Group struct {
 
 // Forgetter is a reader's Floor that can forget one chain: what ReadGroup
 // asks of the floor when the token it remembers was displaced by a
-// reorganisation.
+// reorganization.
 type Forgetter interface {
 	Forget(hall, org, chain string)
 }
 
 // ReadGroup establishes the chain of group of org in hall through borg's
 // reader. org is the vault's owner: borg's reader verifies every token as
-// that organisation's, so a group it returns is the vault's organisation's
+// that organization's, so a group it returns is the vault's organization's
 // (spec section 7.2).
 //
 // When the reader has a Floor (borg's reader.Client.Floor), the group is
@@ -51,7 +51,7 @@ type Forgetter interface {
 // are answering an older state, one in which a member since removed is
 // still a member and the epoch that removal began does not exist. That is
 // refused (rollback). Only the chain source's word that the remembered
-// token is no longer mined, a reorganisation, makes the floor forget it;
+// token is no longer mined, a reorganization, makes the floor forget it;
 // a source that fails proves nothing, and nothing is forgotten on its
 // account.
 func ReadGroup(ctx context.Context, rd *reader.Client, hall string, org []byte, group [secrec.GroupIDLen]byte) (*Group, error) {
@@ -228,10 +228,10 @@ func (e *NoWrapError) Error() string {
 
 func (e *NoWrapError) Unwrap() error { return ErrNoWrap }
 
-// SignerWallet is the wallet of the organisation's signer key: the key
-// derived from the organisation's identity key that borg keeps a member of
+// SignerWallet is the wallet of the organization's signer key: the key
+// derived from the organization's identity key that borg keeps a member of
 // each group once `borg org signer` has run, so that every instance of the
-// organisation's tooling opens the epoch keys another instance sampled
+// organization's tooling opens the epoch keys another instance sampled
 // (borg's spec section 7.4; docs/spec.md section 8.5). It returns the
 // wallet and the signer's public key.
 func SignerWallet(orgKey *ec.PrivateKey) (wallet.Interface, []byte, error) {
@@ -246,15 +246,15 @@ func SignerWallet(orgKey *ec.PrivateKey) (wallet.Interface, []byte, error) {
 	return w, k.PubKey().Compressed(), nil
 }
 
-// ReleaserWallet is the organisation's own wallet acting for its signer key:
-// the wallet that holds the organisation's identity key, wherever that is (a
+// ReleaserWallet is the organization's own wallet acting for its signer key:
+// the wallet that holds the organization's identity key, wherever that is (a
 // hardware module, a remote signer), opening the wrap borg made to the signer
 // key from the releaser's side. A wrap is a BRC-2 ciphertext between the
-// organisation and the member under BRC-42 child keys, so the organisation,
+// organization and the member under BRC-42 child keys, so the organization,
 // which released it, derives the same key the member does: decrypting with
 // the member as counterparty opens it. The returned wallet answers borg's
 // member checks (reader.Open) as the signer key would, with no private key
-// leaving the organisation's wallet. orgKey is the organisation's identity
+// leaving the organization's wallet. orgKey is the organization's identity
 // key; it returns the wallet and the signer's public key.
 func ReleaserWallet(org wallet.Interface, orgKey []byte) (wallet.Interface, []byte, error) {
 	signer, err := borgrec.SignerKey(orgKey)
@@ -273,8 +273,8 @@ func ReleaserWallet(org wallet.Interface, orgKey []byte) (wallet.Interface, []by
 }
 
 // releaser is ReleaserWallet's wallet: a decryption whose counterparty is
-// the organisation is asked of the organisation's wallet with the signer key
-// as counterparty. Everything else is the organisation's wallet's.
+// the organization is asked of the organization's wallet with the signer key
+// as counterparty. Everything else is the organization's wallet's.
 type releaser struct {
 	wallet.Interface
 	org, signer *ec.PublicKey
@@ -283,7 +283,7 @@ type releaser struct {
 func (r *releaser) Decrypt(ctx context.Context, args wallet.DecryptArgs, originator string) (*wallet.DecryptResult, error) {
 	cp := args.Counterparty
 	if cp.Type != wallet.CounterpartyTypeOther || cp.Counterparty == nil || !cp.Counterparty.IsEqual(r.org) {
-		return nil, errors.New("vread: the releaser opens only the organisation's wraps to its signer key")
+		return nil, errors.New("vread: the releaser opens only the organization's wraps to its signer key")
 	}
 	args.Counterparty = wallet.Counterparty{Type: wallet.CounterpartyTypeOther, Counterparty: r.signer}
 	return r.Interface.Decrypt(ctx, args, originator)

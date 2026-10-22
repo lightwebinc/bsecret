@@ -592,7 +592,7 @@ func TestAuditOfAVaultThatDoesNotAcknowledge(t *testing.T) {
 	h.want(r, exitIncomplete, "due     db/password version 1 is keyed under epoch 0")
 }
 
-// A second home made around the organisation's identity rebuilds from the
+// A second home made around the organization's identity rebuilds from the
 // hosts and writes; the first home, whose vault another instance moved,
 // refuses to write until it catches up.
 func TestSyncOnASecondHome(t *testing.T) {
@@ -823,7 +823,7 @@ func TestThePlaneLosesAnObject(t *testing.T) {
 func TestTheTerminal(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	h.organisation()
+	h.organization()
 	h.identity("alice", false)
 	gid, err := h.borg.CreateGroup("engineering", h.keys["alice"])
 	if err != nil {
@@ -899,7 +899,7 @@ func TestALostTransition(t *testing.T) {
 	h := newHarness(t)
 	h.vault()
 	h.put("db/password", "one")
-	// A second home of the organisation, with coin and funding trees of
+	// A second home of the organization, with coin and funding trees of
 	// its own, caught up by sync: two instances never share a tree.
 	h.identity("org2", true, "-borg", h.borg.Home)
 	h.must("org2", "sync")
@@ -1132,7 +1132,7 @@ func (f fakeSource) MerkleProof(context.Context, string) (*transaction.MerklePat
 // back, leaves the highest seq verified in force, and hosts that roll the
 // vault back are still refused. Only the node's word that the remembered
 // token is not mined, after its stored proof stopped verifying, is a
-// reorganisation.
+// reorganization.
 func TestTheFloorSurvivesAFailingSource(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -1359,7 +1359,7 @@ func TestAnUnconfirmedCarrierIsNotPublished(t *testing.T) {
 	}
 }
 
-// After a reorganisation a proof kept from before may name a block that is
+// After a reorganization a proof kept from before may name a block that is
 // no longer in the best chain. A reader handed such a proof by a host, and
 // an owner holding one in its home, each take the transaction's current
 // proof from the node and verify that against their own headers.

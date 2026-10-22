@@ -6,8 +6,7 @@ it.
 
 A report is most useful with the version (`bsecret -version`), what you ran,
 what you expected, and what happened instead. We aim to acknowledge within
-three working days.
-
+three working days. Supported: the latest release.
 
 In scope:
 
@@ -21,3 +20,8 @@ In scope:
 - anything that leaks a key held by the owner or a member, or spends coin
   other than as its owner asked;
 - the images and the host module bundle.
+
+Not in scope, because the design states them as limits
+([docs/limits.md](docs/limits.md)): a removed member keeps what it could
+read before the re-key; metadata on the chain and at an open host is
+pseudonymous, not hidden; reads leave no footprint.

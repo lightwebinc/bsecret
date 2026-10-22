@@ -117,9 +117,9 @@ func (g *global) resolveGroup(ctx context.Context, rd *reader.Client, hall strin
 			// A host not asked, or whose walk was cut at borg's bound
 			// (reader.ErrTruncated), may hold the group: an empty answer
 			// proves nothing.
-			return [secrec.GroupIDLen]byte{}, incomplete("no group named %q of this organisation is answered in hall %s, and %d hall host(s) did not answer in full; name it by its identifier", termsafe.Abbrev(name), hall, len(errs))
+			return [secrec.GroupIDLen]byte{}, incomplete("no group named %q of this organization is answered in hall %s, and %d hall host(s) did not answer in full; name it by its identifier", termsafe.Abbrev(name), hall, len(errs))
 		}
-		return [secrec.GroupIDLen]byte{}, usage("no group named %q of this organisation is answered in hall %s; name it by its identifier", termsafe.Abbrev(name), hall)
+		return [secrec.GroupIDLen]byte{}, usage("no group named %q of this organization is answered in hall %s; name it by its identifier", termsafe.Abbrev(name), hall)
 	}
 	return [secrec.GroupIDLen]byte{}, usage("%d groups are named %q; name one by its identifier: %v", len(match), termsafe.Abbrev(name), match)
 }

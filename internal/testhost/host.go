@@ -1,6 +1,6 @@
 // Package testhost is the local stand-ins this module's tests run against:
 // an overlay host that carries bsecret crypts and borg halls, a plane, a
-// terms route, and an organisation's borg tooling reduced to what a vault
+// terms route, and an organization's borg tooling reduced to what a vault
 // needs of it. Nothing here is for real use.
 package testhost
 
@@ -89,7 +89,7 @@ type Host struct {
 	RewriteBorg func(q *borgrec.Question, outs []Output) []Output
 	// Stale answers every token, carrier and sweep under a proof that names
 	// another block than the one the chain mined it in: a host whose stored
-	// proofs a reorganisation left behind.
+	// proofs a reorganization left behind.
 	Stale bool
 	// Submits counts submissions; Refused counts refusals by reason; Asked
 	// counts the ls_bsecret questions answered, by class.

@@ -34,7 +34,7 @@ func (h *harness) serveWallet(name string) string {
 func TestTheOrganizationKeyInAWalletOfItsOwn(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	org := h.organisation()
+	org := h.organization()
 	for _, m := range []string{"alice", "bob", "carol"} {
 		h.identity(m, false)
 	}

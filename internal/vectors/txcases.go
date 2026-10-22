@@ -247,7 +247,7 @@ func (e *txEnv) cases() ([]txCase, error) {
 	if err != nil {
 		return nil, err
 	}
-	add(txCase{name: "carrier-lock-member-key", note: "the organisation's secret record locked and signed under alice's secret key: the lock is bound to the record's org. The field signature does not verify under the organisation's key either, and the lock is what refuses it", rule: rowCanonical,
+	add(txCase{name: "carrier-lock-member-key", note: "the organization's secret record locked and signed under alice's secret key: the lock is bound to the record's org. The field signature does not verify under the organization's key either, and the lock is what refuses it", rule: rowCanonical,
 		tx: carrierFrom(e.sec, 0, sUnlock, out(1000, alice.lock(sd, true, recA))), reason: "lock"})
 	sigA := sigOf(lockA, 1)
 	head := append(append([]byte{33}, sk.Compressed()...), script.OpCHECKSIG)
@@ -272,7 +272,7 @@ func (e *txEnv) cases() ([]txCase, error) {
 		tx: carrierFrom(e.sec, 0, sUnlock, out(1000, fieldSigOf(lockA, sk, 1, highSBytes))), reason: "signature"})
 	add(txCase{name: "carrier-field-signature-wrong-key", note: "a strict signature over the record by a stranger's key", rule: rowSigs,
 		tx: carrierFrom(e.sec, 0, sUnlock, out(1000, fieldSigOf(lockA, sk, 1, signWith(Dave.Priv, recA)))), reason: "signature"})
-	add(txCase{name: "carrier-field-signature-identity-key", note: "a strict signature over the record by the organisation's identity key rather than its secret key", rule: rowSigs,
+	add(txCase{name: "carrier-field-signature-identity-key", note: "a strict signature over the record by the organization's identity key rather than its secret key", rule: rowSigs,
 		tx: carrierFrom(e.sec, 0, sUnlock, out(1000, fieldSigOf(lockA, sk, 1, signWith(Org.Priv, recA)))), reason: "signature"})
 	add(txCase{name: "carrier-field-signature-padded", note: "the field signature with a zero byte before its R value: not the strict encoding", rule: rowSigs,
 		tx: carrierFrom(e.sec, 0, sUnlock, out(1000, fieldSigOf(lockA, sk, 1, padR))), reason: "signature"})
@@ -475,7 +475,7 @@ func (e *txEnv) tokenCases(add func(txCase)) error {
 		return err
 	}
 	ua := lock1(alice.lock(vd, true, secrec.TagVault, rec1), 1)
-	refuse("token-lock-member-key", "the organisation's seq 1 record locked and signed under alice's vault key. The field signature does not verify under the organisation's key either, and the lock is what refuses it", rowCanonical, ua, t0, "lock")
+	refuse("token-lock-member-key", "the organization's seq 1 record locked and signed under alice's vault key. The field signature does not verify under the organization's key either, and the lock is what refuses it", rowCanonical, ua, t0, "lock")
 	sig1 := sigOf(t1.Outputs[0].LockingScript, 2)
 	head := append(append([]byte{33}, vk.Compressed()...), script.OpCHECKSIG)
 	nm := append(append(append(append(append([]byte{}, head...), push(secrec.TagVault)...), push4(rec1)...), push(sig1)...), script.Op2DROP, script.OpDROP)

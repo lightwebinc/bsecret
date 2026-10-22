@@ -155,12 +155,12 @@ type Legs struct {
 type Engine struct {
 	St     *state.State
 	Signer *bwallet.Signer
-	// Key is the organisation's identity private key. It derives the
+	// Key is the organization's identity private key. It derives the
 	// signer key, the member of the vault's group through which the
-	// organisation opens an epoch's key (vread.SignerWallet).
+	// organization opens an epoch's key (vread.SignerWallet).
 	Key *ec.PrivateKey
 	// Release, when Key is nil, is the wallet that holds the
-	// organisation's identity key: an epoch's key is opened through it, as
+	// organization's identity key: an epoch's key is opened through it, as
 	// the releaser of borg's wrap to the signer key (vread.ReleaserWallet).
 	Release wallet.Interface
 	Pool    *bwallet.Pool
@@ -557,7 +557,7 @@ func (e *Engine) prove(ctx context.Context, kind string, tree *transaction.Trans
 }
 
 // reproveTree holds a funding tree's kept proof to the publisher's headers
-// and, when a reorganisation left it stale, replaces it with the node's
+// and, when a reorganization left it stale, replaces it with the node's
 // current one, in the home too: a carrier or a first token carrying a
 // proof of an orphaned block is refused by every host.
 func (e *Engine) reproveTree(ctx context.Context, tree *transaction.Transaction) error {

@@ -20,9 +20,9 @@ example `<host>/modules/bsecret/bsecret-module.js`) and name it by absolute
 path:
 
 ```sh
-OVERLAY_TOPICS=tm_bsecret_example_crypt_hmqzvtkwrx
+OVERLAY_TOPICS=tm_bsecret_example_hmqzvtkwrx
 OVERLAY_MODULES=/srv/overlay/modules/bsecret/bsecret-module.js
-BSECRET_CRYPTS=example_crypt_hmqzvtkwrx
+BSECRET_CRYPTS=example_hmqzvtkwrx
 BSECRET_STATE_DIR=/var/lib/bsecret
 BSECRET_HEADERS_URL=https://headers.example.com
 ```
@@ -238,9 +238,10 @@ Retention runs hourly. A dropped carrier is deleted from storage at once
 (after every admission and every retention pass); the engine's record that
 its transaction was applied remains, so offered again it is a duplicate. On
 a host whose storage cannot delete an output the module says so once in the
-log, and what it dropped stays in storage, unanswered. Funding does not bound what a key can store at a host
-(the value returns by sweep): these floors, the rows and the table do, and
-a host rate-limits submissions in front of the engine.
+log, and what it dropped stays in storage, unanswered. Funding does not
+limit what a key can store at a host, since a sweep returns the value;
+these floors, the rows and the table do, and submissions are rate-limited
+in front of the engine.
 
 ## The state directory
 
@@ -328,14 +329,16 @@ of their groups. A refusal comes before any price, so a stranger pays for
 nothing. Other crypts the host carries are answered as before.
 
 ```text
-BSECRET_CRYPTS=example_abcdefghij
-BSECRET_PRIVATE=example_abcdefghij=02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
+BSECRET_CRYPTS=example_hmqzvtkwrx
+BSECRET_PRIVATE=example_hmqzvtkwrx=02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
 BSECRET_HALL_URL=http://127.0.0.1:8080
 BSECRET_LISTEN=0.0.0.0:8443
 BSECRET_PAYEE_KEY=<64 hex characters: the route's BRC-104 identity>
 ```
 
-Membership is borg's. For an asker that is not one of the organizations,
+Membership is borg's: an asker who is a current member of any group of a
+named organization is served, not only of the group a vault is keyed to.
+For an asker that is not one of the organizations,
 the module asks each `BSECRET_HALL_URL` borg's `member-of` question for
 each hall the organization's vaults in the crypt name, as the host's index
 holds them; any host that answers a group is enough. The answer is kept for

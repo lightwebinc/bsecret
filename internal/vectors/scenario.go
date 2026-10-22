@@ -280,7 +280,7 @@ func (s *Scenario) record(epoch uint64, create, update []*Version, retire []stri
 	return raw, back, nil
 }
 
-// Build makes the scenario: one vault of the organisation, keyed to the
+// Build makes the scenario: one vault of the organization, keyed to the
 // group's epochs, through a removal and a scheduled rotation.
 func Build() (*Scenario, error) {
 	s := &Scenario{Versions: map[string]*Version{}, set: map[[32]byte]secrec.Current{}, Labels: secrec.DefaultLabels, Used: secrec.NewCommitments()}

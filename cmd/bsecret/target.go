@@ -55,7 +55,7 @@ func (g *global) readTarget(ctx context.Context, needVault bool) (*target, error
 		t.orgHex, t.own = t.st.Identity, true
 	}
 	if t.orgHex == "" {
-		return nil, usage("no owner: set org (or -org) to the identity key of the organisation that owns the vault")
+		return nil, usage("no owner: set org (or -org) to the identity key of the organization that owns the vault")
 	}
 	if t.org, err = parseKey("org", t.orgHex); err != nil {
 		return nil, err
@@ -150,7 +150,7 @@ func (g *global) noChain(t *target, v *vread.ChainView, err error) error {
 			g.say("host %s: REFUSED token %s (%s): %v", r.Host, termsafe.Abbrev(r.Txid), r.Reason, r.Err)
 		}
 		if n := len(v.Refused); n > 0 {
-			return incomplete("vault %s: the hosts answered %d token(s) and none verifies against the header source %s: nothing is established. A header source that does not answer fails every answer the same way (bsecret doctor), and a proof a reorganisation displaced is replaced only from the chain view (config key chain)", vread.Short(t.vaultHex()), n, g.cfg.HeaderURL)
+			return incomplete("vault %s: the hosts answered %d token(s) and none verifies against the header source %s: nothing is established. A header source that does not answer fails every answer the same way (bsecret doctor), and a proof a reorganization displaced is replaced only from the chain view (config key chain)", vread.Short(t.vaultHex()), n, g.cfg.HeaderURL)
 		}
 	}
 	return incomplete("vault %s: %v: an empty answer proves nothing", vread.Short(t.vaultHex()), err)
@@ -244,7 +244,7 @@ func (g *global) ratchet(st *state.State, t *target, v *vread.ChainView) (proble
 			problem = incomplete("a host answers an older state of the vault than this home verified; the vault is read from the others")
 		}
 		if v.Tokens[s.Seq].Txid != s.Txid {
-			g.say("the token at seq %d is %s, and this home verified %s: a reorganisation displaced it, or the hosts answer a fork", s.Seq, v.Tokens[s.Seq].Txid, s.Txid)
+			g.say("the token at seq %d is %s, and this home verified %s: a reorganization displaced it, or the hosts answer a fork", s.Seq, v.Tokens[s.Seq].Txid, s.Txid)
 		}
 	}
 	last := v.Latest()
@@ -285,7 +285,7 @@ func (g *global) open(ctx context.Context, t *target, st *state.State) (*opened,
 			g.say("the copy of the vault's chain this home kept does not read back; it is dropped and the chain is read again from its first token. What this home verified stays its floor")
 			state.DropChain(g.cfg.Home, t.crypt, t.orgHex, t.vaultHex())
 		case vread.MemoryDisplaced:
-			g.say("the token this home remembered of the vault no longer verifies against the header source, and the node says it is not mined: a reorganisation displaced it. It is forgotten, and the chain is read again from its first token")
+			g.say("the token this home remembered of the vault no longer verifies against the header source, and the node says it is not mined: a reorganization displaced it. It is forgotten, and the chain is read again from its first token")
 			state.DropChain(g.cfg.Home, t.crypt, t.orgHex, t.vaultHex())
 			st.Forget(t.crypt, t.orgHex, t.vaultHex())
 		}

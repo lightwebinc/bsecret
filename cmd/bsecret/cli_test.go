@@ -37,7 +37,7 @@ func init() {
 }
 
 // harness is a local chain, two stand-in hosts behind a stand-in plane, a
-// stand-in organisation's borg tooling, and the environment that points
+// stand-in organization's borg tooling, and the environment that points
 // the command at them. Each identity is a home of its own.
 type harness struct {
 	t      *testing.T
@@ -249,10 +249,10 @@ func (h *harness) identity(name string, fund bool, args ...string) string {
 	return id[1]
 }
 
-// organisation makes the organisation: its borg home (the stand-in
+// organization makes the organization: its borg home (the stand-in
 // tooling, which funds itself and creates the hall), and the bsecret home
 // "org" made around that home's identity; then a crypt both hosts carry.
-func (h *harness) organisation() string {
+func (h *harness) organization() string {
 	h.t.Helper()
 	borg, err := testhost.NewBorg(filepath.Join(h.dir, "borg-org"), h.chainS.URL, h.a, h.b)
 	if err != nil {
@@ -277,11 +277,11 @@ func (h *harness) organisation() string {
 	return org
 }
 
-// vault makes the organisation, three members (alice, bob, carol) in one
+// vault makes the organization, three members (alice, bob, carol) in one
 // group, and a vault keyed to it, and returns the vault's identifier.
 func (h *harness) vault(args ...string) string {
 	h.t.Helper()
-	h.organisation()
+	h.organization()
 	for _, m := range []string{"alice", "bob", "carol"} {
 		h.identity(m, false)
 	}
@@ -298,7 +298,7 @@ func (h *harness) vault(args ...string) string {
 	return m[1]
 }
 
-// put writes a secret as the organisation.
+// put writes a secret as the organization.
 func (h *harness) put(name, value string, args ...string) result {
 	h.t.Helper()
 	return h.mustIn("org", value, append([]string{"put", name}, args...)...)
@@ -438,7 +438,7 @@ func TestUsageAndExitCodes(t *testing.T) {
 func TestInitAroundABorgHome(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	org := h.organisation()
+	org := h.organization()
 	r := h.must("org", "init")
 	if !strings.Contains(r.stdout, "identity     "+org) || !strings.Contains(r.stderr, "exists; left as it is") {
 		t.Fatalf("a second init:\n%s\n%s", r.stdout, r.stderr)
@@ -492,13 +492,13 @@ func TestInitAroundABorgHome(t *testing.T) {
 	h.want(h.run("org", "", "payee", "key", "-out", keyFile), exitUsage, "never writes over a file")
 }
 
-// The organisation writes only once it holds the epoch's key, which it has
+// The organization writes only once it holds the epoch's key, which it has
 // through its signer key: without `borg org signer` the vault is not
 // created.
 func TestTheOwnerNeedsItsSignerKey(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	h.organisation()
+	h.organization()
 	h.identity("alice", false)
 	h.borg.NoSigner = true
 	gid, err := h.borg.CreateGroup("engineering", h.keys["alice"])
@@ -557,7 +557,7 @@ func TestTheNullDeviceIsNoTerminal(t *testing.T) {
 // created without -name gets one drawn at random, and says so.
 func TestAVaultWithNoNameGetsADrawnOne(t *testing.T) {
 	h := newHarness(t)
-	h.organisation()
+	h.organization()
 	h.identity("alice", false)
 	gid, err := h.borg.CreateGroup("engineering", h.keys["alice"])
 	if err != nil {

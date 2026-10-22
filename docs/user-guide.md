@@ -186,7 +186,7 @@ means the chain view, whichever it is.
 ```text
 # ~/.bsecret/config, a member on mainnet
 network    = main
-crypt      = example_crypt_hmqzvtkwrx
+crypt      = example_hmqzvtkwrx
 org        = 02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5
 vault      = ops
 hosts      = https://host-a.example.com,https://host-b.example.com
@@ -238,7 +238,9 @@ group has begun an epoch the vault has not acknowledged. **current** means
 the version is keyed under the group's latest epoch and the node says the
 token read is the vault's latest; **EXPOSED** means it is keyed under an
 earlier epoch, so a key the group has since removed can open it. A script
-that must not act on such a value uses `get -strict`, which refuses it.
+that must not act on such a value uses `get -strict`, which refuses it
+(an unanchored value it does not refuse; the daemon's `-refuse unanchored`
+does).
 
 Each `put` takes one block: the version is listed by a mined token, which
 is published a minute after its block (the propagation delay), and the
@@ -337,8 +339,7 @@ it from a timer.
 **Reading.** A machine reads as any member does: it has an identity key of
 its own, made with `bsecret init` where it runs, whose public key the
 owner adds to the group (`bsecret enroll`, section 8); its home needs no
-coin. Three shapes
-work with the command as it is:
+coin. Four shapes work with the command as it is:
 
 - **At start.** An entrypoint runs `bsecret get NAME -strict` and writes
   the value to a file only the process reads (a tmpfs), or into its
@@ -363,13 +364,13 @@ daemon, not with a command on every request. Its identity file is a
 credential: whoever holds it opens every version keyed under an epoch that
 key is a member of.
 
-**Rotating faster than a block.** A token rotated every few minutes cannot
-wait for a block. Create the
-vault with `-anchor interval`. Then `put -defer` publishes a version
-without listing it: readers take it by its link to the last listed
-version, and are told it is **unanchored**. `bsecret anchor`, run at an
-interval of your choosing, lists the latest version of each secret in one
-token. The price is assurance: an unanchored version can be withheld by a
+**Rotating faster than a block.** For a token rotated every few minutes,
+create the vault with `-anchor interval`. A secret's first version is
+listed as usual; after that, `put -defer` publishes a version without
+listing it: readers take it by its link to the last listed version, and
+are told it is **unanchored**. `bsecret anchor`, run at an interval of
+your choosing, lists the latest version of each secret in one token and
+sweeps the versions that came and went between anchors. The price is assurance: an unanchored version can be withheld by a
 host or replaced by the owner without a trace in the audit trail, and a
 reader that needs the newest asks more than one host. A reader follows at
 most 64 unlisted versions above a listed one, so anchor at least that
@@ -471,8 +472,8 @@ the race for the next token; it says so, and `sync` catches it up.
 
 ## 14. Priced questions and the payee
 
-The free questions answer everything a member needs. A host may price the
-bulk questions: the whole trail of a vault (`audit`) and every version of
+The free questions answer everything a member needs, and a home with no
+coin cannot ask a priced one. A host may price the bulk questions: the whole trail of a vault (`audit`) and every version of
 one secret it still holds (`history`). `bsecret terms` prints what a host
 charges. A priced question is paid from the home's coin through the host's
 402: one payment a page, at most `-max-sats` a page (1000 unless you say

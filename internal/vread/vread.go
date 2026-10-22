@@ -335,7 +335,7 @@ const (
 )
 
 // A host stores an object with the proof it was given, and cannot take a
-// new one: after a reorganisation the stored proof may name a block that is
+// new one: after a reorganization the stored proof may name a block that is
 // no longer in the best chain, although the same transaction was mined
 // again elsewhere (spec section 11.5). A reader then fetches the
 // transaction's current proof from a chain source by its txid, and verifies

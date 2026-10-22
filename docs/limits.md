@@ -70,7 +70,7 @@ this version chooses) or **the contract's** (a record bound).
 | A write while the vault is in debt | re-keyings and retirements of stale secrets only | fixed: every host refuses anything else (`debt`) | From the acknowledgement on, the rule is every replica's | Same |
 | Time from a removal to a settled vault | about two blocks and a propagation delay for a vault of up to 64 secrets: the group's token, borg's wraps, then the vault's token; one more block per further 64 secrets. The sweep of the old versions is one block more | none | The new epoch's key must be mined and wrapped before a version can be keyed under it | Same |
 | How often a secret can be given a new value, per-version vault | one version a block a vault | one a block | Each version is listed by a token | Same |
-| How often a secret can be given a new value, interval vault | as fast as the owner publishes (`put -defer`) | 64 unlisted versions in a row before a reader stops following them | An unlisted version waits for no block. `anchor` lists the latest of each secret in one token: run it at least once per 64 versions of any one secret, and no more often than a block | Same |
+| How often a secret can be given a new value, interval vault | as fast as the owner publishes (`put -defer`) | 64 unlisted versions in a row before a reader stops following them | An unlisted version waits for no block. `anchor` lists the latest of each secret in one token: run it at least once per 64 versions of any one secret, and no more often than a block. A secret's first version is always listed: `put -defer` refuses it | Same |
 | Rotation a secret schedules for itself (`-rotate-every`) | none | none | `due` reports it (exit 3) once elapsed. Set it no shorter than a few blocks in a per-version vault | Same |
 | Sweep of versions under ended epochs | after the vault settles | the owner may keep history instead (`-keep`) | A swept version leaves every honest host's answers; a kept one is what a removed member can still fetch | Same |
 | Sweeps in flight per home | one | one | A sweep is persisted, settled and waited for before the next is built, so no output is swept twice | Same |
@@ -247,7 +247,7 @@ not do, stated so that nobody finds it by accident.
    so any client that reaches a host can walk a vault's chain and fetch its
    carriers, unless the host makes the crypt private (`BSECRET_PRIVATE`,
    spec section 10.4): then it answers only the crypt's organizations and
-   their groups' members, over BRC-104. Membership is the word of the borg
+   the members of any of their groups, over BRC-104. Membership is the word of the borg
    hosts the operator names, kept for `BSECRET_MEMBER_TTL`, so a removed
    member can still ask for that long. A vault's tokens are mined, so what
    they carry ([spec.md](spec.md) section 3) is readable from the chain
@@ -311,10 +311,9 @@ twice. Each entry of a change list adds 104 bytes to a token.
 
 **Costs.** Sizes measured on a test network over 121 vault tokens, 136
 versions, 21 sweeps, 2 chain trees and 7 secret trees of two owners;
-satoshis at the default fee policy, the network's rate of 100 satoshis per
-1000 bytes with a floor of 100 a transaction and that rate as the most
-paid (`mint.DefaultFees`). A transaction under 1,000 bytes pays the floor; a larger one pays the rate on
-its size. A carrier is never mined and rides one funding output of 1
+satoshis at the default fee policy (`mint.DefaultFees`): 100 satoshis per
+1,000 bytes with a floor of 100 a transaction, so a transaction under
+1,000 bytes pays 100 and a larger one pays the rate on its size. A carrier is never mined and rides one funding output of 1
 satoshi, which a sweep returns. The rate, the floor and a ceiling are
 settings (`fee_rate`, `fee_floor`, `fee_max_rate`, `fee_max_tx`), and
 `fee_source = arc` follows the broadcaster's published policy instead

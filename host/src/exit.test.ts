@@ -26,7 +26,7 @@ import { fromHex, toHex } from './util.js'
 
 const g = goldenGroup()
 const derivation = readVectors<{ group: { epochs: Array<{ epoch: number; key: string; symmetricKey: string; epochId: string }> } }>('derivation-v1.json')
-/** The group's epochs as the organisation that sampled their keys holds them. */
+/** The group's epochs as the organization that sampled their keys holds them. */
 const epochs: EpochRef[] = derivation.group.epochs.map((e) => ({ epoch: e.epoch, id: fromHex(e.epochId), symmetric: fromHex(e.symmetricKey) }))
 const [alice, bob, carol] = [identity('alice'), identity('bob'), identity('carol')]
 const askOf = (e: Engine): Ask => async (query) => await outputs(e, query)
@@ -46,8 +46,8 @@ test('the fixture is borg\'s group: three epochs, the removal at epoch 1, and ea
 test('revoke forces rotation: once the vault acknowledges the new epoch its chain admits only re-keying or retirement until nothing is stale, and an auditor verifies the trail from headers', async () => {
   const chain = new Chain(91000)
   const s = await setup({ chain })
-  const owner = new OwnerSim(crypt, 'the organisation', chain, { key: identity('org') })
-  assert.equal(owner.hex, toHex(g.org), "the vault's owner is the group's organisation")
+  const owner = new OwnerSim(crypt, 'the organization', chain, { key: identity('org') })
+  assert.equal(owner.hex, toHex(g.org), "the vault's owner is the group's organization")
   const vault = owner.vault('production', g.hall, g.group, epochs[0]!)
   const who = { crypt, org: owner.hex, vault: vault.idHex }
   const ask = askOf(s.engine)
@@ -147,7 +147,7 @@ test('revoke forces rotation: once the vault acknowledges the new epoch its chai
 test('nothing forces the acknowledgement: an owner that goes on writing under the old epoch is admitted, and the audit counts it', async () => {
   const chain = new Chain(92000)
   const s = await setup({ chain })
-  const owner = new OwnerSim(crypt, 'the organisation', chain, { key: identity('org') })
+  const owner = new OwnerSim(crypt, 'the organization', chain, { key: identity('org') })
   const vault = owner.vault('behind', g.hall, g.group, epochs[0]!)
   const who = { crypt, org: owner.hex, vault: vault.idHex }
   const began = [chain.mine(fromNowhere([])).merklePath!.blockHeight]

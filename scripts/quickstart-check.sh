@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # QUICKSTART.md, run as written, in a throwaway copy of the quickstart
-# compose project: the local chain, two hosts and MySQL; an organisation,
+# compose project: the local chain, two hosts and MySQL; an organization,
 # three members and a group (borg); a crypt and a vault on the group; three
 # secrets every member reads; a removal, which begins a new epoch; the
 # acknowledgement and the re-keying, after which the removed member reads
@@ -50,7 +50,7 @@ key() { sed -n 's/^identity *//p' "$1"; }
 step "1. the local chain"
 dc up -d chain
 
-step "2. an organisation and three members (borg), and a home of each for bsecret"
+step "2. an organization and three members (borg), and a home of each for bsecret"
 borg org init | tee org.txt
 borg org fund
 for m in alice bob carol; do borg $m init | tee $m.txt; done
@@ -82,7 +82,7 @@ done
 printf '%s\n' "$out"
 [ "$(printf '%s\n' "$out" | grep -c '^host .* answering$')" = 2 ] || fail "the hosts did not come up"
 
-step "5. the organisation, a group, and the signer key (borg)"
+step "5. the organization, a group, and the signer key (borg)"
 borg org org create 'Example Organization' -member "$ALICE" -member "$BOB" -member "$CAROL" | tee create.txt
 [ "$(grep -c '^grant ' create.txt)" = 3 ] || fail "org create did not issue three grants"
 borg org group create engineering -member "$ALICE" -member "$BOB" -member "$CAROL" | tee group.txt

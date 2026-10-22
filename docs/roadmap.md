@@ -40,18 +40,16 @@ block headers with nobody's cooperation.
   one step (bsecret checks it and runs borg's add), and the workload picks
   up its membership. No private key travels.
 - Private crypts: a host setting that serves a crypt only to the
-  organizations it names and their groups' members, every class through
-  the authenticated route the priced classes use, and readers that ask
-  that route as their own identity. What the tokens carry stays on the
-  chain.
+  organizations it names and the members of any of their groups, every
+  class through the authenticated route the priced classes use, and
+  readers that ask that route as their own identity (the `lookup_auth`
+  setting). What the tokens carry stays on the chain.
 - The organization's key in a wallet of its own (`wallet = wire:<URL>`):
   every signature, derivation and decryption asked of a BRC-100 wallet
   over the wallet wire, so the key can live in a hardware module or a
   remote signer rather than a file in the home.
 
 ## Next
-
-Ordered by what unblocks the most.
 
 1. **Large secrets through bstore**, in place of a local directory and a
    `uhrp://` address.
@@ -63,9 +61,9 @@ Ordered by what unblocks the most.
   fields sealed under a key the crypt's members hold, so the chain shows
   that a vault moved and not what it holds. It trades the audit anyone can
   run for an audit the organization's members and invited auditors run.
-  Its magics (`sev`, `ses`, `sep` with version byte `0x02`) and domain
-  strings (`... v2`) are reserved now and written by nothing, and this
-  version refuses the magics, so the two versions can never be confused.
+  Its magics (`sev`, `ses`, `sep` with version byte `0x02`) and its `v2`
+  domain strings are reserved: version 1 writes none and refuses the
+  magics.
 - **A secret name that cannot be guessed from its identifier**, by a
   per-vault value folded into the identifier. It changes how a reader
   checks an identifier, so it waits for the same record version.

@@ -12,8 +12,8 @@ You need:
 
 - A borg organization with a group, and `borg org signer` run once in its
   borg home ([borg's quickstart](https://github.com/lightwebinc/borg/blob/main/QUICKSTART.md)).
-- BSV in a wallet you control (testnet coin on testnet). About 10,000 sat
-  covers a vault and about ninety versions; a version costs about 107 sat
+- BSV in a wallet you control (testnet coin on testnet). Send about 20,000
+  sat; a vault and about ninety versions cost under 10,000, a version about 107 sat
   ([limits.md](docs/limits.md)). The borg home is funded separately.
 - Overlay hosts that carry the crypt (and the group's hall): borg's host
   image with the bsecret module added, or the module on any reference
@@ -151,8 +151,8 @@ nothing else shared. The two homes keep separate coin: `bs org fund` (no
 (coinbase: only on a regtest chain you run, for development and tests; on
 mainnet or testnet you import a payment with `fund -txid` or `fund -beef`
 instead). The
-members need no coin. The payee is host-a's, and the auditor is anyone at all: it is funded only to pay for
-the priced audit later.
+members need no coin. The payee belongs to host-a. The auditor is anyone
+at all; its home is funded only to pay for the priced audit later.
 
 ### 3. A hall, a crypt, the payee key
 

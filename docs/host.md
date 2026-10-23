@@ -292,6 +292,21 @@ What is bsecret's own:
 `bsecret_payment_events_total{kind}` and `bsecret_payments_unmined`, with the
 labels the host module lists.
 
+## The Go module
+
+The same module exists in Go, `module/` in this repository, written to
+bcommon's engine-neutral contract (`github.com/lightwebinc/bcommon/module`)
+for a Go overlay host that carries the adapter: `tm_bsecret_<crypt>` for
+each crypt, `ls_bsecret` for all of them, the journal `bsecret-rows.jsonl`
+with the same lines, the terms route (bcommon's `termsroute`, the Go twin of
+the TypeScript host entry) with the same routes, codes, bodies, metrics and
+ledger lines, and private crypts. It reads the same `BSECRET_` variables as
+the table above and refuses the same mistakes. Its admission rules are
+`internal/secrec.Admit`, the index rules secrec's folds, listings and rows,
+and its tests drive it with the transaction and index vectors. A host hands
+the topic manager the submission's bytes exactly as they arrived
+(`module.WithSubmission`): the rules decide on the wire form.
+
 ## Joining a crypt
 
 A host that starts carrying a crypt, or that missed part of a chain, is

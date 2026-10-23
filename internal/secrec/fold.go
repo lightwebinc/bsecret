@@ -87,11 +87,26 @@ type VaultFold struct {
 	epoch       uint64
 	broken      string
 	trail       []Event
+	// ended is the seq of the token that replaced or retired each version.
+	ended map[versionKey]uint64
 }
 
 // NewVaultFold starts a fold before seq 0.
 func NewVaultFold() *VaultFold {
-	return &VaultFold{set: map[[32]byte]Current{}, last: map[[32]byte]uint64{}, commitments: map[[32]byte]bool{}}
+	return &VaultFold{set: map[[32]byte]Current{}, last: map[[32]byte]uint64{}, commitments: map[[32]byte]bool{}, ended: map[versionKey]uint64{}}
+}
+
+// Current is the version of id the set holds, when it holds one.
+func (f *VaultFold) Current(id [32]byte) (Current, bool) {
+	c, ok := f.set[id]
+	return c, ok
+}
+
+// EndedAt is the seq of the token that replaced or retired version of id,
+// when one did.
+func (f *VaultFold) EndedAt(id [32]byte, version uint64) (uint64, bool) {
+	s, ok := f.ended[versionKey{id, version}]
+	return s, ok
 }
 
 // Clone is a fold that goes on from here on its own: a branch, or a
@@ -99,9 +114,12 @@ func NewVaultFold() *VaultFold {
 func (f *VaultFold) Clone() *VaultFold {
 	c := &VaultFold{set: make(map[[32]byte]Current, len(f.set)), last: make(map[[32]byte]uint64, len(f.last)),
 		commitments: make(map[[32]byte]bool, len(f.commitments)), epoch: f.epoch, broken: f.broken,
-		trail: append([]Event(nil), f.trail...)}
+		trail: append([]Event(nil), f.trail...), ended: make(map[versionKey]uint64, len(f.ended))}
 	for k, v := range f.set {
 		c.set[k] = v
+	}
+	for k, v := range f.ended {
+		c.ended[k] = v
 	}
 	for k, v := range f.last {
 		c.last[k] = v
@@ -146,6 +164,7 @@ func (f *VaultFold) Apply(v *Vault) string {
 		return f.last[id]
 	}
 	var trail []Event
+	var ended []versionKey
 	reuse := false
 	for _, id := range v.Retire {
 		c, ok := set[id]
@@ -153,6 +172,7 @@ func (f *VaultFold) Apply(v *Vault) string {
 			return fail(StatusSetMismatch)
 		}
 		delete(set, id)
+		ended = append(ended, versionKey{id, c.Version})
 		trail = append(trail, Event{Seq: v.Seq, Kind: "retire", ID: id, Version: c.Version, Epoch: v.Epoch, FromEpoch: c.Epoch})
 	}
 	for _, e := range v.Update {
@@ -164,6 +184,7 @@ func (f *VaultFold) Apply(v *Vault) string {
 		if c.Epoch < v.Epoch {
 			kind = "rekey"
 		}
+		ended = append(ended, versionKey{e.ID, c.Version})
 		trail = append(trail, Event{Seq: v.Seq, Kind: kind, ID: e.ID, Version: e.Version, ContentID: e.ContentID, Epoch: v.Epoch, FromEpoch: c.Epoch})
 		set[e.ID] = Current{ID: e.ID, Version: e.Version, ContentID: e.ContentID, Epoch: v.Epoch, Seq: v.Seq}
 		last[e.ID] = e.Version
@@ -202,6 +223,12 @@ func (f *VaultFold) Apply(v *Vault) string {
 		}
 	}
 	f.trail = append(f.trail, trail...)
+	if f.ended == nil {
+		f.ended = map[versionKey]uint64{}
+	}
+	for _, k := range ended {
+		f.ended[k] = v.Seq
+	}
 	if reuse {
 		return StatusCommitmentReuse
 	}

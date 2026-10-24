@@ -257,8 +257,11 @@ to a crash, or a directory restored from a copy) is taken into its row again
 when it is below what the row keeps, so the winner stays the lowest
 commitment the host holds. It keeps a funding output from answering a second
 carrier and keeps retention's clocks, so it is kept for the host's life,
-backed up with the database, and never edited. Each line is flushed to disk
-before the admission it records completes. It names outpoints, txids and
+backed up with the database, and never edited. Each line is in the file
+before the admission it records completes. The TypeScript module flushes it
+to disk then too; the Go module flushes the lines of each
+`BSECRET_JOURNAL_SYNC_MS` window together (below), so a process that dies
+loses none and a power loss at most that window. It names outpoints, txids and
 commitments, never an identity or a secret. A cut-short last line is
 skipped; any other line that does not parse stops the host, because a row
 skipped could let a swept or superseded carrier be answered again.
@@ -301,11 +304,17 @@ each crypt, `ls_bsecret` for all of them, the journal `bsecret-rows.jsonl`
 with the same lines, the terms route (bcommon's `termsroute`, the Go twin of
 the TypeScript host entry) with the same routes, codes, bodies, metrics and
 ledger lines, and private crypts. It reads the same `BSECRET_` variables as
-the table above and refuses the same mistakes. Its admission rules are
-`internal/secrec.Admit`, the index rules secrec's folds, listings and rows,
-and its tests drive it with the transaction and index vectors. A host hands
-the topic manager the submission's bytes exactly as they arrived
-(`module.WithSubmission`): the rules decide on the wire form.
+the table above and refuses the same mistakes, and one more:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `BSECRET_JOURNAL_SYNC_MS` | 100 | the journal's group commit window, 0 to 60000 milliseconds. Each line is written to `bsecret-rows.jsonl` before the admission completes and the lines of a window are flushed to disk together by a timer, off the lookup service's lock; closing the module flushes too. A process that dies loses nothing (the lines are in the page cache); a power loss loses at most the window, as a store that syncs its write-ahead log on a timer does. 0 flushes each line before the admission completes, as the TypeScript module does, and costs one fsync of every admission that writes a line, under the lock |
+
+Its admission rules are `internal/secrec.Admit`, the index rules secrec's
+folds, listings and rows, and its tests drive it with the transaction and
+index vectors. A host hands the topic manager the submission's bytes
+exactly as they arrived (`module.WithSubmission`): the rules decide on the
+wire form.
 
 ## Joining a crypt
 
@@ -328,7 +337,13 @@ predecessor), and every status other than `consistent` is logged with its
 crypt, owner, vault, `seq` and txid; `bsecret_retractions_total` counts
 spends that retracted an outpoint; `bsecret_dropped_total{why}` counts
 dropped carriers and sweeps (`evidence`, `retention`, `table`);
-`bsecret_lookups_total{class}` counts questions. The gauges are
+`bsecret_lookups_total{class}` counts questions. The Go module also counts
+its journal: `bsecret_journal_lines_total`,
+`bsecret_journal_wait_seconds_total` (the time the lookup service spent
+writing lines under its lock, the fsync included when
+`BSECRET_JOURNAL_SYNC_MS` is 0), `bsecret_journal_syncs_total{result}`
+(`ok`, `error`) and `bsecret_journal_sync_seconds_total` (the timed fsyncs,
+off the lock). The gauges are
 `bsecret_crypts`, `bsecret_vaults`, `bsecret_tokens`,
 `bsecret_tokens_pending`, `bsecret_carriers`, `bsecret_sweeps`,
 `bsecret_outpoint_rows` and `bsecret_spend_table`.

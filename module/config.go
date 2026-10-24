@@ -13,8 +13,9 @@
 // BSECRET_SPEND_TABLE, BSECRET_LISTEN, BSECRET_PRICES, BSECRET_PAYEE_KEY,
 // BSECRET_SESSIONS, BSECRET_SESSION_TTL, the handshake and response
 // budgets, BSECRET_PRIVATE, BSECRET_HALL_URL, BSECRET_MEMBER_TTL,
-// BSECRET_ARCADE_URL, BSECRET_ASSET_URL and the BSECRET_ACCEPT_* rule.
-// Every mistake is an error, and the host refuses to start.
+// BSECRET_ARCADE_URL, BSECRET_ASSET_URL and the BSECRET_ACCEPT_* rule, and
+// one of its own, BSECRET_JOURNAL_SYNC_MS (the rows journal's group commit
+// window). Every mistake is an error, and the host refuses to start.
 package module
 
 import (
@@ -47,6 +48,15 @@ const (
 	MinMemberTTL     = 1
 )
 
+// The rows journal's group commit window (BSECRET_JOURNAL_SYNC_MS): lines
+// are written at once and fsynced together this often, off the lookup
+// service's lock; 0 fsyncs each line before the admission goes on. The
+// default and the bound are a timed write-ahead log's usual ones.
+const (
+	DefaultJournalSyncMs = 100
+	MaxJournalSyncMs     = 60_000
+)
+
 // Config is the module's configuration.
 type Config struct {
 	Crypts         []string
@@ -57,6 +67,9 @@ type Config struct {
 	MaxBEEF        int
 	MaxSweepInputs int
 	SpendTable     int
+	// JournalSync is the rows journal's group commit window; 0 syncs every
+	// line.
+	JournalSync time.Duration
 	// Listen is the terms route's host:port; empty for none.
 	Listen   string
 	Prices   map[string]uint64
@@ -251,6 +264,14 @@ func ParseConfig(getenv func(string) string) (*Config, error) {
 			return nil, err
 		}
 	}
+	syncMs, err := integer("BSECRET_JOURNAL_SYNC_MS", getenv("BSECRET_JOURNAL_SYNC_MS"), DefaultJournalSyncMs, 0)
+	if err != nil {
+		return nil, err
+	}
+	if syncMs > MaxJournalSyncMs {
+		return nil, fmt.Errorf("BSECRET_JOURNAL_SYNC_MS: %d is over %d", syncMs, MaxJournalSyncMs)
+	}
+	c.JournalSync = time.Duration(syncMs) * time.Millisecond
 	if c.Prices, err = termsroute.ParsePrices(getenv("BSECRET_PRICES"), Classes, "BSECRET_PRICES"); err != nil {
 		return nil, err
 	}

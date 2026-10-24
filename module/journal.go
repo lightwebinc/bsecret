@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 // JournalFile is the journal's file name in the state directory.
@@ -130,7 +131,8 @@ func (l *Line) valid() bool {
 	return false
 }
 
-// Journal is where the rows live. Append is durable when it returns.
+// Journal is where the rows live. Append is durable when it returns or
+// within the journal's sync window (FileJournal.SyncEvery).
 type Journal interface {
 	Load() ([]Line, error)
 	Append(l Line) error
@@ -159,17 +161,49 @@ func (m *MemoryJournal) Append(l Line) error {
 }
 
 // FileJournal is the journal as a file, bsecret-rows.jsonl in a directory.
-// Each line is written and flushed to disk before Append returns. A last
-// line cut short by a crash is cut off on load; any other line that does
-// not parse stops the load, because a row silently skipped could let a
-// swept or superseded carrier be answered again.
+// Each line is written to the file before Append returns, so a process
+// that dies loses nothing (the line is in the page cache). When it reaches
+// the disk is SyncEvery: zero flushes each line before Append returns;
+// more is a group commit, one fsync for every line written in the window,
+// run by a timer off the caller's path, so a power loss loses at most the
+// window (the posture of a store that syncs its write-ahead log on a timer).
+// Close flushes. A last line cut short by a crash is cut off on load; any
+// other line that does not parse stops the load, because a row silently
+// skipped could let a swept or superseded carrier be answered again.
 type FileJournal struct {
 	Path string
-	mu   sync.Mutex
-	f    *os.File
+	// SyncEvery is the group commit window; zero syncs every line.
+	SyncEvery time.Duration
+	// OnSync, when set, is called after each timed fsync with the lines it
+	// covered, how long it took and its error. It runs on the timer's
+	// goroutine, holding no lock of the journal's.
+	OnSync func(lines int, took time.Duration, err error)
+
+	// syncMu orders fsyncs: one at a time, and Close waits for the one in
+	// flight before it closes the file. Taken before mu, never after.
+	syncMu sync.Mutex
+	mu     sync.Mutex
+	f      *os.File
+	// pending counts the lines written since the last fsync began; armed is
+	// whether a timed fsync is scheduled; failed is the last timed fsync's
+	// error, returned by the next Append.
+	pending int
+	armed   bool
+	timer   *time.Timer
+	failed  error
+	// fsync is (*os.File).Sync; tests count or fail it.
+	fsync func(*os.File) error
 }
 
-// NewFileJournal makes the directory and names the file.
+func (j *FileJournal) sync(f *os.File) error {
+	if j.fsync != nil {
+		return j.fsync(f)
+	}
+	return f.Sync()
+}
+
+// NewFileJournal makes the directory and names the file. The journal
+// syncs every line until SyncEvery is set.
 func NewFileJournal(dir string) (*FileJournal, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
@@ -220,14 +254,17 @@ func (j *FileJournal) Load() ([]Line, error) {
 	return out, nil
 }
 
-// Append implements Journal.
+// Append implements Journal: the line is in the file when it returns, and
+// on disk too when SyncEvery is zero; otherwise a timed fsync takes it
+// there within SyncEvery. An error of an earlier timed fsync is returned
+// once, by the next Append, after its line is written.
 func (j *FileJournal) Append(l Line) error {
-	j.mu.Lock()
-	defer j.mu.Unlock()
 	b, err := l.encode()
 	if err != nil {
 		return err
 	}
+	j.mu.Lock()
+	defer j.mu.Unlock()
 	if j.f == nil {
 		f, err := os.OpenFile(j.Path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 		if err != nil {
@@ -238,17 +275,97 @@ func (j *FileJournal) Append(l Line) error {
 	if _, err := j.f.Write(b); err != nil {
 		return err
 	}
-	return j.f.Sync()
+	if j.SyncEvery <= 0 {
+		return j.sync(j.f)
+	}
+	j.pending++
+	if !j.armed {
+		j.armed = true
+		j.timer = time.AfterFunc(j.SyncEvery, j.timedSync)
+	}
+	if err := j.failed; err != nil {
+		j.failed = nil
+		return fmt.Errorf("journal: a timed fsync failed: %w", err)
+	}
+	return nil
 }
 
-// Close closes the file.
-func (j *FileJournal) Close() error {
+// timedSync is the group commit: one fsync for every line written since
+// the last one began, outside the journal's lock, so Append goes on
+// writing while it runs. A failed fsync leaves its lines pending for the
+// next.
+func (j *FileJournal) timedSync() {
+	j.syncMu.Lock()
+	j.mu.Lock()
+	j.armed = false
+	f, n := j.f, j.pending
+	j.pending = 0
+	j.mu.Unlock()
+	if f == nil || n == 0 {
+		j.syncMu.Unlock()
+		return
+	}
+	start := time.Now()
+	err := j.sync(f)
+	took := time.Since(start)
+	if err != nil {
+		j.mu.Lock()
+		j.pending += n
+		j.failed = err
+		if !j.armed && j.f != nil {
+			j.armed = true
+			j.timer = time.AfterFunc(j.SyncEvery, j.timedSync)
+		}
+		j.mu.Unlock()
+	}
+	j.syncMu.Unlock()
+	if j.OnSync != nil {
+		j.OnSync(n, took, err)
+	}
+}
+
+// Sync flushes every line written so far to disk now.
+func (j *FileJournal) Sync() error {
+	j.syncMu.Lock()
+	defer j.syncMu.Unlock()
 	j.mu.Lock()
 	defer j.mu.Unlock()
+	return j.flushLocked()
+}
+
+// flushLocked fsyncs the open file when lines are pending. The caller holds
+// syncMu and mu.
+func (j *FileJournal) flushLocked() error {
+	if j.f == nil || j.pending == 0 {
+		return nil
+	}
+	if err := j.sync(j.f); err != nil {
+		return err
+	}
+	j.pending = 0
+	j.failed = nil
+	return nil
+}
+
+// Close flushes what is pending and closes the file. A later Append opens
+// it again.
+func (j *FileJournal) Close() error {
+	j.syncMu.Lock()
+	defer j.syncMu.Unlock()
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.timer != nil {
+		j.timer.Stop()
+		j.timer = nil
+	}
+	j.armed = false
 	if j.f == nil {
 		return nil
 	}
-	err := j.f.Close()
+	err := j.flushLocked()
+	if cerr := j.f.Close(); err == nil {
+		err = cerr
+	}
 	j.f = nil
 	return err
 }

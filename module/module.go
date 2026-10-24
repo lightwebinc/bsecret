@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bsv-blockchain/go-sdk/transaction/chaintracker"
@@ -39,10 +40,11 @@ type Mounted struct {
 	// Members is who the private crypts are served to, when there are any.
 	Members *Members
 	// Front is the terms route, when configured.
-	Front  *Front
-	config *Config
-	host   bmodule.Host
-	ledger *termsroute.Ledger
+	Front   *Front
+	config  *Config
+	host    bmodule.Host
+	ledger  *termsroute.Ledger
+	journal Journal
 }
 
 // Front is the terms route and where it listens.
@@ -80,6 +82,12 @@ func Mount(host bmodule.Host, c *Config, overlayTopics []string, journal Journal
 	}
 	m.Preset("bsecret_retractions_total", nil)
 	m.Preset("bsecret_equivocations_total", nil)
+	m.Preset("bsecret_journal_lines_total", nil)
+	m.Preset("bsecret_journal_wait_seconds_total", nil)
+	for _, result := range []string{"ok", "error"} {
+		m.Preset("bsecret_journal_syncs_total", map[string]string{"result": result})
+	}
+	m.Preset("bsecret_journal_sync_seconds_total", nil)
 	priced := map[string]bool{}
 	for name, p := range c.Prices {
 		if p > 0 {
@@ -97,6 +105,8 @@ func Mount(host bmodule.Host, c *Config, overlayTopics []string, journal Journal
 		if err != nil {
 			return nil, err
 		}
+		fj.SyncEvery = c.JournalSync
+		fj.OnSync = journalSyncs(host)
 		journal = fj
 	}
 	var members *Members
@@ -131,7 +141,7 @@ func Mount(host bmodule.Host, c *Config, overlayTopics []string, journal Journal
 		}
 		topics[secrec.Topic(crypt)] = tm
 	}
-	out := &Mounted{Module: bmodule.Module{Topics: topics, Lookups: map[string]bmodule.LookupService{secrec.LookupService: ls}}, LS: ls, Members: members, config: c, host: host}
+	out := &Mounted{Module: bmodule.Module{Topics: topics, Lookups: map[string]bmodule.LookupService{secrec.LookupService: ls}}, LS: ls, Members: members, config: c, host: host, journal: journal}
 	if c.Listen != "" {
 		var receiver termsroute.Receiver
 		var gate *termsroute.Gate
@@ -181,9 +191,13 @@ func Mount(host bmodule.Host, c *Config, overlayTopics []string, journal Journal
 	for t := range topics {
 		topicNames = append(topicNames, t)
 	}
+	journalLine := "each line"
+	if c.JournalSync > 0 {
+		journalLine = fmt.Sprintf("every %s", c.JournalSync)
+	}
 	host.Log("bsecret module mounted", map[string]any{"topics": strings.Join(sortedStrings(topicNames), ","), "lookup": secrec.LookupService, "headers": c.HeadersURL,
 		"terms": terms, "priced": orNone(sortedStrings(pricedNames)), "sessions": sessions, "handshakes": handshakes, "responses": responses,
-		"private": orNone(sortedStrings(privateNames)), "payments": payments, "build": Build})
+		"private": orNone(sortedStrings(privateNames)), "payments": payments, "journal_sync": journalLine, "build": Build})
 	return out, nil
 }
 
@@ -194,10 +208,48 @@ func orNone(a []string) string {
 	return strings.Join(a, ",")
 }
 
+// journalSyncs counts the rows journal's timed fsyncs and logs the first
+// failure of a run of them and the recovery after it.
+func journalSyncs(host bmodule.Host) func(lines int, took time.Duration, err error) {
+	var mu sync.Mutex
+	failing := false
+	return func(lines int, took time.Duration, err error) {
+		m := host.Metrics()
+		m.Inc("bsecret_journal_sync_seconds_total", nil, took.Seconds())
+		result := "ok"
+		if err != nil {
+			result = "error"
+		}
+		m.Inc("bsecret_journal_syncs_total", map[string]string{"result": result}, 1)
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case err != nil && !failing:
+			failing = true
+			host.Log("ls_bsecret could not sync the journal; its lines stay pending and the sync is tried again", map[string]any{"lines": lines, "err": err.Error()})
+		case err == nil && failing:
+			failing = false
+			host.Log("ls_bsecret journal synced again", map[string]any{"lines": lines})
+		}
+	}
+}
+
+// Close flushes the rows journal and closes it (Start does when its context
+// ends). A host that stops without it leaves at most the last sync window's
+// lines in the page cache: written, not yet on disk.
+func (m *Mounted) Close() error {
+	if c, ok := m.journal.(interface{ Close() error }); ok {
+		return c.Close()
+	}
+	return nil
+}
+
 // Start serves the terms route (when configured) until ctx ends, and runs
 // the background tick: the payment watch every TickEvery and retention
-// every PruneEvery once the index is restored. It returns when ctx ends.
+// every PruneEvery once the index is restored. It returns when ctx ends,
+// after closing the rows journal (Close).
 func (m *Mounted) Start(ctx context.Context) error {
+	defer func() { _ = m.Close() }()
 	go func() {
 		pruned := time.Now()
 		t := time.NewTicker(TickEvery)

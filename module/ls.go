@@ -443,8 +443,16 @@ func (s *Service) turnedAway(c string) {
 	}
 }
 
+// write appends a journal line and applies it. The time Append takes is
+// spent under the service's lock (bsecret_journal_wait_seconds_total): the
+// write, and the fsync too when the journal syncs every line.
 func (s *Service) write(l Line) {
-	if err := s.journal.Append(l); err != nil {
+	start := time.Now()
+	err := s.journal.Append(l)
+	m := s.host.Metrics()
+	m.Inc("bsecret_journal_wait_seconds_total", nil, time.Since(start).Seconds())
+	m.Inc("bsecret_journal_lines_total", nil, 1)
+	if err != nil {
 		// A line that is not on disk is still applied: the host keeps
 		// answering as it decided, and says so.
 		s.host.Log("ls_bsecret could not write the journal", map[string]any{"err": err.Error()})

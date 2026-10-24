@@ -350,10 +350,12 @@ path, in six phases:
    as a gap and waits for the owner's `fill`;
 3. listed: `secrets` and `secrets-after`, the carriers of each vault's
    current set;
-4. versions: `version` for every version a held token lists whose carrier
-   the host does not hold;
-5. pending: `pending` for every secret a held token lists or a held carrier
-   names;
+4. versions: `version` for every version of the current set, or listed by
+   a token this host first saw inside the retention floor less a day, whose
+   carrier the host does not hold (a version only older tokens list has
+   left every host by its floor);
+5. pending: `pending` for every secret of a current set or of a held
+   carrier;
 6. sweeps: `sweep` for each held carrier's funding outpoint.
 
 A dropped carrier's admission stays recorded, so a walk never offers back

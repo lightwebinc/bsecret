@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	"github.com/bsv-blockchain/go-sdk/overlay/lookup"
@@ -311,6 +312,63 @@ func TestReplayFirstToken(t *testing.T) {
 	res = replayFrom(t, b, a, 0, 0)
 	if d := vw.level(t, a, b); d != "" {
 		t.Fatalf("with a chain view (%v, notes %v): %s", res.kinds, res.notes, d)
+	}
+}
+
+// TestReplayAsksNoDroppedHistory: once the replaced versions have left both
+// hosts by the retention floor, a walk asks no version for them, though the
+// tokens still list them; before that it asks for every listed version the
+// host lacks.
+func TestReplayAsksNoDroppedHistory(t *testing.T) {
+	vw := readWorld(t)
+	at := time.Now()
+	clock := func() time.Time { return at }
+	a, _ := vectorRig(t, nil, clock)
+	_, h := readTx(t)
+	b := setup(t, vw.f, h, nil, clock)
+	for _, n := range []string{"vault-token-create", "vault-token-second-vault", "secret-carrier-db-password-v1"} {
+		for _, c := range vw.f.Cases {
+			if c.Name == n {
+				if _, err := b.submit(unhex(t, c.BEEF)); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+	}
+	versions := func() (n int) {
+		ask := peerOf(a)
+		var cursor any
+		for {
+			ans, err := b.ls.Replay(context.Background(), &bmodule.ReplayRequest{Topic: b.topic, Peer: "a", Cursor: cursor,
+				Ask: func(ctx context.Context, q *lookup.LookupQuestion) (*lookup.LookupAnswer, error) {
+					if strings.Contains(string(q.Query), `"version"`) {
+						n++
+					}
+					return ask(ctx, q)
+				},
+				Applied: func(_ context.Context, txid chainhash.Hash) (bool, error) {
+					return b.storage.isApplied(b.topic, txid.String()), nil
+				}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, o := range ans.Objects {
+				_, _ = b.submit(o.BEEF)
+			}
+			if ans.Done {
+				return n
+			}
+			cursor = ans.Cursor
+		}
+	}
+	if n := versions(); n == 0 {
+		t.Fatal("inside the floor, no listed version was asked for")
+	}
+	at = at.Add(40 * 24 * time.Hour)
+	a.ls.Prune(context.Background())
+	b.ls.Prune(context.Background())
+	if n := versions(); n != 0 {
+		t.Fatalf("past the floor, %d versions asked for", n)
 	}
 }
 

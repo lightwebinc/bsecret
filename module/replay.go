@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bsv-blockchain/go-sdk/chainhash"
 	"github.com/bsv-blockchain/go-sdk/transaction"
@@ -45,10 +46,12 @@ import (
 //     tree, from the chain view (BSECRET_ASSET_URL or BSECRET_CHAIN);
 //  3. listed: for each of those vaults, the peer's listed carriers of the
 //     current set (secrets, secrets-after);
-//  4. versions: every version a held token lists whose carrier the host
-//     does not hold (version);
-//  5. pending: for every secret a held token lists or a held carrier
-//     names, its unlisted versions above the listed one (pending);
+//  4. versions: every version of the current set, or listed by a token
+//     first seen inside the retention floor less a day, whose carrier the
+//     host does not hold (version): a version only older tokens list has
+//     left every host by its floor;
+//  5. pending: for every secret of the current set or of a held carrier,
+//     its unlisted versions above the listed one (pending);
 //  6. sweeps: the sweeps of each held carrier's funding outpoint (sweep).
 //
 // A dropped carrier's admission stays recorded (section 11.3), so the walk
@@ -289,29 +292,52 @@ func (s *Service) replayListed(crypt string) replay.Phase {
 		}}
 }
 
-// listedVersions are what the held tokens of crypt's vaults list, as
-// org|vault|id|version, and, with versions false, the secrets they list or
-// a held carrier names, as org|vault|id. With versions true only those
-// whose carrier the host does not hold are listed.
-func (s *Service) listedVersions(crypt string, versions bool) []string {
+// listedVersions are, as org|vault|id|version, the versions of crypt's
+// vaults whose carrier the host does not hold among those it still keeps:
+// the current set's, and those a token first seen inside the retention
+// floor less a day lists; and, with versions false, as org|vault|id, the
+// secrets of the current sets and of the held carriers. A version only
+// older tokens list was replaced longer ago than any host keeps it, so
+// asking for it every walk would ask for nothing, ever more often.
+func (s *Service) listedVersions(ctx context.Context, crypt string, versions bool) []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	keys := map[string]bool{}
+	cutoff := s.unix() - int64((s.retention-24*time.Hour)/time.Second)
 	for _, v := range s.vaults {
 		if v.crypt != crypt {
 			continue
 		}
+		want := map[string]map[uint64]bool{}
+		add := func(id string, version uint64) {
+			if want[id] == nil {
+				want[id] = map[uint64]bool{}
+			}
+			want[id][version] = true
+		}
+		if b := s.answerBranch(ctx, v); b != nil {
+			for _, cur := range b.fold.Set() {
+				add(hexOf(cur.ID), cur.Version)
+			}
+		}
 		for _, t := range v.byTxid {
+			if seen, ok := s.tokenSeen[t.txid]; !ok || seen.at < cutoff {
+				continue
+			}
 			for _, list := range [][]secrec.Entry{t.rec.Create, t.rec.Update} {
 				for _, e := range list {
-					id := hexOf(e.ID)
-					if !versions {
-						keys[v.org+"|"+v.vault+"|"+id] = true
-						continue
-					}
-					if len(s.versions[v.key+"|"+id][e.Version]) == 0 {
-						keys[v.org+"|"+v.vault+"|"+id+"|"+strconv.FormatUint(e.Version, 10)] = true
-					}
+					add(hexOf(e.ID), e.Version)
+				}
+			}
+		}
+		for id, vs := range want {
+			if !versions {
+				keys[v.org+"|"+v.vault+"|"+id] = true
+				continue
+			}
+			for version := range vs {
+				if len(s.versions[v.key+"|"+id][version]) == 0 {
+					keys[v.org+"|"+v.vault+"|"+id+"|"+strconv.FormatUint(version, 10)] = true
 				}
 			}
 		}
@@ -328,7 +354,9 @@ func (s *Service) listedVersions(crypt string, versions bool) []string {
 
 func (s *Service) replayVersions(crypt string) replay.Phase {
 	return replay.Phase{Name: "versions",
-		Items: func(context.Context, *replay.Walk) ([]string, error) { return s.listedVersions(crypt, true), nil },
+		Items: func(ctx context.Context, _ *replay.Walk) ([]string, error) {
+			return s.listedVersions(ctx, crypt, true), nil
+		},
 		Do: func(ctx context.Context, w *replay.Walk, item string, _ *string) (bool, error) {
 			p := strings.Split(item, "|")
 			q := map[string]string{"crypt": crypt, "org": p[0], "vault": p[1], "secret": p[2], "version": p[3]}
@@ -339,7 +367,9 @@ func (s *Service) replayVersions(crypt string) replay.Phase {
 
 func (s *Service) replayPending(crypt string) replay.Phase {
 	return replay.Phase{Name: "pending",
-		Items: func(context.Context, *replay.Walk) ([]string, error) { return s.listedVersions(crypt, false), nil },
+		Items: func(ctx context.Context, _ *replay.Walk) ([]string, error) {
+			return s.listedVersions(ctx, crypt, false), nil
+		},
 		Do: func(ctx context.Context, w *replay.Walk, item string, _ *string) (bool, error) {
 			p := strings.Split(item, "|")
 			q := map[string]string{"crypt": crypt, "org": p[0], "vault": p[1], "pending": p[2]}

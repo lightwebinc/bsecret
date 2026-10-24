@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -14,6 +15,8 @@ import (
 	"github.com/lightwebinc/bcommon/bwallet"
 	"github.com/lightwebinc/bcommon/headers"
 	bmodule "github.com/lightwebinc/bcommon/module"
+	"github.com/lightwebinc/bcommon/nodeapi"
+	"github.com/lightwebinc/bcommon/replay"
 	"github.com/lightwebinc/bcommon/termsroute"
 
 	"github.com/lightwebinc/bsecret/internal/secrec"
@@ -51,6 +54,21 @@ type Mounted struct {
 type Front struct {
 	*termsroute.Front
 	Addr string
+}
+
+// chainView is the configured node view as a replay's chain source (the
+// parent of a vault's first token, which no host keeps): the node's asset
+// API (BSECRET_ASSET_URL), else WhatsOnChain (BSECRET_CHAIN), else none.
+func chainView(a termsroute.AcceptConfig) replay.TreeSource {
+	switch {
+	case a.AssetURL != "":
+		return &nodeapi.Asset{Base: a.AssetURL, Client: &http.Client{Timeout: 30 * time.Second}}
+	case a.Chain != "":
+		if woc, err := nodeapi.NewWoC(a.Chain, a.WocKey); err == nil {
+			return woc
+		}
+	}
+	return nil
 }
 
 // Mount builds the module for c. overlayTopics is OVERLAY_TOPICS, when
@@ -111,7 +129,8 @@ func Mount(host bmodule.Host, c *Config, overlayTopics []string, journal Journal
 	}
 	var members *Members
 	ls, err := NewService(Options{Crypts: c.Crypts, Host: host, Journal: journal, Priced: priced, RetentionDays: c.RetentionDays, UnheldHours: c.UnheldHours,
-		SpendTable: c.SpendTable, Headers: hdrs, Now: now, Access: func(ctx context.Context, crypt string) error {
+		SpendTable: c.SpendTable, Headers: hdrs, Now: now, Trees: chainView(c.Accept), MaxBEEF: c.MaxBEEF, MaxSweepInputs: c.MaxSweepInputs,
+		Access: func(ctx context.Context, crypt string) error {
 			if members == nil {
 				return nil
 			}

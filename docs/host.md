@@ -328,6 +328,40 @@ source while it still serves the tree. Tokens, carriers and
 sweeps may be replayed in any order: a token ahead of its predecessor is
 `pending` until the predecessor arrives.
 
+### Ordered replay on a Go host
+
+The Go module does this for its own host from a sibling host: its lookup
+service is a bcommon `module.Replayer`, which a Go host that carries the
+hook (overlay-engine 0.9 and later) asks on its catch-up schedule, once a
+round for each `tm_bsecret_` topic and each peer, never by an unordered
+synchronization. A walk asks the peer's `ls_bsecret` only free classes and
+answers the objects to submit, which the host admits through its ordinary
+path, in six phases:
+
+1. vaults: `vaults` and `vaults-after` for each organization the host
+   knows from the tokens and carriers it holds;
+2. tokens: for every vault the host holds a token of or phase 1 found,
+   `vault`, then `vault-seq` at each seq up to the peer's latest at which
+   the host holds no token; each token in the BEEF of the token and its
+   parent with minimal paths, held to section 11.1 first, after its parent,
+   never without it. A first token takes its parent, the chain tree, from
+   the node view (`BSECRET_ASSET_URL`, else `BSECRET_CHAIN`); without one,
+   or once the node no longer serves the spent tree, the vault is counted
+   as a gap and waits for the owner's `fill`;
+3. listed: `secrets` and `secrets-after`, the carriers of each vault's
+   current set;
+4. versions: `version` for every version a held token lists whose carrier
+   the host does not hold;
+5. pending: `pending` for every secret a held token lists or a held carrier
+   names;
+6. sweeps: `sweep` for each held carrier's funding outpoint.
+
+A dropped carrier's admission stays recorded, so a walk never offers back
+what the host dropped. What no free class leads to is not replayed: a token
+the peer holds unrooted, a version of a secret no held token lists and no
+held carrier names, a carrier a host keeps only as evidence (superseded),
+and a sweep of carriers the host never held (it retracts nothing here).
+
 
 ## Metrics
 

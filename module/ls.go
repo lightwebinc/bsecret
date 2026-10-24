@@ -17,6 +17,7 @@ import (
 
 	"github.com/lightwebinc/bcommon/guard"
 	bmodule "github.com/lightwebinc/bcommon/module"
+	"github.com/lightwebinc/bcommon/replay"
 
 	"github.com/lightwebinc/bsecret/internal/secrec"
 )
@@ -73,6 +74,12 @@ type Options struct {
 	// Now is the host's clock; time.Now when nil.
 	Now    func() time.Time
 	Access Access
+	// Trees is the chain view a replay reads a vault's first token's
+	// parent from (Replay); nil when the host has none.
+	Trees replay.TreeSource
+	// MaxBEEF and MaxSweepInputs are the topic managers' bounds, which a
+	// replay holds a token it assembles to; secrec's defaults when zero.
+	MaxBEEF, MaxSweepInputs int
 }
 
 // tokenEntry is a vault token the host holds.
@@ -220,6 +227,9 @@ type Service struct {
 	headers   chaintracker.ChainTracker
 	now       func() time.Time
 	access    Access
+	// What a replay needs beyond the index (Replay).
+	trees             replay.TreeSource
+	maxBEEF, maxSweep int
 
 	mu sync.Mutex
 	// What the journal holds.
@@ -281,7 +291,8 @@ func NewService(o Options) (*Service, error) {
 		o.Journal = &MemoryJournal{}
 	}
 	s := &Service{crypts: map[string]bool{}, host: o.Host, journal: o.Journal, priced: o.Priced, retention: time.Duration(o.RetentionDays) * 24 * time.Hour,
-		unheld: time.Duration(o.UnheldHours) * time.Hour, tableCap: o.SpendTable, headers: o.Headers, now: o.Now, access: o.Access}
+		unheld: time.Duration(o.UnheldHours) * time.Hour, tableCap: o.SpendTable, headers: o.Headers, now: o.Now, access: o.Access,
+		trees: o.Trees, maxBEEF: o.MaxBEEF, maxSweep: o.MaxSweepInputs}
 	for _, c := range o.Crypts {
 		s.crypts[c] = true
 	}

@@ -126,7 +126,7 @@ $ make quickstart-check # QUICKSTART.md, run as written
 
 Go 1.27.2 or later, and Node 24 for the TypeScript package under `host/`
 (`make verify NODE=/path/to/node24` when it is not on `PATH`). The direct Go
-dependencies are go-sdk v1.7.1, bcommon v0.33.10 and borg v0.7.2 (exact tags
+dependencies are go-sdk v1.7.1, bcommon v0.33.13 and borg v0.7.2 (exact tags
 in `go.mod`, asserted by `make verify`), and nothing else but bcommon's devkit, which
 only the tests and the devchain and vectors commands import.
 

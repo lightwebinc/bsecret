@@ -1049,12 +1049,17 @@ func TestAPredecessorTheNodeDoesNotSayAboutDiscardsNothing(t *testing.T) {
 		if !spendsTip {
 			return
 		}
-		for _, in := range tx.Inputs {
-			if in.SourceTXID != nil && in.SourceTXID.String() != tip {
+		// Input 0 is the predecessor; the rest is the fee, which may be
+		// the tip's own change (the pool pays with the smallest coin
+		// that fits).
+		for _, in := range tx.Inputs[1:] {
+			if in.SourceTXID != nil {
 				h.chain.SpendElsewhere(in.SourceTXID.String(), in.SourceTxOutIndex, other)
 			}
 		}
-		h.unknownSpend(tip)
+		// Only the predecessor: the fee coin may be the tip's change,
+		// which the node shows spent by the other transaction.
+		h.unknownSpend(fmt.Sprintf("%s:%d", tip, tx.Inputs[0].SourceTxOutIndex))
 	}
 	h.mu.Unlock()
 	h.env["BSECRET_TIMEOUT"] = "5s"
@@ -1066,7 +1071,7 @@ func TestAPredecessorTheNodeDoesNotSayAboutDiscardsNothing(t *testing.T) {
 		t.Fatalf("the transition was discarded:\n%s", r.stdout)
 	}
 	h.mu.Lock()
-	delete(h.unknown, tip)
+	clear(h.unknown)
 	h.mu.Unlock()
 	r = h.run("org", "two", "put", "db/password")
 	if !strings.Contains(r.stderr, "lost: its fee coin is spent by "+other[:12]) {

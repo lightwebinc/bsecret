@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -67,14 +69,15 @@ type harness struct {
 	// that drops fully spent transactions: neither their bytes nor a
 	// proof.
 	pruned map[string]bool
-	// unknown are the transactions whose outputs the node's UTXO view
-	// answers with status NOT_FOUND, as a node does for outputs it has
-	// pruned or could not read: neither unspent nor spent.
+	// unknown are the transactions ("txid") or single outputs
+	// ("txid:vout") the node's UTXO view answers with status NOT_FOUND,
+	// as a node does for outputs it has pruned or could not read:
+	// neither unspent nor spent.
 	unknown map[string]bool
 }
 
-// unknownSpend makes the node's UTXO view of txids answer NOT_FOUND for
-// every output.
+// unknownSpend makes the node's UTXO view answer NOT_FOUND for every
+// output of each txid, or for the one output of each "txid:vout".
 func (h *harness) unknownSpend(txids ...string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -115,13 +118,39 @@ func (h *harness) serveChain(w http.ResponseWriter, r *http.Request) {
 	}
 	if id, ok := strings.CutPrefix(r.URL.Path, "/api/v1/utxos/"); ok {
 		h.mu.Lock()
-		unknown := h.unknown[strings.TrimSuffix(id, "/json")]
+		txid := strings.TrimSuffix(id, "/json")
+		unknown := h.unknown[txid]
+		var vouts []string
+		for k := range h.unknown {
+			if v, ok := strings.CutPrefix(k, txid+":"); ok {
+				vouts = append(vouts, v)
+			}
+		}
 		h.mu.Unlock()
 		if unknown {
 			rec := httptest.NewRecorder()
 			h.chain.ServeHTTP(rec, r)
 			w.WriteHeader(rec.Code)
 			_, _ = w.Write(reStatus.ReplaceAll(rec.Body.Bytes(), []byte(`"status":"NOT_FOUND"`)))
+			return
+		}
+		if len(vouts) > 0 {
+			rec := httptest.NewRecorder()
+			h.chain.ServeHTTP(rec, r)
+			var outs []map[string]any
+			if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &outs) != nil {
+				w.WriteHeader(rec.Code)
+				_, _ = w.Write(rec.Body.Bytes())
+				return
+			}
+			for _, o := range outs {
+				if slices.Contains(vouts, fmt.Sprint(o["vout"])) {
+					o["status"] = "NOT_FOUND"
+					delete(o, "spendingData")
+				}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(outs)
 			return
 		}
 	}

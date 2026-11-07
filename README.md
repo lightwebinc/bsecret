@@ -17,7 +17,7 @@ the key is wrapped to the members of a group's current epoch; and when the
 group removes a member, the vault must re-key everything it holds before it
 does anything else.
 
-> The TypeScript host module under `host/` is frozen: bug fixes only. New behavior goes to its Go twin under `module/`, for Go overlay hosts ([docs/host.md](docs/host.md#the-go-module)). The `bsecret-host` image runs the TypeScript module.
+> The TypeScript host module under `host/` is frozen: bug fixes only. New behavior goes to its Go twin under `module/`, written to bcommon's `module` contract and mounted by a Go overlay engine ([docs/host.md](docs/host.md#the-go-module)). The `bsecret-host` image runs the TypeScript module.
 
 ## How it works
 
@@ -126,15 +126,19 @@ $ make quickstart-check # QUICKSTART.md, run as written
 
 Go 1.27.2 or later, and Node 24 for the TypeScript package under `host/`
 (`make verify NODE=/path/to/node24` when it is not on `PATH`). The direct Go
-dependencies are go-sdk v1.7.1, bcommon v0.33.10 and borg v0.7.2, and nothing
-else but bcommon's devkit v0.1.0, which only the tests and the devchain and
-vectors commands import.
+dependencies, pinned to exact tags in `go.mod` and asserted by `make verify`,
+are go-sdk, bcommon and borg, and nothing else but bcommon's devkit, which
+only the tests and the devchain and vectors commands import.
 
 The record layer exists twice, held to one set of vectors: `internal/secrec`
 in Go, and `host/` in TypeScript. Each reads what the other writes
 (`testdata/vectors`, `testdata/ts`). `host/` is also the host module: the
 topic manager `tm_bsecret_<crypt>` and the lookup service
 `ls_bsecret`, bundled into one file an overlay host loads by path.
+
+## Security
+
+Report a vulnerability privately: [SECURITY.md](SECURITY.md).
 
 ## License
 

@@ -113,7 +113,7 @@ test('dist/module.js loads by absolute path, as OVERLAY_MODULES names it, and mo
     // would fall to the admit-everything default: refused.
     process.env['OVERLAY_TOPICS'] = `tm_bsecret_${crypt},tm_bsecret_third_mkvbqzxtrw`
     await assert.rejects(imported.default(new FakeHost()), /tm_bsecret_third_mkvbqzxtrw/)
-    // A crypt is joined by replay: a host that would synchronise one as unspent outputs does not start.
+    // A crypt is joined by replay: a host that would synchronize one as unspent outputs does not start.
     process.env['OVERLAY_TOPICS'] = `tm_anytx,tm_bsecret_${crypt},tm_bsecret_${other}`
     process.env['OVERLAY_SYNC_PEERS'] = `tm_anytx=https://peer.example;tm_bsecret_${crypt}=https://peer.example`
     await assert.rejects(imported.default(new FakeHost()), /OVERLAY_SYNC_PEERS names tm_bsecret_example_crypt_hmqzvtkwrx/)

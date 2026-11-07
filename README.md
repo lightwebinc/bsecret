@@ -17,7 +17,7 @@ the key is wrapped to the members of a group's current epoch; and when the
 group removes a member, the vault must re-key everything it holds before it
 does anything else.
 
-> The TypeScript host module under `host/` is frozen: bug fixes only. A Go overlay engine will take its place; new behavior goes to the Go core.
+> The TypeScript host module under `host/` is frozen: bug fixes only. New behavior goes to its Go twin under `module/`, for Go overlay hosts ([docs/host.md](docs/host.md#the-go-module)). The `bsecret-host` image runs the TypeScript module.
 
 ## How it works
 

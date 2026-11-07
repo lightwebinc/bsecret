@@ -232,7 +232,7 @@ test('pages: 64 tokens or 16 carriers, in order, strictly after the cursor, neve
   const owner = new OwnerSim(crypt, 'page owner', chain, { trees: 130, chains: 70 })
   const e0 = epochOf('pages', 0)
   const vault = owner.vault('pages', hall, group, e0)
-  // 20 secrets, labelled alternately; one of them carried twice.
+  // 20 secrets, labeled alternately; one of them carried twice.
   const first: Version[] = []
   for (let i = 0; i < 20; i++) first.push(await vault.version(`s/${String(i).padStart(2, '0')}`, `value ${i}`, { label: i % 2 === 0 ? 'internal' : 'public' }))
   await vault.token({ create: first })

@@ -357,7 +357,7 @@ func ParseConfig(getenv func(string) string) (*Config, error) {
 	return c, nil
 }
 
-// CheckNoSync refuses a host configured to synchronise a tm_bsecret_ topic
+// CheckNoSync refuses a host configured to synchronize a tm_bsecret_ topic
 // with a peer (OVERLAY_SYNC_PEERS, topic=url,...;topic=...): such a
 // synchronisation carries only unspent outputs, so it never carries a
 // chain's spent tokens, and it drops what a topic manager refuses without

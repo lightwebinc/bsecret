@@ -89,7 +89,7 @@ services:
       - "127.0.0.1:8382:8080"
 
   # The borg command, run with `docker compose run --rm -T borg <command>`:
-  # the organisation, its members and its group are borg's. Its homes are
+  # the organization, its members and its group are borg's. Its homes are
   # in the named volume `borg-home`, one directory each, named by BORG_HOME.
   borg:
     image: ${BORG_IMAGE:-ghcr.io/lightwebinc/borg:latest}

@@ -371,7 +371,7 @@ export function secretModule(host: ModuleHost, c: Config, overlayTopics?: readon
 }
 
 /**
- * Refuses a host configured to synchronise a `tm_bsecret_` topic with a
+ * Refuses a host configured to synchronize a `tm_bsecret_` topic with a
  * peer (OVERLAY_SYNC_PEERS, `topic=url,...;topic=...`). That
  * synchronisation carries only unspent outputs, so it never carries a
  * chain's spent tokens, and it drops what a topic manager refuses without

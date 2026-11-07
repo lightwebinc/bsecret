@@ -40,7 +40,7 @@ flowchart LR
 | `bsecret` command | the owner's tooling, the member's reader and the auditor's check, one static binary; `serve` keeps a member's reader running and serves what it verified over HTTP | `cmd/bsecret` |
 | bsecret home | one identity's directory: key, coin pool, state. Made around a borg home's identity (`init -borg`) and sharing nothing else with it | `~/.bsecret` |
 | borg | the organization, its groups and their epoch keys | [borg](https://github.com/lightwebinc/borg) |
-| host module | the topic manager `tm_bsecret_<crypt>` and the lookup service `ls_bsecret`, loaded by a reference overlay host beside borg's module | `host/` (TypeScript), [host.md](host.md) |
+| host module | the topic manager `tm_bsecret_<crypt>` and the lookup service `ls_bsecret`, loaded by a reference overlay host beside borg's module, or by a Go overlay host | `host/` (TypeScript), `module/` (Go), [host.md](host.md) |
 | content store | optional: where a ciphertext over the inline bound is kept, a directory or an HTTP base URL | `content` |
 | header source, chain view, settlement leg | as for borg: WhatsOnChain and GorillaPool's public arcade by default on mainnet and testnet, or your own | `header_url`, `chain`, `settle` |
 | `devchain` | a local regtest chain for the sandbox and tests; nothing it mines is money | `cmd/devchain` |

@@ -96,7 +96,7 @@ jobs:
           make docker-build-host BORG_HOST_IMAGE=ghcr.io/lightwebinc/borg-host:latest
       # The stack publishes fixed host ports, so one quickstart runs at a
       # time on a runner; any bsecret-quickstart-check-* stack left is an
-      # orphan of a cancelled run (cancel skips the script's teardown), so it
+      # orphan of a canceled run (cancel skips the script's teardown), so it
       # is removed first.
       - name: the quickstart, as written
         run: |

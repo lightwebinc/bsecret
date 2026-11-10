@@ -6,7 +6,7 @@ require (
 	github.com/bsv-blockchain/go-sdk v1.7.1
 	github.com/lightwebinc/bcommon v0.33.13
 	github.com/lightwebinc/bcommon/devkit v0.1.0
-	github.com/lightwebinc/borg v0.7.2
+	github.com/lightwebinc/borg v0.7.5
 )
 
 require (

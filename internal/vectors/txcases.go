@@ -73,6 +73,10 @@ type txCase struct {
 	reason           string // "" admits
 	held             []int  // overrides the computed previous coins when not nil
 	maxSweep         int
+	// interpRefuses is a case the script interpreter refuses too: go-sdk
+	// from v1.7.5 refuses a high-S signature in a version 1 transaction.
+	// The topic manager's rule still refuses it first.
+	interpRefuses bool
 }
 
 // heldInputs is the previous coins the engine hands the topic manager for tx.
@@ -226,9 +230,9 @@ func (e *txEnv) cases() ([]txCase, error) {
 		tx: e.secondCarrier()})
 	spk := o.derivedPriv(sd)
 	finalHigh := rewriteUnlock(signAll(cloneTx(final)), 0, func(sg []byte) []byte { return push(append(highSBytes(sg[:len(sg)-1]), sg[len(sg)-1])) })
-	add(txCase{name: "carrier-mineable-before-unlock", note: "breaks the mineable rule (a final input) and the unlock rule (a high-S input signature): refused as mineable", rule: rowCarrier, tx: finalHigh, reason: "mineable"})
-	add(txCase{name: "carrier-unlock-high-s", note: "secret-carrier-api-token-v1 with its input signature's high-S twin, which verifies: another txid, same record", rule: rowSigs,
-		tx: rewriteUnlock(ka, 0, func(sg []byte) []byte { return push(append(highSBytes(sg[:len(sg)-1]), sg[len(sg)-1])) }), reason: "unlock"})
+	add(txCase{name: "carrier-mineable-before-unlock", note: "breaks the mineable rule (a final input) and the unlock rule (a high-S input signature): refused as mineable. The interpreter refuses a high-S signature in a version 1 transaction too, so scriptsVerify is false", rule: rowCarrier, tx: finalHigh, reason: "mineable", interpRefuses: true})
+	add(txCase{name: "carrier-unlock-high-s", note: "secret-carrier-api-token-v1 with its input signature's high-S twin: another txid, same record. The interpreter refuses a high-S signature in a version 1 transaction too, so scriptsVerify is false", rule: rowSigs,
+		tx: rewriteUnlock(ka, 0, func(sg []byte) []byte { return push(append(highSBytes(sg[:len(sg)-1]), sg[len(sg)-1])) }), reason: "unlock", interpRefuses: true})
 	add(txCase{name: "carrier-unlock-pushdata1", note: "the signature pushed by OP_PUSHDATA1", rule: rowCarrier,
 		tx: rewriteUnlock(ka, 0, func(sg []byte) []byte { return append([]byte{script.OpPUSHDATA1, byte(len(sg))}, sg...) }), reason: "unlock"})
 	add(txCase{name: "carrier-unlock-extra-push", note: "OP_0 pushed before the signature", rule: rowCarrier,

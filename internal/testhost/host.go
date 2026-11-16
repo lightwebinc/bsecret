@@ -18,11 +18,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/bsv-blockchain/go-sdk/spv"
 	"github.com/bsv-blockchain/go-sdk/transaction"
 
 	"github.com/lightwebinc/bcommon/guard"
 	bc "github.com/lightwebinc/bcommon/testchain"
+	"github.com/lightwebinc/bcommon/verify"
 
 	"github.com/lightwebinc/borg/borgrec"
 
@@ -313,8 +313,9 @@ func (h *Host) submit(w http.ResponseWriter, r *http.Request) {
 		steak(nil, nil)
 		return
 	}
-	ok, verr := spv.Verify(context.Background(), tx, h.chain, nil)
-	if verr != nil || !ok {
+	// The overlay plane's SPV: a carrier is not final by design, and
+	// go-sdk's spv.Verify refuses every transaction that is not.
+	if k, verr := verify.Check(context.Background(), tx, h.chain); k != verify.Passed {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("SPV: %v", verr))
 		return
 	}

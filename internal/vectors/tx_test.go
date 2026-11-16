@@ -82,7 +82,9 @@ func TestTransactionFile(t *testing.T) {
 		for _, coin := range c.Coins {
 			held = append(held, coin.InputIndex)
 		}
-		if !c.Scripts {
+		// A refusal may also fail the interpreter (a high-S signature in a
+		// version 1 transaction); an admission never does.
+		if !c.Scripts && c.Verdict != "refuse" {
 			t.Errorf("%s: its scripts do not verify", c.Name)
 		}
 		a, err := secrec.Admit(context.Background(), beef, held, secrec.Host{Crypt: f.Crypt, Headers: h, MaxBEEF: f.MaxBEEF, MaxSweepInputs: c.MaxSweepInputs})

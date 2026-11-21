@@ -2108,8 +2108,8 @@ member opens a version exactly when it held the version's epoch, BRC-369's
 own vectors still reproduce, a version opens only under the key of the epoch
 it names, every transition case is admitted or refused
 by exactly the rule it names, every refused transaction's own scripts still
-verify, and the tooling's record of commitments (section 6.2) has seen none
-twice.
+verify unless the case is marked as one the interpreter refuses too, and the
+tooling's record of commitments (section 6.2) has seen none twice.
 
 | File | What it holds |
 | --- | --- |
@@ -2122,7 +2122,7 @@ twice.
 | `refusal-v1.json` | byte strings each record's rules refuse, each with its reason (section 3.1); records with an unknown key, preserved |
 | `query-v1.json` | every class with its members, price and limit; questions, each with its class or refused |
 | `script-v1.json` | the classifier of section 11.1 over real locking scripts from bcommon's PushDrop, and scripts that claim nothing |
-| `transaction-v1.json` | real transactions against a test chain's headers: a mined chain tree and secret tree, a vault of four mined tokens (two of them in one block) with its carriers, a second vault and a sweep, each as the BEEF submitted and with its previous coins; every rule of section 11.1 refused case by case in its order, each case naming the row of [frozen.md](frozen.md) it pins, each with scripts that verify, and cases that break two rules and are refused for the earlier; a token admitted on a parent that was never admissible; each token as a host stores it, read without its parent, held to the token before it by its spend, and replayed byte for byte |
+| `transaction-v1.json` | real transactions against a test chain's headers: a mined chain tree and secret tree, a vault of four mined tokens (two of them in one block) with its carriers, a second vault and a sweep, each as the BEEF submitted and with its previous coins; every rule of section 11.1 refused case by case in its order, each case naming the row of [frozen.md](frozen.md) it pins, each with scripts that verify (but `carrier-unlock-high-s` and `carrier-mineable-before-unlock`, whose high-S input signature the script interpreter refuses too), and cases that break two rules and are refused for the earlier; a token admitted on a parent that was never admissible; each token as a host stores it, read without its parent, held to the token before it by its spend, and replayed byte for byte |
 | `index-v1.json` | what the index computes from those (section 11.2): which held tokens are rooted, in any order and with tokens missing; the chain folded; outpoint rows, bounded and dropped; and a carrier of every status |
 | `testdata/ts/ts-v1.json` | written by the TypeScript codec: a crypt drawn from fixed bytes, vault and secret records with unknown keys, secrets sealed and wrapped by the TypeScript side (the self wrap under the key its SDK derives for the owner), a chain of three tokens, an inclusion context, and carriers, tokens and a sweep signed through its SDK. The Go codec re-encodes, opens, folds and admits all of it, and rebuilds each token's BEEF byte for byte |
 

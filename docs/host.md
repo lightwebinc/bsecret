@@ -80,7 +80,9 @@ it again. A crypt is joined by replay (below).
 | `BSECRET_HALL_URL` | none | the borg hosts asked who is a member of an organization's groups, a comma list of base URLs; required with `BSECRET_PRIVATE` |
 | `BSECRET_MEMBER_TTL` | 60 | seconds a membership answer is kept; at least 1 |
 | `BSECRET_ARCADE_URL` | none | arcade, which the host broadcasts each payment through before it answers (`POST /tx`, `GET /tx/<txid>`) |
-| `BSECRET_ASSET_URL` | none | the node's asset service: the spend view of a payment's inputs and the proof of a held or watched payment. Without both URLs every payment is held until it mines |
+| `BSECRET_ASSET_URL` | none | the node's asset service: the spend view of a payment's inputs and the proof of a held or watched payment. Without arcade and a spend view (this, or `BSECRET_CHAIN`) every payment is held until it mines |
+| `BSECRET_CHAIN` | none | `woc:main` or `woc:test`: WhatsOnChain as that spend view and proof source, for a host with no node; refused beside `BSECRET_ASSET_URL` |
+| `BSECRET_WOC_KEY` | none | a WhatsOnChain API key for `BSECRET_CHAIN` |
 | `BSECRET_ACCEPT_THRESHOLD_SATS` | 25000000 | the largest payment answered on the network's acceptance; above it a payment is held until it mines |
 | `BSECRET_ACCEPT_PAYER_LIMIT` | the threshold | satoshis one payer may have answered fast and not yet mined; past it, held |
 | `BSECRET_ACCEPT_TOTAL_LIMIT` | ten thresholds | the same across every payer |

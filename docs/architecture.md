@@ -70,7 +70,7 @@ ciphertext and wraps, never a key.
 | engine | `internal/engine` | build, persist, settle, wait for and publish vault tokens; carriers; sweeps; `sync`; recovery of interrupted work |
 | state | `internal/state` | the home's `state.json`, written atomically, locked one command at a time |
 | config | `internal/config` | flags, `BSECRET_*`, the config file, defaults ([configuration.md](configuration.md)) |
-| unicast | `internal/unicast` | submit to each host and count the quorum |
+| unicast | `github.com/lightwebinc/bcommon/unicast` | submit to each host and count the quorum |
 | limits | `internal/limits` | every default and cap ([limits.md](limits.md)) |
 | shared | `github.com/lightwebinc/bcommon` | funding trees, carriers, PushDrop, the wallet and pool, header clients, node API, publish legs |
 

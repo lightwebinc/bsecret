@@ -334,7 +334,7 @@ sweeps may be replayed in any order: a token ahead of its predecessor is
 
 The Go module does this for its own host from a sibling host: its lookup
 service is a bcommon `module.Replayer`, which a Go host that carries the
-hook (overlay-engine 0.9 and later) asks on its catch-up schedule, once a
+hook asks on its catch-up schedule, once a
 round for each `tm_bsecret_` topic and each peer, never by an unordered
 synchronization. A walk asks the peer's `ls_bsecret` only free classes and
 answers the objects to submit, which the host admits through its ordinary

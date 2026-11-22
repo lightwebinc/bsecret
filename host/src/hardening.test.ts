@@ -175,9 +175,9 @@ test('a carrier the row turns away is counted once, however many times the engin
   // A winner and eight others, the lowest of all held back.
   for (const x of all.slice(1, 10)) assert.deepEqual(await submit(s.engine, x.tx.toAtomicBEEF()), [0])
   assert.equal(s.ls.outpointRow(op)!.more, 0)
-  // One carrier offered three times at once: all three pass the engine's duplicate check.
+  // One carrier offered three times at once: the engine (2.8.0) admits it once and answers the repeats with nothing admitted.
   const beef = all[12]!.tx.toAtomicBEEF()
-  assert.deepEqual(await Promise.all([submit(s.engine, beef), submit(s.engine, beef), submit(s.engine, beef)]), [[0], [0], [0]])
+  assert.deepEqual(await Promise.all([submit(s.engine, beef), submit(s.engine, beef), submit(s.engine, beef)]), [[0], [], []])
   assert.equal(s.ls.outpointRow(op)!.more, 1)
   // The lowest arrives: the row stops keeping its highest, which is counted once, a repeat of it included.
   assert.deepEqual(await submit(s.engine, all[0]!.tx.toAtomicBEEF()), [0])

@@ -394,7 +394,7 @@ async function shake(url: string, localAddress: string): Promise<{ status: numbe
     version: '0.1',
     messageType: 'initialRequest',
     identityKey: PrivateKey.fromRandom().toPublicKey().toString(),
-    initialNonce: Utils.toBase64(Random(32)),
+    initialNonce: Utils.toBase64(Random(48)),
     requestedCertificates: { certifiers: [], types: {} },
   })
   return await new Promise((resolve, reject) => {
@@ -466,6 +466,7 @@ test('one coin pays once: conflicting unbroadcast payments that spend it buy one
   class OneCoin extends PayingWallet {
     readonly same = this.coin()
     override async createAction(args: CreateActionArgs): Promise<CreateActionResult> {
+      if (args.options?.sendWith !== undefined) return await super.createAction(args)
       const tx = await this.pay((args.outputs ?? []).map((o) => ({ satoshis: o.satoshis, lockingScript: o.lockingScript })), this.same)
       return { tx: tx.toAtomicBEEF(), txid: tx.id('hex') }
     }

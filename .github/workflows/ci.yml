@@ -99,7 +99,7 @@ jobs:
           git clone --quiet --depth 1 --branch "$v" https://github.com/lightwebinc/borg "$RUNNER_TEMP/borg"
           cd "$RUNNER_TEMP/borg"
           make docker-build VERSION="$v"
-          make docker-build-host VERSION="$v" REFERENCE_HOST_IMAGE=${{ vars.REFERENCE_HOST_IMAGE || 'ghcr.io/lightwebinc/overlay-blueprints:0.2.2' }}
+          make docker-build-host VERSION="$v" REFERENCE_HOST_IMAGE=${{ vars.REFERENCE_HOST_IMAGE || 'ghcr.io/lightwebinc/overlay-blueprints:0.5.0' }}
       - name: images
         run: |
           make docker-build

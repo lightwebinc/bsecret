@@ -64,12 +64,12 @@ fmt-check:
 #  - go.mod and go.sum are tidy, and no module is replaced;
 #  - the direct set is exactly go-sdk, bcommon, bcommon's devkit
 #    (imported only by tests and the devchain and vectors commands) and borg;
-#  - go-sdk resolves to exactly v1.7.5, the version bcommon pins and the
+#  - go-sdk resolves to exactly v1.7.8, the version bcommon pins and the
 #    vectors were made with. Minimal version selection takes the higher of
 #    two pins, so a library asking for a later go-sdk would change what
 #    bsecret ships without a line changing here.
 DEPS_DIRECT := github.com/bsv-blockchain/go-sdk github.com/lightwebinc/bcommon github.com/lightwebinc/bcommon/devkit $(BORG)
-DEPS_SDK    := github.com/bsv-blockchain/go-sdk v1.7.5
+DEPS_SDK    := github.com/bsv-blockchain/go-sdk v1.7.8
 
 deps-check:
 	@set -eu; \

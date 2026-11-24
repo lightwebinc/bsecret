@@ -99,10 +99,10 @@ bsecret imports; both are Apache-2.0. go-sdk brings the other six with
 it, and a statically linked binary contains them whether they were asked
 for directly or not.
 
-go-sdk is under the Apache License 2.0 from v1.7.5, the version bsecret
-builds on. Earlier versions were under the Open BSV License Version 5,
+go-sdk is under the Apache License 2.0 from v1.7.5; bsecret builds on
+v1.7.8. Versions before v1.7.5 were under the Open BSV License Version 5,
 whose grant was revocable and limited to the BSV Blockchains; those terms
-do not apply to v1.7.5.
+do not apply from v1.7.5.
 
 The overlay host module under host/ is a separate npm package, and what
 is deployed from it is one file, host/bundle/bsecret-module.js. That file

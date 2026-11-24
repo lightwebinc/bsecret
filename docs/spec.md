@@ -1979,8 +1979,8 @@ the code that reads them is borg's own: its public Go packages `borgrec`
 and the wrap that releases an epoch's key to a member) and `reader`, at the
 tag `go.mod` pins. Nothing of them is copied or restated here. This
 contract's vectors are bound to borg's group by borg's golden vectors, kept
-unchanged under `internal/borgread/testdata`. bsecret pins bcommon v0.37.0
-and borg v0.8.0.
+unchanged under `internal/borgread/testdata`. bsecret pins bcommon v0.40.0
+and borg v0.8.1.
 
 ## 17. Size and rate bounds
 
